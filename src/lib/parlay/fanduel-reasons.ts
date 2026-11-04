@@ -101,7 +101,8 @@ export const priceMismatch = (what: string, pickOdds: number | null, fanDuelOdds
   (pickOdds === null ? ", a price no ordinary line carries." : " but your pick is " + fmt(pickOdds) + ".") +
   " Not sent: check the bet on FanDuel.";
 
-export const priceMovedWarning = (pickOdds: number, fanDuelOdds: number) => "Price moved a lot — your pick was " + fmt(pickOdds) + ", FanDuel has " + fmt(fanDuelOdds) + ".";
+export const priceMovedWarning = (pickOdds: number | null, fanDuelOdds: number) =>
+  "Price moved a lot — " + (pickOdds === null ? "your pick has no stated price" : "your pick was " + fmt(pickOdds)) + ", FanDuel has " + fmt(fanDuelOdds) + ".";
 
 export const playerNotMatched = (typed: string, market: string) => "Player not matched — no \"" + typed + "\" with " + market + " on FanDuel for this game.";
 

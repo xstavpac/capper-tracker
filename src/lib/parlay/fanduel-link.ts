@@ -670,18 +670,22 @@ export function checkPrice(
   leg: FanDuelLegInput,
   target: FanDuelLegTarget,
   fanDuelPrice: number,
-  fanDuelLine: number | undefined
+  fanDuelLine: number | undefined,
+  live = false
 ): { blocked: string | null; warning: string | null } {
   const outcome = "name" in target.outcome ? target.outcome.name + " " : "";
   const what = marketLabel(target.marketKey) + (fanDuelLine === undefined ? "" : " " + outcome + fanDuelLine);
   const pickHasPrice = leg.oddsSource !== "DEFAULTED" && Number.isFinite(leg.odds) && leg.odds !== 0;
   if (!pickHasPrice) {
     // Nothing to compare: only a price no ordinary line market carries is stopped.
-    if (PRICE_GATED_BETS.has(leg.betType) && fanDuelPrice <= NO_ODDS_MIN_FANDUEL_PRICE) return { blocked: priceMismatch(what, null, fanDuelPrice), warning: null };
+    if (PRICE_GATED_BETS.has(leg.betType) && fanDuelPrice <= NO_ODDS_MIN_FANDUEL_PRICE) {
+      // A game under way legitimately reprices, so a live leg is warned, never blocked, on price.
+      return live ? { blocked: null, warning: priceMovedWarning(null, fanDuelPrice) } : { blocked: priceMismatch(what, null, fanDuelPrice), warning: null };
+    }
     return { blocked: null, warning: null };
   }
   const gap = Math.abs(impliedProbability(leg.odds) - impliedProbability(fanDuelPrice));
-  if (gap >= MAX_IMPLIED_PROB_GAP) return { blocked: priceMismatch(what, leg.odds, fanDuelPrice), warning: null };
+  if (gap >= MAX_IMPLIED_PROB_GAP && !live) return { blocked: priceMismatch(what, leg.odds, fanDuelPrice), warning: null };
   if (gap >= PRICE_MOVED_WARN_GAP) return { blocked: null, warning: priceMovedWarning(leg.odds, fanDuelPrice) };
   return { blocked: null, warning: null };
 }
@@ -747,7 +751,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     if (match.status === "matched" || match.status === "adjusted") {
       // A price nowhere near the pick's is a different bet, whatever the market and line say: not sent, and never
       // shown as an adjusted line.
-      const priced = checkPrice(leg, target, match.price, match.status === "adjusted" ? match.fanDuelLine : target.point);
+      const priced = checkPrice(leg, target, match.price, match.status === "adjusted" ? match.fanDuelLine : target.point, hasKickedOff(leg.gameTime, deps.now));
       if (priced.blocked) {
         settle(leg, "price_mismatch", priced.blocked);
         return;

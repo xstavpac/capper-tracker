@@ -227,6 +227,45 @@ async function main() {
   ]);
   check("a first-period Over 1.5 is a different bet from the full-game Over 1.5", [withP1.by["1P over 1.5"].status, withP1.by["1P over 1.5"].fanDuelOdds, withP1.by["FG over 1.5"].status], ["matched", -122, "line_unavailable"]);
 
+  // ---- 8b. Live legs: the price gap only warns; the line caps still apply ----
+  const LIVE_AT = "2026-10-13T19:30:00Z"; // 30 min before NOW
+  const SOON_AT = "2026-10-13T23:00:00Z"; // not started
+  const liveRun = (gameTime: string, over: Partial<FanDuelLegInput>, board: FanDuelMarket[]) =>
+    run("icehockey_nhl", NHL.home_team, NHL.away_team, board, [nhlLeg("t", { gameTime, betDetail: "Over 6.5", line: 6.5, ...over })], gameTime).then((r) => r.by.t);
+  const wide = totalsBoard(6.5, -400, 300);
+  const liveWide = await liveRun(LIVE_AT, { odds: 150 }, wide);
+  check("LIVE leg, +150 pick vs -400 (gap far past 0.25): sent with the Price-moved warning", [liveWide.status, liveWide.warning], ["matched", "Price moved a lot — your pick was +150, FanDuel has -400."]);
+  const preWide = await liveRun(SOON_AT, { odds: 150 }, wide);
+  check("NON-live leg with the same +150 vs -400 gap: Potentially incorrect market match, not sent", [preWide.status, preWide.warning, preWide.sentLine], ["price_mismatch", null, null]);
+  const liveNoOdds = await liveRun(LIVE_AT, { odds: -110, oddsSource: "DEFAULTED" }, totalsBoard(6.5, -1500, 700));
+  check("LIVE no-real-price leg at -1500 (past the -1000 floor): sent with a warning", [liveNoOdds.status, liveNoOdds.warning], ["matched", "Price moved a lot — your pick has no stated price, FanDuel has -1500."]);
+  const preNoOdds = await liveRun(SOON_AT, { odds: -110, oddsSource: "DEFAULTED" }, totalsBoard(6.5, -1500, 700));
+  check("NON-live no-real-price leg at -1500: blocked", preNoOdds.status, "price_mismatch");
+  const liveCap = await liveRun(LIVE_AT, { odds: -110, line: 6, betDetail: "Over 6" }, totalsBoard(7.5, -110, -110));
+  check("LIVE leg still obeys the line cap: hockey total 6 -> 7.5 is Line unavailable", [liveCap.status, liveCap.sentLine], ["line_unavailable", null]);
+  const liveAdj = await liveRun(LIVE_AT, { odds: -110, line: 6, betDetail: "Over 6" }, totalsBoard(6.5, -110, -110));
+  check("LIVE leg inside the cap: hockey total 6 -> 6.5 sends adjusted", liveAdj.status, "adjusted");
+
+  // ---- 8c. MLB / NHL team totals follow the 0.5 cap ----
+  const teamTotalBoard: FanDuelMarket[] = [
+    {
+      key: "team_totals",
+      sid: null,
+      outcomes: [
+        { name: "Over", description: "Colorado Rockies", price: -110, point: 2.5, sid: "9101", link: link("45.1", "9101") },
+        { name: "Under", description: "Colorado Rockies", price: -110, point: 2.5, sid: "9102", link: link("45.1", "9102") },
+      ],
+    },
+  ];
+  const mlbTt = (betDetail: string, line: number) => ({
+    pickId: "tt", sportKey: "baseball_mlb", leagueName: "MLB", betType: "TEAM_TOTAL", period: "FULL_GAME" as const, betDetail, line,
+    homeTeam: "Colorado Rockies", awayTeam: "Arizona Diamondbacks", gameTime: SOON_AT, odds: -110, oddsSource: "STATED" as const, onBoard: true,
+  });
+  const tt = await run("baseball_mlb", "Colorado Rockies", "Arizona Diamondbacks", teamTotalBoard, [mlbTt("Colorado Rockies Team Total Over 1.5", 1.5)], SOON_AT);
+  check("MLB Colorado team total Over 1.5 vs a ladder starting at 2.5: Line unavailable, not sent", [tt.by.tt.status, tt.by.tt.sentLine, tt.url], ["line_unavailable", null, null]);
+  const ttOk = await run("baseball_mlb", "Colorado Rockies", "Arizona Diamondbacks", teamTotalBoard, [mlbTt("Colorado Rockies Team Total Over 2", 2)], SOON_AT);
+  check("MLB Colorado team total Over 2 vs 2.5 (0.5 away) still sends", ttOk.by.tt.status, "adjusted");
+
   // ---- 9. Labels ----
   check(
     "labels for the new statuses",

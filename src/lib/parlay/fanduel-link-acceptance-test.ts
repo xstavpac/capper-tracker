@@ -967,7 +967,7 @@ async function main() {
   const allenProp = leg({ pickId: "allen", betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards", odds: -110 });
   const broncosMl = leg({ pickId: "broncos-ml", betDetail: "Broncos ML", homeTeam: "Denver Broncos", awayTeam: "Seattle Seahawks", gameTime: "2026-10-16T00:15:00Z", odds: 132 });
   const over = leg({ pickId: "over", gameStatus: "final", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T14:00:00Z" });
-  const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z", odds: -380 });
+  const started = leg({ pickId: "started", homeTeam: "Dallas Cowboys", awayTeam: "New York Giants", betDetail: "Cowboys ML", gameTime: "2026-10-12T17:00:00Z" });
 
   const a = fakeDeps(NOW);
   const built = await build([billsMl, started, broncosMl, allenProp, over], a.deps);
@@ -976,13 +976,13 @@ async function main() {
     built.legs.map((l) => [l.pickId, l.status, l.pickOdds, l.fanDuelOdds]),
     [
       ["bills-ml", "matched", 150, 154],
-      ["started", "matched", -380, -400],
+      ["started", "matched", 150, -400],
       ["broncos-ml", "matched", 132, 132],
       ["allen", "matched", -110, -113],
       ["over", "over", 150, null],
     ]
   );
-  check("the live leg is sent like any other, with no reason", built.legs[1].reason, null);
+  check("the live leg is sent like any other, with no reason (+150 pick vs -400 on FanDuel: a warning, not a block)", [built.legs[1].reason, built.legs[1].warning], [null, "Price moved a lot — your pick was +150, FanDuel has -400."]);
   check("the game-over leg says why", built.legs[4].reason, "Game is over.");
   check(
     "the link holds every matched leg, the live one included, in leg order",
