@@ -227,30 +227,30 @@ function main() {
     }
   );
   check(
-    "parseTouchdownProp: 'Gibbs 2+ TDs' -> parses as a TD-shaped prop, but flagged unsupported (multi-TD)",
+    "parseTouchdownProp: 'Gibbs 2+ TDs' -> TD-shaped prop carrying its count (OVER 1.5), not unsupported",
     parseTouchdownProp("Gibbs 2+ TDs"),
     {
       playerName: "Gibbs",
       propType: "ANY",
-      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 1.5, direction: "OVER" },
     }
   );
   check(
-    "parseTouchdownProp: 'Gibbs 2+ touchdowns' -> same multi-TD flag",
+    "parseTouchdownProp: 'Gibbs 2+ touchdowns' -> same count (OVER 1.5)",
     parseTouchdownProp("Gibbs 2+ touchdowns"),
     {
       playerName: "Gibbs",
       propType: "ANY",
-      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 1.5, direction: "OVER" },
     }
   );
   check(
-    "parseTouchdownProp: 'Gibbs 3+ TDs' -> same multi-TD flag",
+    "parseTouchdownProp: 'Gibbs 3+ TDs' -> count OVER 2.5",
     parseTouchdownProp("Gibbs 3+ TDs"),
     {
       playerName: "Gibbs",
       propType: "ANY",
-      unsupported: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 2.5, direction: "OVER" },
     }
   );
 
@@ -270,30 +270,30 @@ function main() {
   // and would have graded a Kelce Over 1.5 TDs pick WIN off a single TD).
   // Must decline the same way first/multi-TD do above, not grade wrong.
   check(
-    "parseTouchdownProp: 'Kelce Over 1.5 TDs' -> parses as a TD-shaped prop, but flagged unsupported (Over/Under)",
+    "parseTouchdownProp: 'Kelce Over 1.5 TDs' -> count OVER 1.5, player name without the line words",
     parseTouchdownProp("Kelce Over 1.5 TDs"),
     {
-      playerName: "Kelce Over .",
+      playerName: "Kelce",
       propType: "ANY",
-      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 1.5, direction: "OVER" },
     }
   );
   check(
-    "parseTouchdownProp: 'Kelce Over 0.5 TDs' -> same Over/Under flag",
+    "parseTouchdownProp: 'Kelce Over 0.5 TDs' -> count OVER 0.5",
     parseTouchdownProp("Kelce Over 0.5 TDs"),
     {
-      playerName: "Kelce Over .",
+      playerName: "Kelce",
       propType: "ANY",
-      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 0.5, direction: "OVER" },
     }
   );
   check(
-    "parseTouchdownProp: 'Kelce Under 0.5 TDs' -> same Over/Under flag",
+    "parseTouchdownProp: 'Kelce Under 0.5 TDs' -> count UNDER 0.5",
     parseTouchdownProp("Kelce Under 0.5 TDs"),
     {
-      playerName: "Kelce Under .",
+      playerName: "Kelce",
       propType: "ANY",
-      unsupported: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+      count: { line: 0.5, direction: "UNDER" },
     }
   );
   const overUnderTdPick = parseCatalog(`Capper\nChiefs Kelce Over 1.5 TDs`, []).picks[0];

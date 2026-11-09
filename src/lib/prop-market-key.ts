@@ -63,6 +63,7 @@ const MARKET_NOUNS = {
     PASS_INTERCEPTIONS: "interceptions thrown",
     RUSH_ATTEMPTS: "rushing attempts",
     TD: "touchdowns",
+    TD_COUNT: "touchdown counts (2+ / over-under)",
     PASS_TDS: "passing touchdowns",
   },
   BASKETBALL: {

@@ -133,6 +133,10 @@ enum PropMarket {
   RUSH_ATTEMPTS
   PASS_INTERCEPTIONS
   PASS_COMPLETIONS
+  // NFL touchdown COUNT (2026-11): "2+ TDs", "3+ TDs", "Over/Under x TDs" - a line on a player's
+  // rushing + receiving TDs, graded from the same box-score columns as anytime TD. Its own value, never
+  // TD, so a count pick can't pool with anytime-TD in any per-market record.
+  TD_COUNT
   // NHL markets (2026-10). Graded from ESPN's NHL summary box score / scoring
   // plays - see server/data/nhl-boxscore.ts and nhl-prop-grading.ts. Additive:
   // no NFL value or grading path changes. POINTS = goals + assists; SAVES is

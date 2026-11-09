@@ -38,14 +38,16 @@ for (const [text, player, direction, line] of FORMS) {
 }
 
 // ---- anytime / scorer TD: a different market, must not become PASS_TDS ----
-for (const text of ["Watson anytime TD", "Deshaun Watson to score a TD", "Puka Nacua Anytime Touchdown", "Watson ATD", "Watson rushing TD", "Watson 2+ TDs"]) {
+for (const text of ["Watson anytime TD", "Deshaun Watson to score a TD", "Puka Nacua Anytime Touchdown", "Watson ATD", "Watson rushing TD"]) {
   check(`non-collision: "${text}" is not PASS_TDS`, parsePlayerProp(normalizeNPlusPlayerProp(text))?.propMarket, "TD");
 }
 check("anytime TD still priced as anytime TD", isAnytimeTdPick("Watson anytime TD"), true);
 check("passing TD is never an anytime-TD pick (raw)", isAnytimeTdPick("Watson 1+ passing TD"), false);
 check("passing TD is never an anytime-TD pick (spelled out)", isAnytimeTdPick("Watson over 0.5 passing touchdowns"), false);
 check("parseTouchdownProp declines passing-TD text", parseTouchdownProp("Watson over 0.5 passing touchdowns"), null);
-check("Over/Under TD (non-passing) stays unsupported", !!parseTouchdownProp("Kelce Over 1.5 TDs")?.unsupported, true);
+// A TD count is its own market (TD_COUNT) - never PASS_TDS, never anytime TD.
+check("non-collision: \"Watson 2+ TDs\" is TD_COUNT, not PASS_TDS", parsePlayerProp(normalizeNPlusPlayerProp("Watson 2+ TDs"))?.propMarket, "TD_COUNT");
+check("Over/Under TD (non-passing) is a graded count, not unsupported", [parseTouchdownProp("Kelce Over 1.5 TDs")?.unsupported ?? null, parseTouchdownProp("Kelce Over 1.5 TDs")?.count], [null, { line: 1.5, direction: "OVER" }]);
 // Passing YARDS and TDs stay distinct.
 check("passing yards unaffected", parsePlayerProp("Josh Allen Over 275.5 Passing Yards")?.propMarket, "PASS_YDS");
 check("passing + rushing yards unaffected", parsePlayerProp("Josh Allen Over 300.5 Passing and Rushing Yards")?.propMarket, "PASS_RUSH_YDS");

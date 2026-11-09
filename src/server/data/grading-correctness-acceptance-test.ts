@@ -257,7 +257,7 @@ async function main() {
     }
   );
   await expectAsync(
-    "Multi-TD text ('2+ TDs') declines before any box-score fetch, not silently graded as anytime-TD",
+    "Multi-TD text ('2+ TDs') is no longer declined: it reaches the box-score fetch (fake event id -> not available)",
     resolveTouchdownProp(
       { betDetail: "Gibbs 2+ TDs", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
       "fake-event-id",
@@ -265,11 +265,11 @@ async function main() {
     ),
     {
       outcome: null,
-      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+      reason: "the box score isn't available yet for this game",
     }
   );
   await expectAsync(
-    "'3+ touchdowns' phrasing: same multi-TD decline",
+    "'3+ touchdowns' phrasing: same - reaches the box-score fetch",
     resolveTouchdownProp(
       { betDetail: "Gibbs 3+ touchdowns", homeTeam: "Detroit Lions", awayTeam: "Green Bay Packers" },
       "fake-event-id",
@@ -277,7 +277,7 @@ async function main() {
     ),
     {
       outcome: null,
-      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
+      reason: "the box score isn't available yet for this game",
     }
   );
 
@@ -287,7 +287,7 @@ async function main() {
   // graded WIN off a single TD, which is wrong for an Over 1.5 line. Must
   // decline before any box-score fetch, same as first/multi-TD above. ----
   await expectAsync(
-    "Over/Under TD text ('Over 1.5 TDs') declines before any box-score fetch, not silently graded as anytime-TD",
+    "Over/Under TD text ('Over 1.5 TDs') reaches the box-score fetch (fake event id -> not available)",
     resolveTouchdownProp(
       { betDetail: "Kelce Over 1.5 TDs", homeTeam: "Kansas City Chiefs", awayTeam: "Denver Broncos" },
       "fake-event-id",
@@ -295,11 +295,11 @@ async function main() {
     ),
     {
       outcome: null,
-      reason: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+      reason: "the box score isn't available yet for this game",
     }
   );
   await expectAsync(
-    "'Under 0.5 TDs' phrasing: same Over/Under decline",
+    "'Under 0.5 TDs' phrasing: same - reaches the box-score fetch",
     resolveTouchdownProp(
       { betDetail: "Kelce Under 0.5 TDs", homeTeam: "Kansas City Chiefs", awayTeam: "Denver Broncos" },
       "fake-event-id",
@@ -307,7 +307,7 @@ async function main() {
     ),
     {
       outcome: null,
-      reason: "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading",
+      reason: "the box score isn't available yet for this game",
     }
   );
 

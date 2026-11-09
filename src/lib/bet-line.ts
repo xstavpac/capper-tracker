@@ -474,49 +474,43 @@ export type TdPropType = "RUSHING" | "RECEIVING" | "ANY";
 // before fuzzy-matching against a real roster; this function has no team
 // knowledge of its own; unresolved names beyond a Levenshtein tolerance
 // safely fail to match rather than grading incorrectly.
+export type TdCountLine = { line: number; direction: "OVER" | "UNDER" };
+
 export function parseTouchdownProp(
   text: string
-): { playerName: string; propType: TdPropType; unsupported?: string } | null {
+): { playerName: string; propType: TdPropType; unsupported?: string; count?: TdCountLine } | null {
   if (!/\btouchdowns?\b/i.test(text) && !/\btds?\b/i.test(text) && !/\batd\b/i.test(text)) return null;
   // "Watson over 0.5 passing touchdowns" is the PASS_TDS count market, not a TD-scorer prop - see
   // PASSING_TDS_PATTERN. Declined here so it can never be read (or priced) as anytime-TD.
   if (isPassingTdsText(text)) return null;
 
-  // First-TD ("who scores first in the game") and multi-TD ("2+ TDs") are a
-  // different bet shape than the anytime-TD market this app actually grades
-  // (resolveTouchdownProp only ever asks "did this player score at least
-  // once") - first-TD needs scoring-play sequence data this app doesn't
-  // fetch, and multi-TD needs a count threshold this app doesn't store
-  // anywhere. Still matched here (not left to fall through to null) so
-  // catalog import classifies these as PLAYER_PROP same as any other TD
-  // pick, not the wrong MONEYLINE/TOTAL default a `null` return would risk
-  // - but `unsupported` tells resolveTouchdownProp (grading.ts) to decline
-  // grading instead of silently computing anytime-TD's WIN/LOSS for a bet
-  // that isn't actually anytime-TD. Matched narrowly (the qualifier must sit
-  // directly next to the TD word) so it can't misfire on unrelated text that
-  // happens to contain "first"/"1st" elsewhere, e.g. a first-half-scoped
-  // anytime-TD pick ("Anytime TD 1st Half").
+  // First-TD ("who scores first in the game") is a different bet shape than the anytime-TD market
+  // resolveTouchdownProp grades - it needs scoring-play sequence data this app doesn't fetch - so it
+  // stays `unsupported` (still matched here so catalog import classifies it as PLAYER_PROP, not the wrong
+  // MONEYLINE/TOTAL default a `null` return would risk). Matched narrowly (the qualifier must sit
+  // directly next to the TD word) so it can't misfire on a first-half-scoped anytime-TD pick.
+  //
+  // A TD COUNT is graded (TD_COUNT market): "2+ TDs" / "3 or more TDs" is OVER (N - 0.5), and
+  // "Over/Under x TDs" is that line and direction, read through parsePlayerPropLine so the o/u
+  // shorthand and spelled-out numbers behave as they do for every other line market. The threshold is
+  // returned as `count`; its presence is what makes a TD pick TD_COUNT, not TD.
   const isFirstTd = /\b(?:first|1st)\s+(?:touchdown|td)s?\b/i.test(text);
-  const isMultiTd = /\d\s*\+\s*(?:touchdown|td)s?\b/i.test(text);
-  // Over/Under N.5 TDs ("Kelce Over 1.5 TDs") is a TD-count threshold market,
-  // not the anytime-TD ("scored at least once") market resolveTouchdownProp
-  // actually grades - same reason multi-TD above is declined rather than
-  // graded wrong. Detected via parsePlayerPropLine's own over/under-plus-number
-  // shape (reused, not reimplemented) rather than a bespoke regex here; gated
-  // behind isFirstTd/isMultiTd being false so those two keep their own,
-  // more specific unsupported reasons.
-  const isOverUnderTd = !isFirstTd && !isMultiTd && parsePlayerPropLine(text) !== null;
+  const nPlus = !isFirstTd ? /(?<![\w.])(\d+)\s*(?:\+|\s+or\s+more\b)\s*(?:rushing\s+|receiving\s+)*(?:touchdown|td)s?\b/i.exec(text) : null;
+  const nPlusN = nPlus ? parseInt(nPlus[1], 10) : 0;
+  const lineInfo = !isFirstTd && !nPlus ? parsePlayerPropLine(text) : null;
+  const count: TdCountLine | undefined =
+    nPlus && nPlusN >= 1 ? { line: nPlusN - 0.5, direction: "OVER" } : lineInfo ? { line: lineInfo.line, direction: lineInfo.direction } : undefined;
+  // "0+ TDs" is not a bet: declined rather than read as anytime-TD.
   const unsupported = isFirstTd
     ? "this bet is a first-touchdown prop, which this app doesn't grade automatically yet - needs manual grading"
-    : isMultiTd
-      ? "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading"
-      : isOverUnderTd
-        ? "this bet is an Over/Under touchdown-count prop, which this app doesn't grade automatically yet - needs manual grading"
-        : undefined;
+    : nPlus && !count
+      ? "couldn't read a touchdown count threshold from this bet text - needs manual grading"
+      : undefined;
 
   const isRushing = /\brush(?:ing|er)?\b/i.test(text);
   const isReceiving = /\b(receiving|reception|receptions|receiver|catches|catch|rec)\b/i.test(text);
-  const propType: TdPropType = isRushing ? "RUSHING" : isReceiving ? "RECEIVING" : "ANY";
+  // A count line over "rushing + receiving TDs" counts both; an anytime pick keeps its first-match read.
+  const propType: TdPropType = count && isRushing && isReceiving ? "ANY" : isRushing ? "RUSHING" : isReceiving ? "RECEIVING" : "ANY";
 
   const playerName = text
     .replace(/\([^)]*\)/g, " ")
@@ -525,6 +519,9 @@ export function parseTouchdownProp(
     .replace(/\batd\b/gi, " ")
     .replace(/\bor\s+more\b/gi, " ")
     .replace(/\b(?:first|1st)\b/gi, " ")
+    // A count line's own words and number ("Kelce Over 1.5 TDs", "Kelce o1.5 TDs") are not part of the
+    // name. Only for a count pick, so every anytime / first-TD name reads exactly as it always has.
+    .replace(count ? /\b(?:over|under)\b|\b[ou]\s*(?=\d)|\d+\.\d+/gi : /(?!)/g, " ")
     .replace(/\b\d+\+?/g, " ")
     .replace(/\b(rushing|rusher|rush|receiving|reception|receptions|rec|receiver|catches|catch|scorer|anytime)\b/gi, " ")
     .replace(/\btouchdowns?\b/gi, " ")
@@ -535,7 +532,7 @@ export function parseTouchdownProp(
 
   if (!playerName) return null;
 
-  return { playerName, propType, unsupported };
+  return { playerName, propType, unsupported, ...(count ? { count } : {}) };
 }
 
 // The full set of structured player-prop markets this app recognizes -
@@ -549,6 +546,7 @@ export type PlayerPropMarket =
   | "REC_YDS"
   | "RECEPTIONS"
   | "TD"
+  | "TD_COUNT"
   | "RUSH_REC_YDS"
   | "PASS_RUSH_YDS"
   | "PASS_TDS"
@@ -712,7 +710,7 @@ function normalizeNPlusNflPlayerProp(text: string): string {
 // reads parseTouchdownProp directly and is unaffected.
 export function isAnytimeTdPick(text: string): boolean {
   const td = parseTouchdownProp(text);
-  if (!td || td.unsupported || td.propType !== "ANY") return false;
+  if (!td || td.unsupported || td.count || td.propType !== "ANY") return false;
   return !/\b(?:1st|2nd|first|second)\s+half\b|\b(?:1st|2nd|3rd|4th|first|second|third|fourth)\s+quarter\b|\bq[1-4]\b/i.test(text);
 }
 
@@ -742,7 +740,7 @@ export function parsePlayerProp(rawText: string): { playerName: string; propMark
   // "over six receptions" reads as "over 6 receptions" (see normalizeSpelledOutPropNumber).
   const text = normalizeSpelledOutPropNumber(rawText);
   const td = parseTouchdownProp(text);
-  if (td) return { playerName: td.playerName, propMarket: "TD" };
+  if (td) return { playerName: td.playerName, propMarket: td.count ? "TD_COUNT" : "TD" };
   if (LONGEST_PLAY_PATTERN.test(text)) return null;
 
   const match =PLAYER_PROP_STAT_PATTERNS.find(([, pattern]) => pattern.test(text));

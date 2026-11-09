@@ -413,12 +413,9 @@ async function main() {
     }
   );
   await expectAsync(
-    "Multi-TD text never reaches anytime-TD grading, even for a player who scored: Josh Allen 2+ TDs -> declined, not WIN",
+    "Multi-TD text is graded as a COUNT (Josh Allen 2+ TDs: 2 rushing TDs in this box score -> WIN), never as anytime-TD",
     resolvePlayerProp(legacyPick("Bills Josh Allen 2+ TDs", "Buffalo Bills", "Houston Texans"), HOU_BUF, "NFL"),
-    {
-      outcome: null,
-      reason: "this bet is a multi-touchdown (2+/3+) prop, which this app doesn't grade automatically yet - needs manual grading",
-    }
+    { outcome: "WIN" }
   );
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);

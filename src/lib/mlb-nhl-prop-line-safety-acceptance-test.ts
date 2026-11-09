@@ -392,12 +392,12 @@ function main() {
     check(`  market ${market}`, parsePlayerProp(expectedDescription)?.propMarket, market);
     check(`  not flagged unsupported: "${line}"`, detectUnsupportedPropLine(line), null);
   }
-  // TD N+ keeps its existing multi-TD "unsupported" handling (still a PLAYER_PROP
-  // that grading declines) - not rewritten to an over/under line.
+  // TD N+ text is not rewritten to an over/under line (it stays "2+ TDs"); parseTouchdownProp
+  // reads the threshold itself (TD_COUNT) and it is no longer flagged unsupported.
   {
     const r = parseCatalog("Krash\nNFL Puka Nacua 2+ TDs");
     check("TD N+ text untouched", r.picks.map((p) => [p.betType, p.description]), [["PLAYER_PROP", "Puka Nacua 2+ TDs"]]);
-    check("TD N+ still flagged multi-TD unsupported by parseTouchdownProp", !!parseTouchdownProp("Puka Nacua 2+ TDs")?.unsupported, true);
+    check("TD N+ is a graded count (OVER 1.5), not flagged unsupported", [parseTouchdownProp("Puka Nacua 2+ TDs")?.unsupported ?? null, parseTouchdownProp("Puka Nacua 2+ TDs")?.count], [null, { line: 1.5, direction: "OVER" }]);
   }
   // Unsupported NFL stats in N+ form route to unresolved (never yardage picks -
   // parsePlayerProp alone would read "receiving targets" as REC_YDS).

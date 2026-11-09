@@ -53,6 +53,7 @@ const PROP_MARKET_PHRASES: Record<string, string> = {
   RUSH_REC_YDS: "Rush+Rec Yds",
   PASS_RUSH_YDS: "Pass+Rush Yds",
   PASS_TDS: "Passing TDs",
+  TD_COUNT: "TDs",
   PASS_ATTEMPTS: "Pass Attempts",
   PASS_COMPLETIONS: "Completions",
   PASS_INTERCEPTIONS: "Interceptions",
@@ -135,9 +136,18 @@ export function buildPickDisplayLabel(input: PickDisplayLabelInput): string | nu
         // market, so the label falls back to raw betDetail rather than
         // mislabeling it "Anytime TD".
         const detail = input.betDetail ?? "";
-        if (parseTouchdownProp(detail)?.unsupported) return null;
+        const td = parseTouchdownProp(detail);
+        if (td?.unsupported || td?.count) return null;
         if (parsePlayerPropLine(detail)) return null;
         return `${cleanedName} Anytime TD`;
+      }
+
+      if (input.propMarket === "TD_COUNT") {
+        // "2+ TDs" / "Over 1.5 TDs" - the threshold is parseTouchdownProp's, not parsePlayerPropLine's:
+        // an "N+" has no over/under word in its text.
+        const count = parseTouchdownProp(input.betDetail ?? "")?.count;
+        if (!count) return null;
+        return `${cleanedName} ${count.direction === "OVER" ? "Over" : "Under"} ${count.line} TDs`;
       }
 
       if (input.propMarket === "ANYTIME_GOAL") {
