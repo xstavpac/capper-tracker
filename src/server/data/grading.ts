@@ -1261,7 +1261,10 @@ export async function resolveTouchdownProp(
   pick: { betDetail: string | null; homeTeam: string; awayTeam: string },
   eventId: string,
   sportName: string,
-  deps: NflPropDeps = {}
+  deps: NflPropDeps = {},
+  // The pick's stored propMarket, when the caller has it (resolvePlayerProp does). It keeps a count pick
+  // and an anytime pick from ever being graded as each other - see the two checks below.
+  storedMarket: PropMarket | null = null
 ): Promise<TouchdownPropResolution> {
   // The box-score reads below hit ESPN's football/nfl summary endpoint
   // specifically - there's no per-sport dispatch here the way getEspnScores
@@ -1291,6 +1294,17 @@ export async function resolveTouchdownProp(
     return { outcome: null, reason: parsed.unsupported };
   }
 
+  // The stored market and the text must agree on anytime-vs-count. A row stored TD whose text is a count
+  // bet (the one "2+ touchdowns" pick imported before TD_COUNT existed) would otherwise be graded - and
+  // recorded - as an anytime-TD pick; one stored TD_COUNT with no threshold in its text would be graded
+  // as anytime. Either way: manual, with the reason.
+  if (storedMarket === "TD" && parsed.count) {
+    return { outcome: null, reason: "this pick is stored as an anytime-TD bet but its text is a touchdown-count bet - needs manual grading" };
+  }
+  if (storedMarket === "TD_COUNT" && !parsed.count) {
+    return { outcome: null, reason: "couldn't find a touchdown-count line (2+ / Over / Under) in this bet text" };
+  }
+
   // Strip a leading/trailing team nickname if the capper included one - see
   // stripTeamNamesFromPlayerName (parse-catalog.ts), shared with
   // resolvePropOdds's caller (bulk-picks.ts) for the same reason.
@@ -1306,9 +1320,14 @@ export async function resolveTouchdownProp(
   // TDs in the other.
   const rushTds = located.stats.rushing?.touchdowns ?? 0;
   const recTds = located.stats.receiving?.touchdowns ?? 0;
-  const scored = parsed.propType === "RUSHING" ? rushTds > 0 : parsed.propType === "RECEIVING" ? recTds > 0 : rushTds + recTds > 0;
+  const tds = parsed.propType === "RUSHING" ? rushTds : parsed.propType === "RECEIVING" ? recTds : rushTds + recTds;
 
-  return { outcome: scored ? "WIN" : "LOSS" };
+  // TD count ("2+", "3+", "Over/Under x"): rushing + receiving TDs against the threshold. "N+" is OVER
+  // N - 0.5, so it can never push; a whole-number Over/Under line pushes on equal (gradeAgainstLine).
+  // Return, defensive and passing TDs are not counted - the same columns anytime-TD has always read.
+  if (parsed.count) return { outcome: gradeAgainstLine(tds, parsed.count.line, parsed.count.direction) };
+
+  return { outcome: tds > 0 ? "WIN" : "LOSS" };
 }
 
 export async function gradeTouchdownProp(
@@ -1374,7 +1393,7 @@ export type PlayerPropResolution =
   | { outcome: "WIN" | "LOSS" | "PUSH" }
   | { outcome: null; reason: string };
 
-type YardageOrReceptionsMarket = Exclude<PlayerPropMarket, "TD">;
+type YardageOrReceptionsMarket = Exclude<PlayerPropMarket, "TD" | "TD_COUNT">;
 
 // Passing/rushing/receiving-yardage and receptions prop grading. Same
 // "matched the game fine, but couldn't confidently grade the bet itself"
@@ -1474,8 +1493,8 @@ export async function resolvePlayerProp(
   if (sportName === "NBA") return gradeNbaPlayerProp(pick, eventId);
 
   const market = resolvedPropMarket(pick);
-  if (market === null || market === "TD") {
-    return resolveTouchdownProp(pick, eventId, sportName, deps);
+  if (market === null || market === "TD" || market === "TD_COUNT") {
+    return resolveTouchdownProp(pick, eventId, sportName, deps, pick.propMarket);
   }
   return resolveYardageOrReceptionsProp(pick, eventId, sportName, market, deps);
 }

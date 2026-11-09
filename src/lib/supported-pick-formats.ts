@@ -205,6 +205,12 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         status: "supported",
         check: { via: "nfl-prop", market: "TD", anytimeTd: true },
       },
+      {
+        market: "Multi-TD / TD count",
+        examples: ["Jahmyr Gibbs 2+ TDs", "Jahmyr Gibbs over 1.5 touchdowns"],
+        status: "supported",
+        check: { via: "nfl-prop", market: "TD_COUNT" },
+      },
     ],
   },
   {
@@ -389,9 +395,9 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         check: { via: "nba-ungraded" },
       },
       {
-        // parseTouchdownProp recognizes these, resolveTouchdownProp declines to grade them.
-        market: "First TD / 2+ TDs",
-        examples: ["Jahmyr Gibbs first TD", "Jahmyr Gibbs 2+ TDs"],
+        // parseTouchdownProp recognizes this, resolveTouchdownProp declines to grade it.
+        market: "First TD",
+        examples: ["Jahmyr Gibbs first TD"],
         status: "not-yet",
         check: { via: "nfl-td-ungraded" },
       },

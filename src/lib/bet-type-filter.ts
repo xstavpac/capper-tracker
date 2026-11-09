@@ -36,6 +36,7 @@ export type BetTypeFilterKey =
   | "F5_TOTAL"
   | "TEAM_TOTAL"
   | "TD"
+  | "TD_COUNT"
   | "PASS_YDS"
   | "RUSH_YDS"
   | "REC_YDS"
@@ -86,6 +87,7 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "F5_TOTAL", label: "F5 Total" },
   { value: "TEAM_TOTAL", label: "Team Total" },
   { value: "TD", label: "Touchdown" },
+  { value: "TD_COUNT", label: "TD Count (2+ / O-U)" },
   { value: "PASS_YDS", label: "Passing Yards" },
   { value: "RUSH_YDS", label: "Rushing Yards" },
   { value: "REC_YDS", label: "Receiving Yards" },
@@ -196,7 +198,7 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
   if (chipSet.includes("TD_PROP"))
     options.push(
-      "TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS",
+      "TD", "TD_COUNT", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS",
       "PASS_ATTEMPTS", "PASS_COMPLETIONS", "PASS_INTERCEPTIONS", "RUSH_ATTEMPTS"
     );
   // NHL player props: hockey is the only chip set with the P1/P2/P3 segment

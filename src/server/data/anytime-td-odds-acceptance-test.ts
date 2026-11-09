@@ -83,7 +83,7 @@ expect("REC_YDS query without side/point -> null", resolvePropOddsFromGame(game,
 // 6. Grading/parsing unchanged: parseTouchdownProp output pinned for the texts grading reads.
 expect("parseTouchdownProp anytime", parseTouchdownProp("Puka Nacua Anytime TD"), { playerName: "Puka Nacua", propType: "ANY", unsupported: undefined });
 expect("parseTouchdownProp first-TD still unsupported", !!parseTouchdownProp("Travis Kelce First TD")?.unsupported, true);
-expect("parseTouchdownProp multi-TD still unsupported", !!parseTouchdownProp("Travis Kelce 2+ TDs")?.unsupported, true);
+expect("parseTouchdownProp multi-TD is a graded count, never anytime-TD", [parseTouchdownProp("Travis Kelce 2+ TDs")?.unsupported ?? null, parseTouchdownProp("Travis Kelce 2+ TDs")?.count, isAnytimeTdPick("Travis Kelce 2+ TDs")], [null, { line: 1.5, direction: "OVER" }, false]);
 expect("parseTouchdownProp rushing TD type", parseTouchdownProp("Travis Kelce Rushing TD")?.propType, "RUSHING");
 expect("parsePlayerProp still tags TD", parsePlayerProp("Puka Nacua Anytime TD"), { playerName: "Puka Nacua", propMarket: "TD" });
 
