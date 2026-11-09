@@ -69,6 +69,7 @@ const MARKET_NOUNS = {
   BASKETBALL: {
     POINTS: "points",
     REBOUNDS: "rebounds",
+    DEFENSIVE_REBOUNDS: "defensive rebounds",
     ASSISTS: "assists",
     THREES_MADE: "threes made",
     STEALS: "steals",

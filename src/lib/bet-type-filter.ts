@@ -67,6 +67,7 @@ export type BetTypeFilterKey =
   // (BET_TYPE_FILTER_OPTIONS / betTypeOptionsForChipSet), so such a pick
   // matches no filter - the same as any market without an option.
   | "REBOUNDS"
+  | "DEFENSIVE_REBOUNDS"
   | "THREES_MADE"
   | "STEALS"
   | "BLOCKS"

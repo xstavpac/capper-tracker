@@ -37,7 +37,7 @@ const BET_TYPES = Object.values(BetType);
 const NON_NFL_PROP_MARKETS = new Set<string>([
   "ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES",
   "STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS",
-  "REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS",
+  "REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS",
   // TD_COUNT (2026-11) lands in TD_PROP like every market without a category of its own; the
   // sweep axis stays at the values the pinned golden table was generated from.
   "TD_COUNT",

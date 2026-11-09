@@ -173,6 +173,24 @@ async function main() {
       check(`"${text}" is an NBA prop with NO market and an unsupported reason`, { name: prop?.playerName, market: prop?.propMarket ?? null, flagged: Boolean(prop?.unsupported) }, { name: "Jokic", market: null, flagged: true });
       check(`"${text}" is never returned as a supported market`, parseNbaPlayerProp(text), null);
     }
+    // Defensive rebounds are their own market and are NEVER total rebounds (parser-ordering pin).
+    for (const text of [
+      "Gobert over 7.5 defensive rebounds",
+      "Gobert o7.5 def reb",
+      "Gobert o7.5 def. rebs",
+      "Gobert under 7.5 dreb",
+      "Gobert 8+ defensive rebounds",
+      "Gobert Over 7.5 Defensive Boards",
+    ]) {
+      check(`"${text}" -> DEFENSIVE_REBOUNDS, player Gobert`, { m: parseNbaProp(text)?.propMarket, n: parseNbaProp(text)?.playerName }, { m: "DEFENSIVE_REBOUNDS", n: "Gobert" });
+      check(`"${text}" never grades as total rebounds`, parseNbaPlayerProp(text)?.propMarket === "REBOUNDS", false);
+    }
+    check("plain rebounds still REBOUNDS", parseNbaPlayerProp("Gobert over 11.5 rebounds")?.propMarket, "REBOUNDS");
+    check("rebounds + assists still REBOUNDS_ASSISTS", parseNbaPlayerProp("Jokic over 20.5 rebounds + assists")?.propMarket, "REBOUNDS_ASSISTS");
+    for (const text of ["Gobert defensive rebounds + assists o12.5", "Gobert o20.5 pts + dreb", "Gobert o9.5 defensive rebounds and rebounds", "Gobert 1st quarter over 3.5 defensive rebounds", "Gobert over 3.5 offensive rebounds"]) {
+      const prop = parseNbaProp(text);
+      check(`"${text}" is unsupported (no market, never total rebounds)`, { market: prop?.propMarket ?? null, flagged: Boolean(prop?.unsupported) }, { market: null, flagged: true });
+    }
     // The two shapes most likely to be misread as a supported one.
     check("triple-double is not a double-double", parseNbaProp("Jokic triple-double")?.propMarket, null);
     check("a quarter-scoped points line is not full-game POINTS", parseNbaProp("Jokic 1st quarter over 7.5 points")?.propMarket, null);

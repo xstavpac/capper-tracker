@@ -105,6 +105,14 @@ async function main() {
     check("STEALS over 2.5 (3) -> WIN", await grade(pick("Jock Landale over 2.5 steals")), W);
     check("STEALS over 3.5 (3) -> LOSS", await grade(pick("Jock Landale over 3.5 steals")), L);
     check("STEALS over 3 (3) -> PUSH", await grade(pick("Jock Landale over 3 stl")), P);
+    // Aday Mara (OKC): 10 REB of which 8 defensive (OREB 2). The two must never be confused.
+    check("DREB over 7.5 (8) -> WIN", await grade(pick("Aday Mara over 7.5 defensive rebounds")), W);
+    check("DREB under 7.5 (8) -> LOSS", await grade(pick("Aday Mara u7.5 dreb")), L);
+    check("DREB over 8 (8) -> PUSH", await grade(pick("Aday Mara over 8 defensive rebounds")), P);
+    check("DREB N+: 8+ defensive rebounds (= over 7.5) -> WIN", await grade(pick("Aday Mara 8+ defensive rebounds")), W);
+    check("DREB N+: 9+ defensive rebounds (= over 8.5) -> LOSS", await grade(pick("Aday Mara 9+ defensive rebounds")), L);
+    check("DREB over 9.5 is a LOSS though total rebounds (10) would WIN", await grade(pick("Aday Mara over 9.5 defensive rebounds")), L);
+    check("stored propMarket DEFENSIVE_REBOUNDS grades the same", await grade(pick("over 7.5", OKC_GAME, { playerName: "Aday Mara", propMarket: "DEFENSIVE_REBOUNDS" })), W);
     // Mara: 4 BLK.
     check("BLOCKS over 3.5 (4) -> WIN", await grade(pick("Aday Mara over 3.5 blocks")), W);
     check("BLOCKS under 3.5 (4) -> LOSS", await grade(pick("Aday Mara u3.5 blk")), L);
@@ -152,6 +160,7 @@ async function main() {
     rosterReads = 0;
     // Listed as DID NOT DRESS, and the roster has exactly one LeBron James (id 1966, the same id).
     check("listed DNP, roster resolves to exactly that id -> PUSH", await grade(pick("LeBron James over 24.5 points", DNP_GAME), dnpBox), P);
+    check("listed DNP, defensive rebounds -> PUSH", await grade(pick("LeBron James over 4.5 defensive rebounds", DNP_GAME), dnpBox), P);
     check("listed DNP, same rule for a yes/no market -> PUSH", await grade(pick("Joel Embiid double-double", DNP_GAME), dnpBox), P);
     // "Carter" is one row in this box (Devin Carter, DNP - ILLNESS) but two roster players
     // (Devin Carter BOS, Jevon Carter ORL): the box alone can't prove which one the pick meant.
@@ -193,6 +202,22 @@ async function main() {
       outcome: null,
       reason: "this NBA prop market isn't one this app grades automatically yet - needs manual grading",
     });
+    // An older game whose box score has no defensiveRebounds column: PENDING, never graded as 0. Other markets on it still grade.
+    {
+      const stripped = JSON.parse(JSON.stringify(okcRaw));
+      for (const t of stripped.boxscore.players) for (const g of t.statistics) {
+        const i = g.keys.indexOf("defensiveRebounds");
+        g.keys.splice(i, 1);
+        for (const a of g.athletes) if (a.stats?.length) a.stats.splice(i, 1);
+      }
+      const noCol = extractNbaBoxScore(stripped);
+      check("box score without the dreb column still extracts", noCol !== null && noCol.players.length === 21, true);
+      check("missing dreb column -> PENDING with a reason", await grade(pick("Aday Mara under 12.5 defensive rebounds"), noCol!), {
+        outcome: null,
+        reason: "this game's box score has no defensive rebounds column - needs manual grading",
+      });
+      check("missing dreb column does not break total rebounds", await grade(pick("Aday Mara o9.5 reb"), noCol!), W);
+    }
     check("triple-double: recognized, not graded", await grade(pick("Aday Mara triple-double")), {
       outcome: null,
       reason: "this bet is a triple-double prop, which this app doesn't grade automatically yet - needs manual grading",

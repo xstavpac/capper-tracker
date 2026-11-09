@@ -28,6 +28,10 @@ export type NbaPlayerRow = {
   didNotPlay: boolean;
   points: number;
   rebounds: number;
+  // Defensive rebounds. null = this game's box score has no such column (an
+  // optional key, not in REQUIRED_KEYS): the grader leaves a DEFENSIVE_REBOUNDS
+  // pick PENDING then, rather than grading it against a made-up 0.
+  defensiveRebounds?: number | null;
   assists: number;
   steals: number;
   blocks: number;
@@ -56,6 +60,8 @@ type EspnGroup = {
   athletes?: { athlete?: { id?: string; displayName?: string }; didNotPlay?: boolean; stats?: string[] }[];
 };
 
+// Read when present, never required: a game missing it must not fail every other NBA prop on it.
+const OPTIONAL_DREB_KEY = "defensiveRebounds";
 const REQUIRED_KEYS = ["points", "rebounds", "assists", "steals", "blocks", "turnovers", "threePointFieldGoalsMade-threePointFieldGoalsAttempted"] as const;
 
 // Returns null when the response has no usable box score at all (missing
@@ -83,6 +89,7 @@ export function extractNbaBoxScore(espnSummaryResponse: unknown): NbaBoxScore | 
       const keys = group.keys ?? [];
       const [iPts, iReb, iAst, iStl, iBlk, iTo, i3] = REQUIRED_KEYS.map((k) => keys.indexOf(k));
       if ([iPts, iReb, iAst, iStl, iBlk, iTo, i3].some((i) => i < 0)) return null;
+      const iDreb = keys.indexOf(OPTIONAL_DREB_KEY);
       for (const a of athletes) {
         if (!a.athlete?.id || !a.athlete.displayName) continue;
         const stats = a.stats ?? [];
@@ -95,6 +102,7 @@ export function extractNbaBoxScore(espnSummaryResponse: unknown): NbaBoxScore | 
           didNotPlay,
           points: didNotPlay ? 0 : toInt(stats[iPts]),
           rebounds: didNotPlay ? 0 : toInt(stats[iReb]),
+          defensiveRebounds: didNotPlay ? 0 : iDreb < 0 || stats[iDreb] === undefined ? null : toInt(stats[iDreb]),
           assists: didNotPlay ? 0 : toInt(stats[iAst]),
           steals: didNotPlay ? 0 : toInt(stats[iStl]),
           blocks: didNotPlay ? 0 : toInt(stats[iBlk]),

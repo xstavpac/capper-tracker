@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "PropMarket" ADD VALUE 'DEFENSIVE_REBOUNDS';
