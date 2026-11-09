@@ -1,3 +1,4 @@
+import { PERIOD_TOKEN_RE } from "@/lib/period-token";
 import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // MLB player-prop text parsing - the MLB twin of nhl-prop.ts / bet-line.ts's NFL
 // parsePlayerProp, in its own pure module so the NFL and NHL parsers (and every
@@ -181,6 +182,7 @@ export function parseMlbPlayerProp(text: string): ParsedMlbProp | null {
   const matched = hit.m[0];
   const playerName = (normalized.slice(0, hit.m.index) + " " + normalized.slice(hit.m.index + matched.length))
     .replace(/\([^)]*\)/g, " ")
+    .replace(PERIOD_TOKEN_RE, " ")
     .replace(/\b(?:mlb|pitcher|pitching|hitter|hitting|batter|starter|sp)\b/gi, " ")
     .replace(/\bvs\.?(?=\s)|@/gi, " ") // "Yankees vs Red Sox Schlittler": matchup words are not part of the name
     .replace(/\b(?:over|under)\b/gi, " ")

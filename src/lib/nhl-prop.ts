@@ -1,3 +1,4 @@
+import { PERIOD_TOKEN_RE } from "@/lib/period-token";
 import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // NHL player-prop text parsing - the NHL twin of bet-line.ts's NFL
 // parsePlayerProp, kept in its own pure module so the NFL parser (and every
@@ -147,6 +148,7 @@ export function parseNhlPlayerProp(
 
   const playerName = normalized
     .replace(/\([^)]*\)/g, " ")
+    .replace(PERIOD_TOKEN_RE, " ")
     .replace(ANYTIME_NO_RE, " ")
     .replace(MARKET_STRIP[propMarket], " ")
     .replace(abbreviations ? /\b(?:fgs|atgs?|ags)\b/gi : /$^/, " ")
