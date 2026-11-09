@@ -9,6 +9,7 @@ import {
   localParts,
   momentumEvents,
   momentumMatchesTile,
+  xTicksFor,
   yAxisFor,
 } from "@/lib/momentum";
 
@@ -60,7 +61,7 @@ check("same-minute grades are one point", m.points.map((p) => [p.v, p.change]), 
 check("first real point's change is since the start point", [m.points[1].prevT === m.points[0].t, m.points[0].prevT], [true, null]);
 check("last point is the net", m.net, 0.5);
 check("today: x runs to now", [m.xStart, m.xEnd], [at("2026-11-07T20:00:00"), NOW]);
-check("x ticks every 2 h from the first hour, in CT", m.xTicks.map((t) => t.label), ["2PM", "4PM", "6PM", "8PM", "10PM"]);
+check("9.5 h span: 4 h steps on clock multiples, in CT", m.xTicks.map((t) => t.label), ["4PM", "8PM"]);
 
 // ---- a past day that grades past midnight: the first tick after midnight carries the day ----
 const past = buildMomentum(
@@ -73,8 +74,24 @@ const past = buildMomentum(
 );
 check("past day ends at the last grade", past.xEnd, at("2026-11-08T08:30:00"));
 check("midnight tick labelled with the day, stronger gridline", past.xTicks.map((t) => [t.label, t.dayStart]), [
-  ["2PM", false], ["4PM", false], ["6PM", false], ["8PM", false], ["10PM", false], ["12AM Sun", true], ["2AM", false],
+  ["4PM", false], ["8PM", false], ["12AM Sun", true],
 ]);
+
+// ---- tick density: step from the span, on local clock multiples, <= 6 labels, no duplicates ----
+const ticksFor = (s: string, e: string) => xTicksFor(at(s), at(e), CT);
+const shortT = ticksFor("2026-11-07T20:00:00", "2026-11-07T23:00:00"); // 2 PM -> 5 PM CT, 3 h
+check("short span (3 h): 2 h steps", shortT.map((t) => t.label), ["2PM", "4PM"]);
+const medT = ticksFor("2026-11-07T20:00:00", "2026-11-08T06:00:00"); // 2 PM -> 12 AM CT, 10 h
+check("medium span (10 h): 4 h steps", medT.map((t) => t.label), ["4PM", "8PM", "12AM Sun"]);
+const longT = ticksFor("2026-11-08T04:00:00", "2026-11-08T23:30:00"); // 10 PM Sat -> 5:30 PM Sun CT, 19.5 h
+check("long span (~20 h) crossing midnight early: 6 h steps, weekday on midnight", longT.map((t) => [t.label, t.dayStart]), [
+  ["12AM Sun", true], ["6AM", false], ["12PM", false],
+]);
+for (const [name, ts] of [["short", shortT], ["medium", medT], ["long", longT]] as const) {
+  const labels = ts.map((t) => t.label);
+  check(name + " span: <= 6 ticks, no duplicate labels", [labels.length <= 6, new Set(labels).size === labels.length], [true, true]);
+}
+check("first tick is on a clock multiple after xStart", medT[0].t > at("2026-11-07T20:00:00"), true);
 
 // ---- y axis: every 20u, 0 always present ----
 check("y ticks for -42.15..20.6", yAxisFor(-42.15, 20.6).ticks, [-60, -40, -20, 0, 20, 40]);

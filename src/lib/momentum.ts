@@ -15,7 +15,7 @@ const SETTLED = new Set(["WIN", "LOSS", "PUSH"]);
 
 export const FLAT_BELOW_UNITS = 1.5;
 export const TREND_WINDOW_MS = 2 * H;
-export const TICK_EVERY_MS = 2 * H;
+export const MIN_SPAN_MS = 2 * H;
 
 export type MomentumEvent = { t: number; d: number };
 
@@ -146,13 +146,22 @@ export function greenShare(min: number, max: number): number {
   return max / (max - min);
 }
 
+// Hours between labels, chosen from the span so the axis stays at about 5 labels: <=8 h -> 2 h,
+// <=16 h -> 4 h, longer -> 6 h.
+export function tickStepHours(spanMs: number): number {
+  return spanMs <= 8 * H ? 2 : spanMs <= 16 * H ? 4 : 6;
+}
+
+// Ticks sit on local clock hours that are multiples of the step (12AM, 4AM, 8AM ...), not offset from
+// xStart. Midnight always carries its weekday and the stronger gridline.
 export function xTicksFor(xStart: number, xEnd: number, tz: string): MomentumTick[] {
+  const step = tickStepHours(xEnd - xStart);
   const out: MomentumTick[] = [];
-  let prevDay = localParts(xStart, tz).dayKey;
-  for (let t = xStart; t <= xEnd; t += TICK_EVERY_MS) {
+  let t = floorToHour(xStart, tz);
+  while (t < xStart || localParts(t, tz).hour % step !== 0) t += H;
+  for (; t <= xEnd; t += step * H) {
     const l = localParts(t, tz);
-    const dayStart = l.dayKey !== prevDay;
-    prevDay = l.dayKey;
+    const dayStart = l.hour === 0;
     out.push({ t, label: hourLabel(t, tz) + (dayStart ? " " + l.weekday : ""), dayStart });
   }
   return out;
@@ -189,7 +198,7 @@ export function buildMomentum(
   }
   const lastPoint = points[points.length - 1];
   const rawEnd = empty ? now : isToday ? Math.max(lastPoint.t, now) : lastPoint.t;
-  const xEnd = Math.max(rawEnd, xStart + TICK_EVERY_MS);
+  const xEnd = Math.max(rawEnd, xStart + MIN_SPAN_MS);
 
   const vals = points.map((p) => p.v);
   const vmin = Math.min(...vals);
