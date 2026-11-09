@@ -20,7 +20,9 @@ import { threeWayWording } from "@/lib/nhl-three-way";
 import { derivePickSide } from "@/lib/pick-side";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
-import { oddsApiRequestKeys } from "@/lib/sport-seasons";
+import { isSportInSeason, oddsApiRequestKeys, SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
+import { filterPlausibleCandidates } from "@/lib/ambiguous-line-plausibility";
+import { NCAAB_D1_TEAMS } from "@/lib/generated/college-teams.generated";
 import { hasKickedOff, isGameOver, type GameFeedStatus } from "@/lib/parlay/game-over";
 import { resolveFanDuelPlayer } from "@/lib/parlay/fanduel-player-match";
 import {
@@ -36,6 +38,9 @@ import {
   priceMismatch,
   priceMovedWarning,
   propMarketLabel,
+  sameNameOtherSport,
+  storedLeagueOutOfSeason,
+  storedLineImplausible,
   twoGamesFound,
 } from "@/lib/parlay/fanduel-reasons";
 
@@ -664,6 +669,89 @@ async function leagueEvents(sportKey: string, deps: FanDuelDeps): Promise<{ even
 
 const PRICE_GATED_BETS = new Set(["SPREAD", "TOTAL", "TEAM_TOTAL"]);
 
+// ---------------------------------------------------------------------
+// The final check before sending: is the stored game believable?
+// ---------------------------------------------------------------------
+// A pick imported onto the wrong game (a school's basketball pick stored on its
+// football game four days out) still names a real FanDuel market, and every
+// later step would happily send it. These checks look only at the stored game,
+// block that one leg as "Needs clarification", and never switch it to another game.
+
+// The day a send belongs to: America/Chicago, the same calendar the slate uses.
+export const SLATE_TIME_ZONE = "America/Chicago";
+export function slateDateKey(at: Date | string | number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: SLATE_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(at));
+}
+const slateDay = (at: string) =>
+  new Date(at).toLocaleDateString("en-US", { timeZone: SLATE_TIME_ZONE, weekday: "short", month: "short", day: "numeric" });
+
+const LINE_BETS = new Set(["SPREAD", "TOTAL", "TEAM_TOTAL"]);
+const BET_WORDS: Record<string, string> = { SPREAD: "a spread", TOTAL: "a total", TEAM_TOTAL: "a team total" };
+
+// Checks 1 and 2, which need no feed: the stored league is in season (isSportInSeason; a league with no season
+// window configured is not judged), and the stored line is one that league posts (the import's own
+// ambiguous-line-plausibility bounds; a league with no bound there passes). The sentence to block with, or null.
+export function storedGameProblem(leg: FanDuelLegInput, now: Date): string | null {
+  if (!leg.sportKey) return null;
+  if (SPORT_SEASON_CONFIG[leg.sportKey] && !isSportInSeason(leg.sportKey, now)) return storedLeagueOutOfSeason(leg.leagueName);
+  if (!LINE_BETS.has(leg.betType)) return null;
+  const betType = leg.betType as "SPREAD" | "TOTAL" | "TEAM_TOTAL";
+  const line = leg.line ?? extractLine(betType, leg.betDetail ?? "");
+  if (line === null) return null;
+  const self = [{ label: leg.leagueName, sport: leg.leagueName, nickname: "" }];
+  const plausible = filterPlausibleCandidates(self, betType, line, leg.period !== "FULL_GAME");
+  return plausible.length === 0 ? storedLineImplausible(leg.leagueName, BET_WORDS[leg.betType], line) : null;
+}
+
+const NCAAF_KEY = "americanfootball_ncaaf";
+const NCAAB_KEY = "basketball_ncaab";
+const LEAGUE_LABEL: Record<string, string> = { [NCAAF_KEY]: "NCAAF", [NCAAB_KEY]: "NCAAB" };
+
+// The other leagues a stored team's name is also a team in. Only a college school does that - one name, a football
+// and a basketball team - so only NCAAF <-> NCAAB answers. Pro teams that share a nickname ("Panthers") never share
+// the whole name. A basketball-only school has no football team to confuse it with.
+export function otherLeaguesForTeam(teamName: string, sportKey: string): string[] {
+  if (sportKey !== NCAAF_KEY && sportKey !== NCAAB_KEY) return [];
+  const school = NCAAB_D1_TEAMS.find((t) => teamNamesMatch(t.name, teamName, NCAAB_KEY) || teamNamesMatch(t.name, teamName, NCAAF_KEY));
+  if (!school) return [];
+  if (sportKey === NCAAF_KEY) return [NCAAB_KEY];
+  return school.football ? [NCAAF_KEY] : [];
+}
+
+// The stored team(s) the pick is on: its side when the pick settles one, else both.
+function pickTeams(leg: FanDuelLegInput): string[] {
+  const sideBet = leg.betType === "TEAM_TOTAL" ? "MONEYLINE" : leg.betType;
+  const side =
+    leg.pickedSide === "HOME" || leg.pickedSide === "AWAY"
+      ? leg.pickedSide
+      : sideBet === "MONEYLINE" || sideBet === "SPREAD"
+        ? derivePickSide({ betType: sideBet, betDetail: leg.betDetail, pickedSide: null }, leg, leg.leagueName)
+        : null;
+  if (side === "HOME") return [leg.homeTeam];
+  if (side === "AWAY") return [leg.awayTeam];
+  return [leg.homeTeam, leg.awayTeam];
+}
+
+// Check 3's question for one leg: which other in-season leagues to look in, or none. Only a leg whose stored game is
+// NOT on the send's slate date asks at all - a same-day leg needs no listing beyond its own league's.
+function slateCheckLeagues(leg: FanDuelLegInput, slate: string, now: Date): string[] {
+  if (!leg.sportKey || slateDateKey(leg.gameTime) === slate) return [];
+  const keys = new Set(pickTeams(leg).flatMap((t) => otherLeaguesForTeam(t, leg.sportKey!)));
+  return Array.from(keys).filter((k) => isSportInSeason(k, now));
+}
+
+// Check 3's answer: the other league's games on the slate date with a team named like the pick's. Every one is
+// named; none is chosen.
+function sameNameGamesToday(leg: FanDuelLegInput, otherKey: string, events: FanDuelEvent[], slate: string): FanDuelEvent[] {
+  const teams = pickTeams(leg);
+  return events.filter(
+    (e) => slateDateKey(e.commenceTime) === slate && teams.some((t) => teamNamesMatch(e.homeTeam, t, otherKey) || teamNamesMatch(e.awayTeam, t, otherKey))
+  );
+}
+
+const gameWords = (league: string, game: { awayTeam: string; homeTeam: string; commenceTime: string }) =>
+  league + ": " + game.awayTeam + " @ " + game.homeTeam + ", " + slateDay(game.commenceTime);
+
 // Whether FanDuel's price for the selection is believable for this pick: the sentence to block with, or a warning to
 // send with, or neither.
 export function checkPrice(
@@ -710,6 +798,13 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       settle(leg, "over", leg.onBoard ? "Game is over." : "Game is over or no longer on the board.");
       continue;
     }
+    // Final check, part 1: the stored league and line (no feed needed). Blocks this leg only. A live leg goes
+    // through it too - only its price gap is relaxed (checkPrice).
+    const storedProblem = storedGameProblem(leg, deps.now);
+    if (storedProblem) {
+      settle(leg, "needs_clarification", storedProblem);
+      continue;
+    }
     const target = fanDuelLegTarget(leg);
     if (!target.ok) {
       settle(leg, target.status ?? "unsupported", target.reason);
@@ -721,11 +816,28 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   // 2. Each leg's event, from one listing per league - plus the league's
   // preseason listing while oddsApiRequestKeys says there is one, the same
   // keys the board's own odds are read from (fetchMergedOddsListing).
-  const sportKeys = Array.from(new Set(pending.map((p) => p.leg.sportKey!)));
+  // Final check, part 3 (slate): a leg whose stored game is not on today's slate, on a school that also plays
+  // another in-season sport, needs that sport's free /events listing too. Asked for in this same batch, once per
+  // league per send - and not at all when every leg is on today's slate or no name is shared.
+  const slate = slateDateKey(deps.now);
+  const slateLeagues = new Map(pending.map((p) => [p.leg.pickId, slateCheckLeagues(p.leg, slate, deps.now)] as const));
+  const sportKeys = Array.from(new Set([...pending.map((p) => p.leg.sportKey!), ...Array.from(slateLeagues.values()).flat()]));
   const listings = new Map(await Promise.all(sportKeys.map(async (key) => [key, await leagueEvents(key, deps)] as const)));
   type Wanted = { leg: FanDuelLegInput; target: FanDuelLegTarget; event: FanDuelEvent };
   const byEvent = new Map<string, Wanted[]>();
   for (const { leg, target } of pending) {
+    const otherKeys = slateLeagues.get(leg.pickId) ?? [];
+    if (otherKeys.some((k) => !listings.get(k))) {
+      // Can't rule the other game out: not sent, and not called a mismatch either.
+      settle(leg, "error", FEED_DOWN);
+      continue;
+    }
+    const others = otherKeys.flatMap((k) => sameNameGamesToday(leg, k, listings.get(k)!.events, slate).map((e) => gameWords(LEAGUE_LABEL[k] ?? k, e)));
+    if (others.length > 0) {
+      // Never switched to the other game, and never settled by which game's price looks closer.
+      settle(leg, "needs_clarification", sameNameOtherSport(gameWords(leg.leagueName, { ...leg, commenceTime: leg.gameTime }), others));
+      continue;
+    }
     const listing = listings.get(leg.sportKey!);
     if (!listing) {
       settle(leg, "error", FEED_DOWN);

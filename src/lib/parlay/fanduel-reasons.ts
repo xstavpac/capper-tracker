@@ -9,7 +9,9 @@
 //   Line unavailable            FanDuel has the market, not this line (or only one past the allowed move)
 //   Potentially incorrect market match   FanDuel's price is far from the pick's: not sent
 //   Player not matched          no one, or more than one, on FanDuel is that player
-//   Needs clarification         a supported bet, but which team it is on isn't settled
+//   Needs clarification         a supported bet, but which team it is on isn't settled - or the stored
+//                               game looks wrong (league out of season, a line that league never posts,
+//                               or the same school playing another sport today)
 //   Market not supported        this app doesn't send that bet for the league yet
 // A leg's line (closest line is X, more than N away) and a selection with no
 // betslip link keep their own sentences; they are already specific.
@@ -113,4 +115,15 @@ export const playersAmbiguous = (typed: string, names: string[]) =>
 export const sideNeedsClarification = (awayTeam: string, homeTeam: string) =>
   "Needs clarification — which team is this pick on, " + awayTeam + " or " + homeTeam + "? Fix the pick's team and send again.";
 
-export const marketNotSupported = (league: string, what: string) => "Market not supported for " + league + " yet — " + what + ".";
+// The final check before sending (fanduel-link.ts storedGameProblem / slate check): the stored game itself looks wrong.
+export const storedLeagueOutOfSeason = (league: string) =>
+  "Needs clarification — this pick is stored as a " + league + " game, and " + league + " isn't in season. Fix the pick's game and send again.";
+
+export const storedLineImplausible = (league: string, what: string, line: number) =>
+  "Needs clarification — " + what + " of " + line + " isn't a real " + league + " line, so this pick may be stored on the wrong game. Fix the pick and send again.";
+
+// `stored` / `others`: "NCAAF: Clemson Tigers @ South Carolina Gamecocks, Sat, Nov 14".
+export const sameNameOtherSport = (stored: string, others: string[]) =>
+  "Needs clarification — this pick is stored on " + stored + ", but the same team also plays today: " + others.join("; ") + ". Which game is it? Fix the pick's game and send again.";
+
+export const marketNotSupported =(league: string, what: string) => "Market not supported for " + league + " yet — " + what + ".";

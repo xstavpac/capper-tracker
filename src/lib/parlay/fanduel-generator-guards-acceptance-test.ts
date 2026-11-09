@@ -38,9 +38,9 @@ const NOW = new Date("2026-10-13T20:00:00Z");
 const link = (m: string, s: string) => `https://sportsbook.fanduel.com/addToBetslip?marketId=${m}&selectionId=${s}`;
 
 // One event, its markets as given; legs find it by teams + time.
-async function run(sportKey: string, home: string, away: string, markets: FanDuelMarket[], legs: FanDuelLegInput[], commence = NHL.commence_time) {
+async function run(sportKey: string, home: string, away: string, markets: FanDuelMarket[], legs: FanDuelLegInput[], commence = NHL.commence_time, now = NOW) {
   const deps: FanDuelDeps = {
-    now: NOW,
+    now,
     getEvents: async (k) => (k === sportKey ? [{ id: "evt", sportKey, homeTeam: home, awayTeam: away, commenceTime: commence }] : []),
     getEventMarkets: async (_s, _e, keys) => markets.filter((m) => keys.includes(m.key)),
   };
@@ -79,6 +79,11 @@ function totalsBoard(point: number, overPrice = -110, underPrice = -110): FanDue
     },
   ];
 }
+// The college scenarios run inside the NCAAB season (it opens 2026-11-01; NOW is 10-13), so the final check's
+// season gate (PR C) doesn't stop them before the line rules they are about.
+const COLLEGE_NOW = new Date("2026-11-10T20:00:00Z");
+const COLLEGE_AT = "2026-11-11T00:30:00Z";
+const runCollege = (sportKey: string, markets: FanDuelMarket[], legs: FanDuelLegInput[]) => run(sportKey, "Home Team", "Away Team", markets, legs, COLLEGE_AT, COLLEGE_NOW);
 const collegeLeg = (pickId: string, league: "NCAAB" | "NCAAF", over: Partial<FanDuelLegInput>): FanDuelLegInput => ({
   pickId,
   sportKey: league === "NCAAB" ? "basketball_ncaab" : "americanfootball_ncaaf",
@@ -89,7 +94,7 @@ const collegeLeg = (pickId: string, league: "NCAAB" | "NCAAF", over: Partial<Fan
   line: null,
   homeTeam: "Home Team",
   awayTeam: "Away Team",
-  gameTime: NHL.commence_time,
+  gameTime: COLLEGE_AT,
   odds: -110,
   oddsSource: "STATED",
   onBoard: true,
@@ -140,25 +145,30 @@ async function main() {
   const inc = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
     nhlLeg("Avalanche over 1.5 1P", { betDetail: "Avalanche over 1.5 1P", line: 1.5, odds: -110, oddsSource: "DEFAULTED" }),
   ]);
+  // PR C: a full-game NHL total of 1.5 is no NHL line at all (ambiguous-line-plausibility: 4.5-8.5), so the final
+  // check stops it before the ladder is read - the stored game is the problem, not FanDuel's line.
   check(
-    "FULL_GAME over 1.5, ladder starts at Over 2.5 (-6000): Line unavailable, not sent, no sent-as line",
+    "FULL_GAME over 1.5 (really a 1P bet): Needs clarification before the ladder, not sent, no sent-as line",
     [inc.by["Avalanche over 1.5 1P"].status, inc.by["Avalanche over 1.5 1P"].sentLine, inc.url],
-    ["line_unavailable", null, null]
+    ["needs_clarification", null, null]
   );
-  check("...and the reason is the cap, not 'Worse line'", inc.by["Avalanche over 1.5 1P"].reason, "Line unavailable — FanDuel's closest line is Over 2.5, more than 0.5 away from your pick.");
+  check("...and the reason names the impossible line, not 'Worse line'", inc.by["Avalanche over 1.5 1P"].reason, "Needs clarification — a total of 1.5 isn't a real NHL line, so this pick may be stored on the wrong game. Fix the pick and send again.");
+  // The price guard on the same live ladder, at a line NHL actually posts: Over 4.5 is -450. (The -1000 no-odds bar
+  // is proven on checkPrice directly above: the ladder's only prices past it, Over 2.5 / 3.5, are no NHL full-game
+  // line, and the final check now stops those first.)
   const exact = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
-    nhlLeg("Over 2.5 stated", { betDetail: "Over 2.5", line: 2.5, odds: -110, oddsSource: "STATED" }),
+    nhlLeg("Over 4.5 stated", { betDetail: "Over 4.5", line: 4.5, odds: 150, oddsSource: "STATED" }),
     nhlLeg("Over 2.5 no odds", { betDetail: "Over 2.5", line: 2.5, odds: -110, oddsSource: "DEFAULTED" }),
   ]);
   check(
-    "even on the pick's exact line, Over 2.5 at -6000 against a -110 pick is Potentially incorrect market match, not sent",
-    [exact.by["Over 2.5 stated"].status, exact.by["Over 2.5 stated"].sentLine, exact.by["Over 2.5 stated"].fanDuelOdds, exact.url],
+    "on the pick's exact line, Over 4.5 at -450 against a +150 pick is Potentially incorrect market match, not sent",
+    [exact.by["Over 4.5 stated"].status, exact.by["Over 4.5 stated"].sentLine, exact.by["Over 4.5 stated"].fanDuelOdds, exact.url],
     ["price_mismatch", null, null, null]
   );
-  check("...and so is a pick with no odds of its own", exact.by["Over 2.5 no odds"].status, "price_mismatch");
-  check("a blocked leg shows the label, never 'Worse line'", [notSentDisplay(exact.by["Over 2.5 stated"]).label, /worse/i.test(JSON.stringify(exact.by["Over 2.5 stated"]))], ["Potentially incorrect market match", false]);
-  const edge = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [nhlLeg("Over 3.5 no odds", { betDetail: "Over 3.5", line: 3.5, odds: -110, oddsSource: "DEFAULTED" })]);
-  check("a no-odds Over 3.5 at the ladder's -950 is above the -1000 bar: sent", [edge.by["Over 3.5 no odds"].status, edge.by["Over 3.5 no odds"].fanDuelOdds], ["matched", -950]);
+  check("a no-odds full-game Over 2.5 (-6000) is stopped as an impossible NHL line before any price", exact.by["Over 2.5 no odds"].status, "needs_clarification");
+  check("a blocked leg shows the label, never 'Worse line'", [notSentDisplay(exact.by["Over 4.5 stated"]).label, /worse/i.test(JSON.stringify(exact.by["Over 4.5 stated"]))], ["Potentially incorrect market match", false]);
+  const edge = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [nhlLeg("Over 4.5 no odds", { betDetail: "Over 4.5", line: 4.5, odds: -110, oddsSource: "DEFAULTED" })]);
+  check("a no-odds Over 4.5 at the ladder's -450 is above the -1000 bar: sent", [edge.by["Over 4.5 no odds"].status, edge.by["Over 4.5 no odds"].fanDuelOdds], ["matched", -450]);
 
   // ---- 4. Hockey line moves ----
   const hockey = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
@@ -169,7 +179,7 @@ async function main() {
   ]);
   check("hockey total 6 -> 6.5 still sends (Under: the easier line)", row(hockey.by["Oilers under 6"]).slice(0, 3), ["adjusted", -140, { pick: 6, fanDuel: 6.5, side: "Under", worse: false }]);
   check("hockey Over 6 -> 5.5 still sends (the easier line)", row(hockey.by["Over 6"]).slice(0, 3), ["adjusted", -142, { pick: 6, fanDuel: 5.5, side: "Over", worse: false }]);
-  check("hockey total 1.5 -> 2.5 is Line unavailable", [hockey.by["Over 1.5 full game"].status, hockey.by["Over 1.5 full game"].sentLine], ["line_unavailable", null]);
+  check("a full-game hockey total of 1.5 is never sent (PR C: no such NHL line - Needs clarification)", [hockey.by["Over 1.5 full game"].status, hockey.by["Over 1.5 full game"].sentLine], ["needs_clarification", null]);
   check("hockey Over 7 -> 6.5 (the ladder's nearest, 0.5, easier) sends", row(hockey.by["Over 7"]).slice(0, 3), ["adjusted", 114, { pick: 7, fanDuel: 6.5, side: "Over", worse: false }]);
 
   // ---- 5. Puck line: exact or nothing ----
@@ -189,22 +199,22 @@ async function main() {
   check("...with the exact-line reason", puck2.by["Red Wings -1.5"].reason, "Line unavailable — FanDuel isn't offering this exact line right now.");
 
   // ---- 6. College lines: same-market moves with the right better/worse label ----
-  const bc = await run("basketball_ncaab", "Home Team", "Away Team", totalsBoard(143.5), [
+  const bc = await runCollege("basketball_ncaab", totalsBoard(143.5), [
     collegeLeg("Boston College Under 144.5", "NCAAB", { betDetail: "Boston College Under 144.5", line: 144.5 }),
   ]);
   check("Boston College Under 144.5 -> 143.5: sent, WORSE (harder to win)", row(bc.by["Boston College Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 143.5, side: "Under", worse: true }]);
-  const dx = await run("basketball_ncaab", "Home Team", "Away Team", totalsBoard(145.5), [collegeLeg("Drexel Under 144.5", "NCAAB", { betDetail: "Drexel Under 144.5", line: 144.5 })]);
+  const dx = await runCollege("basketball_ncaab", totalsBoard(145.5), [collegeLeg("Drexel Under 144.5", "NCAAB", { betDetail: "Drexel Under 144.5", line: 144.5 })]);
   check("Drexel Under 144.5 -> 145.5: sent, better", row(dx.by["Drexel Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 145.5, side: "Under", worse: false }]);
-  const oh = await run("americanfootball_ncaaf", "Home Team", "Away Team", totalsBoard(50.5), [collegeLeg("Ohio Over 51", "NCAAF", { betDetail: "Ohio Over 51", line: 51 })]);
+  const oh = await runCollege("americanfootball_ncaaf", totalsBoard(50.5), [collegeLeg("Ohio Over 51", "NCAAF", { betDetail: "Ohio Over 51", line: 51 })]);
   check("Ohio Over 51 -> 50.5: sent, better", row(oh.by["Ohio Over 51"]).slice(0, 3), ["adjusted", -110, { pick: 51, fanDuel: 50.5, side: "Over", worse: false }]);
-  const far = await run("basketball_ncaab", "Home Team", "Away Team", totalsBoard(146.5), [collegeLeg("Under 144.5", "NCAAB", { betDetail: "Under 144.5", line: 144.5 })]);
+  const far = await runCollege("basketball_ncaab", totalsBoard(146.5), [collegeLeg("Under 144.5", "NCAAB", { betDetail: "Under 144.5", line: 144.5 })]);
   check("a college total 2 away is past the 1.5 cap: Line unavailable", far.by["Under 144.5"].status, "line_unavailable");
 
   // ---- 7. Price band on a sent leg, and a blocked leg that would also have been a line move ----
-  const warn = await run("basketball_ncaab", "Home Team", "Away Team", totalsBoard(145.5, -250, 200), [collegeLeg("Over 145.5", "NCAAB", { betDetail: "Over 145.5", line: 145.5, odds: -110 })]);
+  const warn = await runCollege("basketball_ncaab", totalsBoard(145.5, -250, 200), [collegeLeg("Over 145.5", "NCAAB", { betDetail: "Over 145.5", line: 145.5, odds: -110 })]);
   check("pick -110, FanDuel -250: sent, with the warning on the leg", [warn.by["Over 145.5"].status, warn.by["Over 145.5"].warning], ["matched", "Price moved a lot — your pick was -110, FanDuel has -250."]);
-  check("a leg without a warning carries null", (await run("basketball_ncaab", "Home Team", "Away Team", totalsBoard(145.5), [collegeLeg("Over 145.5", "NCAAB", { betDetail: "Over 145.5", line: 145.5 })])).by["Over 145.5"].warning, null);
-  const both = await run("americanfootball_ncaaf", "Home Team", "Away Team", totalsBoard(50.5, -900), [collegeLeg("Ohio Over 51", "NCAAF", { betDetail: "Ohio Over 51", line: 51 })]);
+  check("a leg without a warning carries null", (await runCollege("basketball_ncaab", totalsBoard(145.5), [collegeLeg("Over 145.5", "NCAAB", { betDetail: "Over 145.5", line: 145.5 })])).by["Over 145.5"].warning, null);
+  const both = await runCollege("americanfootball_ncaaf", totalsBoard(50.5, -900), [collegeLeg("Ohio Over 51", "NCAAF", { betDetail: "Ohio Over 51", line: 51 })]);
   check(
     "a line move at an absurd price is blocked, not 'adjusted / Worse line'",
     [both.by["Ohio Over 51"].status, both.by["Ohio Over 51"].sentLine, both.by["Ohio Over 51"].fanDuelOdds, both.url],
@@ -225,7 +235,7 @@ async function main() {
     nhlLeg("1P over 1.5", { betDetail: "Penguins over 1.5 first period", line: 1.5, period: "FIRST_PERIOD" }),
     nhlLeg("FG over 1.5", { betDetail: "Penguins over 1.5", line: 1.5 }),
   ]);
-  check("a first-period Over 1.5 is a different bet from the full-game Over 1.5", [withP1.by["1P over 1.5"].status, withP1.by["1P over 1.5"].fanDuelOdds, withP1.by["FG over 1.5"].status], ["matched", -122, "line_unavailable"]);
+  check("a first-period Over 1.5 is a different bet from the full-game Over 1.5", [withP1.by["1P over 1.5"].status, withP1.by["1P over 1.5"].fanDuelOdds, withP1.by["FG over 1.5"].status], ["matched", -122, "needs_clarification"]);
 
   // ---- 8b. Live legs: the price gap only warns; the line caps still apply ----
   const LIVE_AT = "2026-10-13T19:30:00Z"; // 30 min before NOW
