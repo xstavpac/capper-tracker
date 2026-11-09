@@ -105,6 +105,11 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(12px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        // A leg's swap tray opening under it (generator-result.tsx).
+        "tray-down": {
+          "0%": { opacity: "0", transform: "translateY(-6px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         "build-scan": {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(300%)" },
@@ -251,6 +256,7 @@ const config: Config = {
         "pill-shimmer": "pill-shimmer 4s ease-in-out infinite",
         "build-shimmer": "pill-shimmer 1.6s ease-in-out infinite",
         "leg-land": "leg-land 340ms ease-out both",
+        "tray-down": "tray-down 220ms ease-out both",
         "build-scan": "build-scan 1.4s linear infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",

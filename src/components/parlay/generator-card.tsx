@@ -600,6 +600,16 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
             // Your picks stay; only Live's slip mode ends.
             slip.exitSlipMode();
           }}
+          // Swap one leg by hand: on the session's snapshot, never a request.
+          legSwap={{
+            alternatives: (i) => (parlay ? session.current.alternatives(parlay, i, settings) : { thisGame: [], otherGames: [] }),
+            apply: (i, pickId) => {
+              const next = parlay && session.current.swapLeg(parlay, i, pickId, settings);
+              if (!next) return false;
+              setParlay(next);
+              return true;
+            },
+          }}
         />
       )}
       {!build.reveal && parlay && builtFor === key && parlay.legs.length === 0 && (
