@@ -104,3 +104,70 @@ export function findClosestFuzzyMatch<T>(name: string, candidates: T[], getName:
 
   return best;
 }
+
+// Plural-insensitive identity for capper names, used to widen the "did you mean"
+// prompt to a name that differs from a saved capper only by plural "s", which
+// plain Levenshtein misses when the "s" is mid-string. It only ever produces a
+// SUGGESTION: nothing is merged until a person answers the prompt.
+//
+// Two keys per name, matched if EITHER agrees:
+//   - whole: normalizeName with one trailing "s" dropped
+//     ("codycoversspreads" -> "codycoversspread").
+//   - perWord: one trailing "s" dropped from EACH whitespace-separated word,
+//     then joined ("Cody covers spreads" -> "codycoverspread"). This catches a
+//     mid-string "s" ("Codycoverspreads" vs "Cody covers spreads").
+// Names under 5 normalized characters get no plural stripping (same floor as
+// fuzzyThreshold): short handles like "AFS" / "TBS" stay exact-only.
+const MIN_PLURAL_KEY_LENGTH = 5;
+
+export function capperKeys(name: string): string[] {
+  const exact = normalizeName(name);
+  if (exact.length < MIN_PLURAL_KEY_LENGTH) return [exact];
+  const stripS = (s: string) => (s.length > 1 && s.endsWith("s") ? s.slice(0, -1) : s);
+  const whole = stripS(exact);
+  const perWord = name
+    .split(/s+/)
+    .map((w) => stripS(normalizeName(w)))
+    .join("");
+  return [exact, whole, perWord];
+}
+
+export function findCanonicalCapperMatch(name: string, candidates: readonly string[]): string | null {
+  const mine = capperKeys(name).filter((k) => k !== "");
+  if (mine.length === 0) return null;
+  for (const c of candidates) {
+    if (normalizeName(c).length < MIN_PLURAL_KEY_LENGTH) continue;
+    if (normalizeName(c) === normalizeName(name)) continue;
+    if (capperKeys(c).some((k) => k !== "" && mine.includes(k))) return c;
+  }
+  return null;
+}
+
+// A person's answer to one "did you mean" prompt, keyed by the NAME PAIR: the
+// normalized name as typed and the normalized saved name it was compared to.
+export type CapperNameDecisionKind = "SAME" | "DIFFERENT";
+export type StoredCapperNameDecision = { rawKey: string; suggestedKey: string; decision: CapperNameDecisionKind };
+
+export function capperPairKeys(raw: string, suggestion: string): { rawKey: string; suggestedKey: string } {
+  return { rawKey: normalizeName(raw), suggestedKey: normalizeName(suggestion) };
+}
+
+// What an import should do with a parsed capper name:
+//   - suggestion null: exact match or nothing close - no prompt.
+//   - suggestion set, remembered null: a new pair - ask.
+//   - remembered SAME / DIFFERENT: this exact pair was answered before - reuse it, no prompt.
+// An unanswered pair is never resolved either way.
+export function resolveCapperNameSuggestion(
+  name: string,
+  existing: readonly string[],
+  decisions: readonly StoredCapperNameDecision[]
+): { suggestion: string | null; remembered: CapperNameDecisionKind | null } {
+  const normalized = normalizeName(name);
+  if (existing.some((n) => normalizeName(n) === normalized && normalized !== "")) return { suggestion: null, remembered: null };
+  const suggestion =
+    findCanonicalCapperMatch(name, existing) ?? findClosestFuzzyMatch(name, existing as string[], (n) => n)?.item ?? null;
+  if (!suggestion) return { suggestion: null, remembered: null };
+  const { rawKey, suggestedKey } = capperPairKeys(name, suggestion);
+  const hit = decisions.find((d) => d.rawKey === rawKey && d.suggestedKey === suggestedKey);
+  return { suggestion, remembered: hit ? hit.decision : null };
+}

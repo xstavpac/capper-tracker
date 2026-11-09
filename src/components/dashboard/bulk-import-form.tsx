@@ -28,7 +28,8 @@ import { getNflRosterFullNamesAction } from "@/server/actions/get-nfl-roster-nam
 import { getImportFeedTeamsAction } from "@/server/actions/get-import-feed-teams";
 import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
 import { CommonFormatsCard } from "@/components/import/supported-formats";
-import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
+import { resolveCapperNameSuggestion, type StoredCapperNameDecision } from "@/lib/fuzzy-match";
+import { recordCapperNameDecisionAction } from "@/server/actions/capper-name-decisions";
 import {
   isSkippedAsDuplicate,
   importButtonLabel,
@@ -71,7 +72,7 @@ import {
 // suggestion prompt showing.
 const CONFIRMED_NEW = "__new__";
 
-export function BulkImportForm({ existingCapperNames }: { existingCapperNames: string[] }) {
+export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { existingCapperNames: string[]; nameDecisions?: StoredCapperNameDecision[] }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<ParsedPick[] | null>(null);
   // MLP (moneyline parlay) lines parseCatalog split into 2 legs - kept
@@ -264,15 +265,22 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   const existingLower = existingCapperNames.map((n) => n.toLowerCase());
 
   function fuzzySuggestionFor(rawCapperName: string): string | null {
-    if (existingLower.includes(rawCapperName.toLowerCase())) return null; // exact match already, no suggestion needed
-    const match = findClosestFuzzyMatch(rawCapperName, existingCapperNames, (n) => n);
-    return match ? match.item : null;
+    // A pair answered on an earlier import is not asked again; a pair never answered always is.
+    const r = resolveCapperNameSuggestion(rawCapperName, existingCapperNames, nameDecisions);
+    return r.suggestion && !r.remembered ? r.suggestion : null;
   }
 
   // The name actually used at import/preview time - the fuzzy match's target
   // once confirmed, otherwise the raw parsed name unchanged.
   function resolvedCapperName(rawCapperName: string): string {
-    return resolveCapperName(capperFuzzyChoices, rawCapperName, CONFIRMED_NEW);
+    return resolveWithRemembered(capperFuzzyChoices, rawCapperName);
+  }
+
+  // This import's own answer wins; otherwise a previously remembered "same" answer maps the name to the saved capper.
+  function resolveWithRemembered(choices: Record<string, string>, raw: string): string {
+    if (choices[raw]) return resolveCapperName(choices, raw, CONFIRMED_NEW);
+    const r = resolveCapperNameSuggestion(raw, existingCapperNames, nameDecisions);
+    return r.suggestion && r.remembered === "SAME" ? r.suggestion : raw;
   }
 
   // parseCatalog itself stays a pure sync function (unchanged) - everything
@@ -456,7 +464,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     setDupChecksPending((n) => n + 1);
     const check = checkDuplicatePicksAction(
       entries.map((e) => ({
-        capperName: resolveCapperName(fuzzyChoices, e.p.capperName, CONFIRMED_NEW),
+        capperName: resolveWithRemembered(fuzzyChoices, e.p.capperName),
         sportName: e.p.sportName,
         betType: e.p.betType,
         odds: e.p.odds,
@@ -1224,6 +1232,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                               // Checked under the NEW choice - the state set
                               // here is not visible until the next render.
                               const nextChoices = { ...capperFuzzyChoices, [name]: suggestion };
+                              void recordCapperNameDecisionAction(name, suggestion, "SAME").catch(() => undefined);
                               setCapperFuzzyChoices(nextChoices);
                               checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
                             }}
@@ -1235,6 +1244,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
                             type="button"
                             onClick={() => {
                               const nextChoices = { ...capperFuzzyChoices, [name]: CONFIRMED_NEW };
+                              void recordCapperNameDecisionAction(name, suggestion, "DIFFERENT").catch(() => undefined);
                               setCapperFuzzyChoices(nextChoices);
                               checkDuplicatesFor(validEntries.filter((e) => e.p.capperName === name), nextChoices);
                             }}
