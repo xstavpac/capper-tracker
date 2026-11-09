@@ -8,6 +8,7 @@ import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { TargetIcon } from "@/components/dashboard/cappers-icons";
 import { useSharedLiveScoresIfAny } from "@/components/live/use-live-scores";
 import { useLiveGameJump } from "@/components/live/live-game-jump";
+import { useLiveListScope } from "@/components/live/live-list-scope";
 import { easternDateKey } from "@/lib/dates";
 import {
   LIVE_CATEGORY_REVEAL_STEP,
@@ -59,10 +60,16 @@ export function LiveCategoryPanel({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  // No shared scores means no board is mounted, so no card is showing a pick.
+  // No shared scores means no board is mounted, so no card is showing a pick. The pool follows the
+  // boards' "See more" toggle, so a tile's count is still the number of picks on the cards shown.
+  const { showAll } = useLiveListScope();
   const byCategory = useMemo(
-    () => slatePicksByCategory(picks, scores ? visibleGameIndexes(games, scores, easternDateKey(new Date()), sportKey) : new Set<number>()),
-    [picks, games, scores, sportKey]
+    () =>
+      slatePicksByCategory(
+        picks,
+        scores ? visibleGameIndexes(games, scores, easternDateKey(new Date()), sportKey, !showAll) : new Set<number>()
+      ),
+    [picks, games, scores, sportKey, showAll]
   );
   const tiles = useMemo(
     () => buildCategoryTiles(chipSet, items, new Map(Array.from(byCategory, ([key, list]) => [key, list.length]))),
