@@ -159,7 +159,7 @@ async function send(slip: ExpanderPick[]) {
       ["bills-plus-4", "adjusted"],
       ["nrfi", "unsupported"],
       ["bills-ml", "matched"],
-      ["over-60", "not_found"],
+      ["over-60", "line_unavailable"],
     ]
   );
   check("the link holds only the sent legs", Array.from(new URL(mixed.url!).searchParams.values()), ["42.612291278", "50203", "42.612291277", "50203"]);

@@ -44,6 +44,7 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
               {line.worse && <span className="text-red-700 dark:text-red-300"> · harder to win than your pick</span>}
             </p>
           )}
+          {leg.warning && <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">{leg.warning}</p>}
         </div>
         <p className="shrink-0 text-right text-[13px] font-semibold tabular-nums text-foreground">
           {leg.fanDuelOdds !== null && formatOdds(leg.fanDuelOdds)}
