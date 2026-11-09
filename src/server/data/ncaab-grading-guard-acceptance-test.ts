@@ -1,22 +1,24 @@
-// Proof for the temporary NCAAB grading guard (resolveOutcome, grading.ts) and
-// the pick gate on NCAAB game results - run with:
+// Proof for NCAAB first-half grading and the NCAAB period guard (resolveOutcome,
+// grading.ts), plus the pick gate on NCAAB game results - run with:
 //   npx tsx src/server/data/ncaab-grading-guard-acceptance-test.ts
 //
 // No test framework in this repo. console.logs PASS/FAIL, exits non-zero on
 // any failure. No DB, no network.
 //
-// The bug being fenced off: getEspnGameSegments computes a first half as
-// linescore[0] + linescore[1]. That is right for a four-quarter sport and
-// WRONG for NCAAB, whose two linescore entries ARE the two halves - the sum is
-// all of regulation. The fixture below is a real final (ESPN event 401920912,
-// 2026-11-02): Grambling 89, Northern Illinois 87, linescores [43, 46] and
-// [36, 51]. Written the buggy way, "first half" would be 89-87 and a first-half
-// bet would grade against the whole game.
+// NCAAB plays two halves. ESPN's summary linescore for an NCAAB final is
+// [1H, 2H] plus one entry per overtime (confirmed live 2026-11-09 on 33
+// regulation + 13 OT finals). The quarter sports' first half, linescore[0] +
+// linescore[1], is ALL of regulation here, so firstHalfFromLinescore (odds.ts)
+// takes linescore[0] alone for NCAAB. The main fixture is a real final (ESPN
+// event 401920912, 2026-11-02): Grambling 89, Northern Illinois 87,
+// linescores [43, 46] and [36, 51] - first half 43-36.
 //
-// Until PR C fixes that, an NCAAB pick on any period but FULL_GAME must stay
-// PENDING (resolveOutcome returns null).
+// The guard: NCAAB grades FULL_GAME and FIRST_HALF only. Quarter periods would
+// read the halves as quarters, and SECOND_HALF (final - 1H) would fold in OT.
 
 import { resolveOutcome, withSportKey } from "./grading";
+import { firstHalfFromLinescore } from "./odds";
+import { segmentUnmatchedReason } from "@/lib/pending-pick-reason";
 import { finalsWithPicks, PICK_GATED_SPORT_KEYS, NCAAB_SPORT_KEY } from "@/lib/final-pick-gate";
 import { tendencyPhaseEnabled } from "@/lib/tendency-pipeline";
 import { parseCatalog } from "@/lib/parse-catalog";
@@ -30,21 +32,40 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
-// The real final, as persistFinalScores WOULD store it if NCAAB were wired into
-// getEspnGameSegments the buggy way: first half = 43+46 vs 36+51.
+const ls = (home: number[], away: number[]) => home.map((h, i) => ({ home: h, away: away[i] }));
+
+// ---- the extraction: real ESPN linescores -> first half ----
+const GRAMBLING_LS = ls([43, 46], [36, 51]);
+check("NCAAB regulation final: first half is linescore[0] (43-36), not 89-87", firstHalfFromLinescore(NCAAB_SPORT_KEY, GRAMBLING_LS), { home: 43, away: 36 });
+// ESPN 401917515, Tarleton State at San Diego, Final/OT 96-90.
+check(
+  "NCAAB OT final (3 entries): first half is still linescore[0] (32-46)",
+  firstHalfFromLinescore(NCAAB_SPORT_KEY, ls([32, 50, 14], [46, 36, 8])),
+  { home: 32, away: 46 }
+);
+// ESPN 401926780, Jacksonville State at South Alabama, Final/2OT 83-80. Four
+// entries that are NOT quarters: summing [0]+[1] would give 66-66.
+const SOUTH_ALABAMA_2OT = ls([23, 43, 6, 11], [32, 34, 6, 8]);
+check("NCAAB 2OT final (4 entries): first half is linescore[0] (23-32), not 66-66", firstHalfFromLinescore(NCAAB_SPORT_KEY, SOUTH_ALABAMA_2OT), { home: 23, away: 32 });
+check("NCAAB truncated linescore (1 entry) -> null", firstHalfFromLinescore(NCAAB_SPORT_KEY, ls([43], [36])), null);
+check("NCAAB no linescore -> null", firstHalfFromLinescore(NCAAB_SPORT_KEY, null), null);
+// Other sports untouched: Q1 + Q2.
+check("NBA keeps Q1+Q2 on the same 4 entries (66-66)", firstHalfFromLinescore("basketball_nba", SOUTH_ALABAMA_2OT), { home: 66, away: 66 });
+check("WNBA keeps Q1+Q2", firstHalfFromLinescore("basketball_wnba", SOUTH_ALABAMA_2OT), { home: 66, away: 66 });
+check("NCAAF keeps Q1+Q2", firstHalfFromLinescore("americanfootball_ncaaf", SOUTH_ALABAMA_2OT), { home: 66, away: 66 });
+check("NHL has no half", firstHalfFromLinescore("icehockey_nhl", SOUTH_ALABAMA_2OT), null);
+
+// The real final, as persistFinalScores now stores it: firstFive* = linescore[0].
 const GAME = {
   homeTeam: "Grambling Tigers",
   awayTeam: "Northern Illinois Huskies",
   homeScore: 89,
   awayScore: 87,
-  firstFiveHomeScore: 89,
-  firstFiveAwayScore: 87,
+  firstFiveHomeScore: 43,
+  firstFiveAwayScore: 36,
   firstInningHomeScore: null,
   firstInningAwayScore: null,
-  linescoreJson: [
-    { home: 43, away: 36 },
-    { home: 46, away: 51 },
-  ] as never,
+  linescoreJson: GRAMBLING_LS as never,
 };
 const ncaab = { ...GAME, sportKey: NCAAB_SPORT_KEY };
 const nba = { ...GAME, sportKey: "basketball_nba" };
@@ -58,27 +79,83 @@ const pick = (period: string, betType: string, betDetail: string, line: number |
   pickedSide,
 });
 
-// ---- the guard: every non-FULL_GAME period stays PENDING for NCAAB ----
+// ---- FIRST_HALF now grades for NCAAB, off 43-36 ----
 const H1_OVER = pick("FIRST_HALF", "TOTAL", "1H Over 80.5", 80.5);
 const H2_OVER = pick("SECOND_HALF", "TOTAL", "2H Over 80.5", 80.5);
 const Q1_OVER = pick("FIRST_QUARTER", "TOTAL", "1Q Over 40.5", 40.5);
-const H1_ML = pick("FIRST_HALF", "MONEYLINE", "1H Grambling ML", null, "HOME");
-const H1_SPREAD = pick("FIRST_HALF", "SPREAD", "1H Northern Illinois +3.5", 3.5, "AWAY");
 
-check("NCAAB FIRST_HALF total stays PENDING (the buggy 89-87 'first half' would grade it)", resolveOutcome(H1_OVER, ncaab), null);
+check("NCAAB 1H Over 80.5 LOSES (79 at the half; the buggy 176 would have won it)", resolveOutcome(H1_OVER, ncaab), "LOSS");
+check("NCAAB 1H Over 75.5 wins (79)", resolveOutcome(pick("FIRST_HALF", "TOTAL", "1H Over 75.5", 75.5), ncaab), "WIN");
+check("NCAAB 1H Under 80.5 wins (79)", resolveOutcome(pick("FIRST_HALF", "TOTAL", "1H Under 80.5", 80.5), ncaab), "WIN");
+check("NCAAB 1H moneyline, stored HOME: Grambling led 43-36 -> WIN", resolveOutcome(pick("FIRST_HALF", "MONEYLINE", "1H Grambling ML", null, "HOME"), ncaab), "WIN");
+check("NCAAB 1H moneyline, stored AWAY -> LOSS", resolveOutcome(pick("FIRST_HALF", "MONEYLINE", "1H Northern Illinois ML", null, "AWAY"), ncaab), "LOSS");
+check("NCAAB 1H spread: Northern Illinois +3.5 down 7 -> LOSS", resolveOutcome(pick("FIRST_HALF", "SPREAD", "1H Northern Illinois +3.5", 3.5, "AWAY"), ncaab), "LOSS");
+check("NCAAB 1H spread: Northern Illinois +7.5 down 7 -> WIN", resolveOutcome(pick("FIRST_HALF", "SPREAD", "1H Northern Illinois +7.5", 7.5, "AWAY"), ncaab), "WIN");
+check("NCAAB 1H spread: Grambling -7 up 7 -> PUSH", resolveOutcome(pick("FIRST_HALF", "SPREAD", "1H Grambling -7", -7, "HOME"), ncaab), "PUSH");
+check(
+  "NCAAB 1H pick on a row with no first-half score yet stays PENDING",
+  resolveOutcome(H1_OVER, { ...ncaab, firstFiveHomeScore: null, firstFiveAwayScore: null }),
+  null
+);
+check(
+  "NCAAB pick stored FULL_GAME whose text says 1H -> PENDING, never graded off the full game",
+  resolveOutcome(pick("FULL_GAME", "MONEYLINE", "Grambling 1H ML", null, "HOME"), ncaab),
+  null
+);
+
+// The real pending prod pick cmw5gn2pl0025s8d4twl0one4 (LearLocks), field for
+// field, against ESPN 401909552: Boston College 71, UMass 55, linescores
+// [37, 34] and [35, 20] - 1H 37-35.
+const BC_LS = ls([37, 34], [35, 20]);
+const BC_UMASS = {
+  sportKey: NCAAB_SPORT_KEY,
+  homeTeam: "Boston College Eagles",
+  awayTeam: "Massachusetts Minutemen",
+  homeScore: 71,
+  awayScore: 55,
+  firstFiveHomeScore: null as number | null,
+  firstFiveAwayScore: null as number | null,
+  firstInningHomeScore: null,
+  firstInningAwayScore: null,
+  linescoreJson: BC_LS as never,
+};
+const BC_FH = firstHalfFromLinescore(NCAAB_SPORT_KEY, BC_LS);
+check("BC/UMass: first half extracted as 37-35", BC_FH, { home: 37, away: 35 });
+const BC_PICK = {
+  betType: "MONEYLINE",
+  betDetail: "Boston College 1H moneyline",
+  line: null,
+  period: "FIRST_HALF",
+  homeTeam: "Boston College Eagles",
+  pickedSide: "HOME" as const,
+};
+check("BC 1H ML: PENDING while the row has no first-half score (prod today)", resolveOutcome(BC_PICK, BC_UMASS), null);
+const BC_GRADED = { ...BC_UMASS, firstFiveHomeScore: BC_FH?.home ?? null, firstFiveAwayScore: BC_FH?.away ?? null };
+check("BC 1H ML: WIN once firstFive* = 37-35", resolveOutcome(BC_PICK, BC_GRADED), "WIN");
+check("BC 1H ML: the text alone (no stored pickedSide) also reads Boston College -> WIN", resolveOutcome({ ...BC_PICK, pickedSide: null }, BC_GRADED), "WIN");
+
+// ---- the guard: every other period stays PENDING for NCAAB ----
 check("NCAAB SECOND_HALF total stays PENDING", resolveOutcome(H2_OVER, ncaab), null);
-check("NCAAB FIRST_QUARTER total stays PENDING (no quarters: [43,46] are halves)", resolveOutcome(Q1_OVER, ncaab), null);
-check("NCAAB FIRST_HALF moneyline stays PENDING", resolveOutcome(H1_ML, ncaab), null);
-check("NCAAB FIRST_HALF spread stays PENDING", resolveOutcome(H1_SPREAD, ncaab), null);
+check("NCAAB FIRST_QUARTER total stays PENDING (linescore[0] is a half, not Q1)", resolveOutcome(Q1_OVER, ncaab), null);
+check("NCAAB SECOND_QUARTER stays PENDING", resolveOutcome(pick("SECOND_QUARTER", "TOTAL", "2Q Over 40.5", 40.5), ncaab), null);
+check("NCAAB THIRD_QUARTER stays PENDING (index 2 would be OT)", resolveOutcome(pick("THIRD_QUARTER", "TOTAL", "3Q Over 1.5", 1.5), ncaab), null);
+check("NCAAB FOURTH_QUARTER stays PENDING", resolveOutcome(pick("FOURTH_QUARTER", "TOTAL", "4Q Over 1.5", 1.5), ncaab), null);
 
-// Control: the SAME row and the SAME picks are gradable under another sport, so
-// the nulls above are the guard and not a bad fixture.
-check("control: same FIRST_HALF total grades under NBA (89 > 80.5)", resolveOutcome(H1_OVER, nba), "WIN");
-// (With the buggy first half of 89-87, "second half" = final minus first half = 0-0: the other
-// face of the same bug, and why SECOND_HALF is fenced off too.)
-check("control: same SECOND_HALF total is computed under NBA (0 < 80.5 from the buggy split)", resolveOutcome(H2_OVER, nba), "LOSS");
+// Control: the SAME row and picks grade under another sport, so the nulls above
+// are the guard and not a bad fixture.
+check("control: same SECOND_HALF total is computed under NBA (46 + 51 = 97 > 80.5)", resolveOutcome(H2_OVER, nba), "WIN");
 check("control: same FIRST_QUARTER total grades under NBA (43 + 36 = 79 > 40.5)", resolveOutcome(Q1_OVER, nba), "WIN");
-check("control: a row with no sportKey (older callers) is unguarded", resolveOutcome(H1_OVER, GAME), "WIN");
+check("control: a row with no sportKey (older callers) is unguarded", resolveOutcome(Q1_OVER, GAME), "WIN");
+
+// ---- Pending Picks reason mirrors the guard ----
+const NCAAB_ONLY_MSG = "NCAAB grading covers full game and 1st half only - needs manual grading";
+check("reason: NCAAB SECOND_HALF -> full-game-and-1H-only message", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB_SPORT_KEY, "1H"), NCAAB_ONLY_MSG);
+check("reason: NCAAB FIRST_QUARTER -> same message", segmentUnmatchedReason("FIRST_QUARTER", "FIRST_QUARTER", NCAAB_SPORT_KEY, "1H"), NCAAB_ONLY_MSG);
+check(
+  "reason: NCAAB FIRST_HALF waiting on its score -> the normal 'not posted yet' wording",
+  segmentUnmatchedReason("FIRST_HALF", "FIRST_HALF", NCAAB_SPORT_KEY, "1H"),
+  "matched game, but the 1st half score isn't posted for this game yet"
+);
 
 // ---- FULL_GAME still grades for NCAAB ----
 check(
@@ -179,7 +256,7 @@ check("withSportKey stamps every row and leaves the rest", pool, [
   { homeTeam: "A", sportKey: NCAAB_SPORT_KEY },
   { homeTeam: "B", sportKey: NCAAB_SPORT_KEY },
 ]);
-check("a pool row stamped NCAAB is guarded", resolveOutcome(H1_OVER, { ...GAME, ...withSportKey([{}], NCAAB_SPORT_KEY)[0] }), null);
+check("a pool row stamped NCAAB is guarded", resolveOutcome(Q1_OVER, { ...GAME, ...withSportKey([{}], NCAAB_SPORT_KEY)[0] }), null);
 
 // ---- the pick gate: NCAAB persists only finals a pending pick names ----
 check("NCAAB is the only pick-gated sport", [...PICK_GATED_SPORT_KEYS], [NCAAB_SPORT_KEY]);

@@ -23,15 +23,21 @@ function expect(label: string, actual: unknown, expected: unknown) {
 }
 
 const NCAAB = "basketball_ncaab";
-const NEW_MSG = "NCAAB half-scoped grading isn't supported yet (NCAAB-PR-C) - needs manual grading";
+const NEW_MSG = "NCAAB grading covers full game and 1st half only - needs manual grading";
 const prefix = (sport: string) => firstHalfLabelPrefixForChipSet(chipSetForLeague(sport));
 
 // The reported pick: NCAAB, text "Boston College 1H moneyline", stored FIRST_HALF.
+// NCAAB first halves grade now (linescore[0]), so while the row still lacks its
+// first-half score this reads the normal "not posted yet" wording.
 const bcText = "Boston College 1H moneyline";
 const bcScope = betScope(bcText, "NCAAB");
 expect("BC pick text scopes to FIRST_HALF", bcScope, "FIRST_HALF");
-expect("NCAAB FIRST_HALF pick -> new NCAAB-PR-C message", segmentUnmatchedReason(bcScope, "FIRST_HALF", NCAAB, prefix("NCAAB")), NEW_MSG);
-expect("NCAAB SECOND_HALF pick -> new message", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB, prefix("NCAAB")), NEW_MSG);
+expect(
+  "NCAAB FIRST_HALF pick -> normal 'not posted yet' wording",
+  segmentUnmatchedReason(bcScope, "FIRST_HALF", NCAAB, prefix("NCAAB")),
+  "matched game, but the " + (prefix("NCAAB") === "1H / F5" ? "1st half / F5" : "1st half") + " score isn't posted for this game yet"
+);
+expect("NCAAB SECOND_HALF pick -> full-game-and-1H-only message", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB, prefix("NCAAB")), NEW_MSG);
 expect("NCAAB quarter-stored pick -> new message", segmentUnmatchedReason("FIRST_QUARTER", "FIRST_QUARTER", NCAAB, prefix("NCAAB")), NEW_MSG);
 // Legacy row: text says 1H but stored FULL_GAME -> the NCAAB guard is keyed on the
 // STORED period (same as the grader), so this keeps the "predates" wording.
@@ -80,10 +86,9 @@ expect(
 );
 expect("full-game pick, no sport key -> null", segmentUnmatchedReason("FULL_GAME", "FULL_GAME", undefined, prefix("NCAAF")), null);
 
-// Cross-check against the real grader: the new message is only reached after
-// resolveOutcome returns null, and for NCAAB it does so even with a complete
-// first-half score on the row (the guard, not missing data). NCAAF with the same
-// row grades, so it never reaches the reason code at all.
+// Cross-check against the real grader: an NCAAB 1H pick with a first-half score
+// on the row grades like any other sport's, so it never reaches the reason code;
+// a SECOND_HALF one is still held by the guard (null even with the score).
 const game = {
   homeTeam: "Boston College",
   awayTeam: "Opponent",
@@ -96,7 +101,12 @@ const game = {
   linescoreJson: null,
 };
 const pick = { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: bcText, homeTeam: "Boston College", line: null };
-expect("resolveOutcome: NCAAB 1H returns null even with a first-half score present", resolveOutcome(pick, { ...game, sportKey: NCAAB }), null);
+expect("resolveOutcome: NCAAB 1H grades with a first-half score present (WIN)", resolveOutcome(pick, { ...game, sportKey: NCAAB }), "WIN");
+expect(
+  "resolveOutcome: NCAAB 2H still null with the score present (guard)",
+  resolveOutcome({ ...pick, period: "SECOND_HALF", betDetail: "Boston College 2H moneyline" }, { ...game, sportKey: NCAAB }),
+  null
+);
 expect("resolveOutcome: NCAAF 1H on the same row grades (WIN)", resolveOutcome(pick, { ...game, sportKey: "americanfootball_ncaaf" }), "WIN");
 
 if (failures > 0) {

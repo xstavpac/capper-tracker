@@ -290,8 +290,11 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
     sportKey === "americanfootball_nfl" ||
     sportKey === "americanfootball_ncaaf" ||
     sportKey === "basketball_nba" ||
-    sportKey === "basketball_wnba";
-  // Football/basketball (quarters) plus NHL (periods) - every sport whose
+    sportKey === "basketball_wnba" ||
+    // First half = linescore[0] for NCAAB (two halves) - see
+    // firstHalfFromLinescore in odds.ts.
+    sportKey === NCAAB_SPORT_KEY;
+  // Football/basketball (quarters / NCAAB halves) plus NHL (periods) - every sport whose
   // per-segment linescore ESPN's summary endpoint exposes (see
   // getEspnGameSegments / getNflGameFacts).
   const supportsLinescore = supportsFirstHalf || sportKey === "icehockey_nhl";
@@ -1048,15 +1051,14 @@ export function resolveOutcome(
   const runGrade = (home: number, away: number): GradeOutcome =>
     gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, pick.pickedSide);
 
-  // NCAAB-PR-C: remove when halves grading lands.
-  // NCAAB plays two halves, but getEspnGameSegments computes the first half as
-  // linescore[0] + linescore[1] - which for a two-entry NCAAB linescore is ALL
-  // of regulation. Until that is fixed, only FULL_GAME is graded for NCAAB;
-  // every other period (halves, and the quarters it does not have) stays
-  // PENDING. The persisted row carries no linescore either (persistFinalScores
-  // does not fetch segments for NCAAB), so this is the second lock, not the
-  // only one.
-  if (game.sportKey === NCAAB_SPORT_KEY && pick.period !== "FULL_GAME") return null;
+  // NCAAB plays two halves: its stored linescoreJson is [1H, 2H, OT...], and
+  // firstFive* holds linescore[0] (firstHalfFromLinescore, odds.ts). Only
+  // FULL_GAME and FIRST_HALF grade. Every other period stays PENDING:
+  // segmentScore's quarter slots would read the halves as quarters (Q1 = 1H,
+  // Q3/Q4 = OT), and SECOND_HALF (final - 1H) would fold in OT, which isn't
+  // settled for NCAAB yet. Mirrored in segmentUnmatchedReason
+  // (lib/pending-pick-reason.ts).
+  if (game.sportKey === NCAAB_SPORT_KEY && pick.period !== "FULL_GAME" && pick.period !== "FIRST_HALF") return null;
 
   // NRFI has its own dedicated first-inning score source and ignores period.
   if (pick.betType === "NRFI") {
