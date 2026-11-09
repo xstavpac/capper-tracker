@@ -23,6 +23,7 @@ import { PicksSummaryStrip } from "@/components/picks/picks-summary-strip";
 import { DateNavigator } from "@/components/picks/date-navigator";
 import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
 import { getDayConsensus, getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
+import { summarizeUniquePicks } from "@/lib/unique-picks";
 import { cumulativeUnitsSeries, resolveDateFilter, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
   betTypeFilterCategory,
@@ -309,6 +310,7 @@ export default async function PicksPage({
 
           <PicksSummaryStrip
             summary={summary}
+            unique={summarizeUniquePicks(picks)}
             series={cumulativeUnitsSeries(headerPicks)}
             live={livePicks}
             later={laterPicks}
