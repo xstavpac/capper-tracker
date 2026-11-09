@@ -25,7 +25,7 @@ const NHL_MARKETS = ["ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "A
 const MLB_MARKETS = ["STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS"];
 // NBA markets (2026-10) - same treatment. POINTS and ASSISTS are shared with the NHL list above (one
 // enum value, the pick's sport says whose); these are the values only the NBA has.
-const NBA_MARKETS = ["REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
+const NBA_MARKETS = ["REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
 
 const input = (propMarket: PropMarket | null, betDetail: string | null, sportName = "NHL") =>
   ({
