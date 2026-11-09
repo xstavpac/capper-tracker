@@ -184,6 +184,8 @@ async function main() {
   await click(trayTabs()[1]);
   check("Other games subtitle", (tray()!.textContent ?? "").includes(`Replaces ${before[0].gameLabel} with a game not in your parlay`));
   check("Other games rows: never a game in the parlay", rowIds().length > 0 && rowIds().every((id) => ["G3", "G4"].includes(PICKS.find((p) => p.pickId === id)!.gameId)), rowIds().join(","));
+  const otherGamesShown = rowIds().map((id) => PICKS.find((p) => p.pickId === id)!.gameId);
+  check("Other games rows: one per game", new Set(otherGamesShown).size === otherGamesShown.length, otherGamesShown.join(","));
   const otherTop = rowIds()[0];
 
   // One tray at a time.

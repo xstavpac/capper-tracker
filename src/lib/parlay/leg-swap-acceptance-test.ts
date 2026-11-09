@@ -109,6 +109,10 @@ async function main() {
   const a0 = legAlternatives(snap, base, p0.legs, 0, NOW);
   check("This game: only picks on the swapped leg's game", a0.thisGame.length > 0 && a0.thisGame.every((l) => l.gameId === p0.legs[0].gameId), ids(a0.thisGame).join(","));
   check("Other games: never a game already in the parlay", a0.otherGames.length > 0 && a0.otherGames.every((l) => !p0.legs.some((x) => x.gameId === l.gameId)), ids(a0.otherGames).join(","));
+  const otherGameIds = a0.otherGames.map((l) => l.gameId);
+  check("Other games: one row per game - no two rows share a gameId", otherGameIds.length > 1 && new Set(otherGameIds).size === otherGameIds.length, otherGameIds.join(","));
+  // Each row is its game's best-ranked eligible pick (the home ML has the best record on every fixture game).
+  check("Other games: each row is the best pick on its game", a0.otherGames.every((row) => row.pick.pickId === "g" + row.gameId.slice(1) + "h"), ids(a0.otherGames).join(","));
   check("every rule holds (in parlay, slip, conflicts, max per game, gate)", validAgainst(snap, base, p0.legs, 0, a0).length === 0, validAgainst(snap, base, p0.legs, 0, a0).join("; "));
   check("the win-rate gate: no below-gate pick is offered", !all(a0).some((l) => l.pick.pickId.endsWith("low")));
   check("each tab is in the engine's ranking order (score, best first)", scoreOrdered(a0.thisGame) && scoreOrdered(a0.otherGames));
@@ -176,15 +180,15 @@ async function main() {
   check("a slip pair on G0: Priced at FanDuel before (sameGameGames 1), priced after an Other-games swap (0)", pp.sameGameGames === 1 && pb.sameGameGames === 0 && price(pb).status === "AVAILABLE");
   check("a swapped-out slip pick is listed as not used; slip counts follow", pb.fromSlip === 1 && pb.slipUsed === 1 && pb.generated === 3 && pb.dropped.some((d) => d.pickId === "g0o" && d.reason === "not_selected"));
   // No odds: a pick with no usable price swapped in makes the price Unavailable, swapped back out, priced again.
-  const noOdds = PICKS.map((p) => (p.pickId === "g4o" ? { ...p, odds: 0 } : p));
+  const noOdds = PICKS.map((p) => (p.pickId === "g4h" ? { ...p, odds: 0 } : p));
   const snapNo = snapshotOf([], [], noOdds);
   const pn = buildGeneratedParlay(snapNo, base, null, NOW);
   const iNo = 2;
   const an = legAlternatives(snapNo, base, pn.legs, iNo, NOW);
-  const withNo = an.otherGames.find((l) => l.pick.pickId === "g4o");
+  const withNo = an.otherGames.find((l) => l.pick.pickId === "g4h");
   check("fixture: the no-odds pick is an Other-games alternative", Boolean(withNo), ids(an.otherGames).join(","));
   if (withNo) {
-    const sn = applyLegSwap(snapNo, base, pn, iNo, "g4o", NOW, null)!;
+    const sn = applyLegSwap(snapNo, base, pn, iNo, "g4h", NOW, null)!;
     check("no-odds swap in: Unavailable", combineOdds(sn.legs.map((l) => l.pick)).status === "UNAVAILABLE");
     const back = legAlternatives(snapNo, base, sn.legs, iNo, NOW).thisGame.concat(legAlternatives(snapNo, base, sn.legs, iNo, NOW).otherGames).find((l) => l.pick.odds !== 0)!;
     const sb = applyLegSwap(snapNo, base, sn, iNo, back.pick.pickId, NOW, null)!;
@@ -208,6 +212,7 @@ async function main() {
   const ay = legAlternatives(ys, yset, py.legs, 0, NOW);
   check("Your picks only: alternatives are unused slip picks only", all(ay).length > 0 && all(ay).every((l) => slipIds.includes(l.pick.pickId) && !py.legs.some((x) => x.pick.pickId === l.pick.pickId)), ids(all(ay)).join(","));
   check("Your picks only: ungated (the below-gate slip pick is offered)", !py.legs.some((l) => l.pick.pickId === "g4low") && all(ay).some((l) => l.pick.pickId === "g4low"));
+  check("Your picks only: Other games is one row per game too", new Set(ay.otherGames.map((l) => l.gameId)).size === ay.otherGames.length);
   check("Your picks only: split by game the same way", validAgainst(ys, yset, py.legs, 0, ay).length === 0, validAgainst(ys, yset, py.legs, 0, ay).join("; "));
   const yIn = ay.otherGames[0];
   const sy = applyLegSwap(ys, yset, py, 0, yIn.pick.pickId, NOW, null)!;

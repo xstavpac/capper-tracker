@@ -1108,8 +1108,10 @@ export function buildGeneratedParlay(
 //   THIS_GAME   - other picks on the swapped leg's game. Max legs per game and
 //                 the same-game rules hold against the game's other legs (the
 //                 swapped leg itself doesn't count).
-//   OTHER_GAMES - picks on games with no leg in the parlay; choosing one takes
-//                 the swapped leg's game out (unless another leg is on it).
+//   OTHER_GAMES - games with no leg in the parlay, one row each: the game's
+//                 best-ranked eligible pick, games in that pick's ranking order.
+//                 Choosing one takes the swapped leg's game out (unless another
+//                 leg is on it).
 // Best available: the build's own candidates (qualifyPick - Include Picks, the
 // star, a record, the win-rate gate), never a pick already in the parlay or in
 // the slip, ordered by the build's ranking (byRank). Your picks only: the slip
@@ -1138,7 +1140,14 @@ export function legAlternatives(
   const parlayGames = new Set(legs.map((l) => l.gameId));
   const legsOn = (gameId: string) => others.filter((l) => l.gameId === gameId).map((l) => l.pick);
   const tabOf = (gameId: string): SwapTab | null => (gameId === swapped.gameId ? "THIS_GAME" : parlayGames.has(gameId) ? null : "OTHER_GAMES");
-  const add = (tab: SwapTab, leg: EngineLeg) => (tab === "THIS_GAME" ? out.thisGame : out.otherGames).push(leg);
+  // Picks arrive best first, so the first one on a game is its best: Other games keeps only that one.
+  const otherGameIds = new Set<string>();
+  const add = (tab: SwapTab, leg: EngineLeg) => {
+    if (tab === "THIS_GAME") return void out.thisGame.push(leg);
+    if (otherGameIds.has(leg.gameId)) return;
+    otherGameIds.add(leg.gameId);
+    out.otherGames.push(leg);
+  };
   const gate = effectiveGate(settings, rules);
   const scoreOf = rules.scorer === "SCORING" ? scorerFor(snapshot, gate) : null;
 
