@@ -32,6 +32,7 @@ export function legsNote({
   generatedLegs,
   usable,
   total,
+  favoritesOnly = false,
 }: {
   yourPicksOnly: boolean;
   legCount: number;
@@ -40,9 +41,11 @@ export function legsNote({
   // Picks that can all be legs (engine capacity once built) and picks on the slip.
   usable: number;
   total: number;
+  // The Favorites only star: the generated legs come from favorite cappers only.
+  favoritesOnly?: boolean;
 }): string {
   const head = `Up to ${MAX_PARLAY_LEGS} · `;
-  if (!yourPicksOnly) return `${head}${slipFloor} from your picks, ${generatedLegs} from your cappers.`;
+  if (!yourPicksOnly) return `${head}${slipFloor} from your picks, ${generatedLegs} from your ${favoritesOnly ? "favorite cappers" : "cappers"}.`;
   const used = Math.min(legCount, usable);
   return used >= total ? `${head}all ${total} of your pick${plural(total)}.` : `${head}${used} of your ${total} picks.`;
 }

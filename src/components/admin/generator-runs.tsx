@@ -316,7 +316,7 @@ function SwapTable({ mode }: { mode: SwapModeTrace }) {
 
 function SwapRow({ leg }: { leg: SwapLegTrace }) {
   const ex = leg.excluded;
-  const excluded = [ex.FILTER_BET_TYPE && `${ex.FILTER_BET_TYPE} Bet Types`, ex.IN_SLIP && `${ex.IN_SLIP} in your slip`, ex.ALREADY_IN_PARLAY && `${ex.ALREADY_IN_PARLAY} already a leg`, ex.SAME_GAME_CONFLICT && `${ex.SAME_GAME_CONFLICT} same-game rule`].filter(Boolean);
+  const excluded = [ex.FILTER_BET_TYPE && `${ex.FILTER_BET_TYPE} Bet Types`, ex.FILTER_FAVORITES && `${ex.FILTER_FAVORITES} not a favorite`, ex.IN_SLIP && `${ex.IN_SLIP} in your slip`, ex.ALREADY_IN_PARLAY && `${ex.ALREADY_IN_PARLAY} already a leg`, ex.SAME_GAME_CONFLICT && `${ex.SAME_GAME_CONFLICT} same-game rule`].filter(Boolean);
   const swapped = leg.result === "SWAPPED";
   return (
     <tr className={`border-b border-border-subtle align-top ${swapped ? "" : AMBER}`}>

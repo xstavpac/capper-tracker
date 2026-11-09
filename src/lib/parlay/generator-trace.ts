@@ -117,6 +117,8 @@ export function traceSwapLeg(input: {
   leg: GeneratorPick;
   gamePicks: GeneratorPick[];
   allGamePicks: number;
+  // With the Favorites only star on: the picks it removed after Bet Types.
+  favoritesFiltered?: number;
   slipIds: Set<string>;
   inParlay: Set<string>;
   siblings: GeneratorPick[];
@@ -126,7 +128,13 @@ export function traceSwapLeg(input: {
 }): Omit<SwapLegTrace, "pick" | "result" | "rule"> {
   const out = {
     gamePicks: input.allGamePicks,
-    excluded: { FILTER_BET_TYPE: input.allGamePicks - input.gamePicks.length, IN_SLIP: 0, ALREADY_IN_PARLAY: 0, SAME_GAME_CONFLICT: 0 },
+    excluded: {
+      FILTER_BET_TYPE: input.allGamePicks - input.gamePicks.length - (input.favoritesFiltered ?? 0),
+      ...(input.favoritesFiltered !== undefined ? { FILTER_FAVORITES: input.favoritesFiltered } : {}),
+      IN_SLIP: 0,
+      ALREADY_IN_PARLAY: 0,
+      SAME_GAME_CONFLICT: 0,
+    } as SwapLegTrace["excluded"],
     classifier: {} as Record<string, number>,
     paired: 0,
     noRecord: 0,
@@ -198,6 +206,7 @@ export function traceSettings(pool: { leagues: string[]; slipPickIds: string[]; 
     ...(s.mix ? { mix: s.mix } : {}),
     fillFrom: s.fillFrom,
     minWinPct: s.minWinPct ?? null,
+    ...(s.favoritesOnly ? { favoritesOnly: true } : {}),
   };
 }
 

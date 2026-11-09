@@ -286,7 +286,7 @@ export function Section({
   n: number;
   tone?: "green" | "blue";
   title: string;
-  description: string;
+  description: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
 }) {

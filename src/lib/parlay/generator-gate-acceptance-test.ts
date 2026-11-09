@@ -182,7 +182,7 @@ check("out of range (80, -5) falls back to 55, not to a stricter or looser gate"
   const server = readFileSync("src/server/actions/parlay-generate.ts", "utf8");
   check("parseRequest normalizes minWinPct with the shared helper", /minWinPct:\s*normalizeMinWinPct\(s\.minWinPct\)/.test(server), true);
   const card = readFileSync("src/components/parlay/generator-card.tsx", "utf8");
-  check("the card sends minWinPct in the settings Generate and Regenerate share", /fillFrom, minWinPct \}\)/.test(card), true);
+  check("the card sends minWinPct in the settings Generate and Regenerate share", /fillFrom, minWinPct(?:, | \}\))/.test(card), true);
 }
 
 if (failures > 0) {
