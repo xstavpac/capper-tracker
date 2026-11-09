@@ -58,8 +58,10 @@
 //      The slip's own legs count toward their category's share, the generated
 //      legs fill what is left of each, then any shortfall from the other
 //      selected categories by normal ranking - a mix never shortens a parlay
-//      and never beats max legs per game or a same-game rule. A category that
-//      came up short is said (mixNotes). An unclassified pick (All Picks only)
+//      and never beats max legs per game or a same-game rule. A category set
+//      to a 0 share is off: it never fills a shortfall (if every other
+//      category is spent the parlay is shorter instead). A category that
+//      came up short is said (mixNotes), and what filled it. An unclassified pick (All Picks only)
 //      counts toward no share.
 //   6. Fill from = Your picks only with more usable slip picks than the leg
 //      count (more than rule 1 would put in): the parlay is the leg count of
@@ -814,6 +816,8 @@ export function buildGeneratedParlay(
   const quota: Partial<Record<BetCategoryResult, number>> | null = mixTarget
     ? Object.fromEntries(categories.map((c) => [c, Math.max(0, mixTarget[c] - (slipCounts.get(c) ?? 0))]))
     : null;
+  // A category with a 0 share is off: it never fills a shortfall (selection.ts).
+  const offCategories: BetCategoryResult[] = mix ? categories.filter((c) => (mix[c] ?? 0) === 0) : [];
 
   const select = (rng: Rng | null, recent: ReadonlySet<string>): Candidate[] => {
     const chosen: Candidate[] = [];
@@ -834,7 +838,7 @@ export function buildGeneratedParlay(
     const passes: boolean[] = left ? [true, false] : [false];
     // A strict pass takes only what a share still wants. An unclassified pick
     // has no share, so it waits for the open pass.
-    const allows = (c: Candidate, strict: boolean) => !strict || (left![c.category] ?? 0) > 0;
+    const allows = (c: Candidate, strict: boolean) => !offCategories.includes(c.category) && (!strict || (left![c.category] ?? 0) > 0);
 
     // Pass 1: one leg per game that has none yet, best games first.
     const open = eligible
@@ -905,6 +909,7 @@ export function buildGeneratedParlay(
         return !(sureOfGame(game, a) && sureOfGame(game, b)) || sameGameConflict(asCandidate(a), asCandidate(b)) !== null;
       },
       quota,
+      excludeCategories: offCategories,
       oneLegPerGameFirst: true,
     };
     const tr = baseTrace();
@@ -1043,7 +1048,11 @@ export function buildGeneratedParlay(
   if (mixTarget && fillFrom === "BEST_AVAILABLE") {
     for (const c of categories) {
       const got = legs.filter((l) => betCategory(l.pick) === c).length;
-      if (got < mixTarget[c]) mixNotes.push(mixShortNote(c, got, mixTarget[c]));
+      if (got < mixTarget[c]) {
+        // The slots it left went to other on categories, never to a 0% one.
+        const filledWith = categories.filter((d) => d !== c && (mix![d] ?? 0) > 0 && legs.filter((l) => betCategory(l.pick) === d).length > mixTarget[d]);
+        mixNotes.push(mixShortNote(c, got, mixTarget[c], filledWith));
+      }
     }
   }
   if (targeted && fillFrom === "BEST_AVAILABLE") {

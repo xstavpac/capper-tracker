@@ -4,7 +4,7 @@
 // and F5 moneylines, run lines, game and F5 totals, team totals, NRFI and
 // player props. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-categories-acceptance-test.ts
-import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, WILSON_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { betCategory } from "@/lib/parlay/bet-category";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
@@ -192,7 +192,7 @@ const full = snapOf(FULL);
   const short = run(fewProps, { legCount: 4, include: ["MONEYLINE", "PROPS"], mix: { MONEYLINE: 50, PROPS: 50 } });
   check("Props 50% with one qualifying prop: the full 4 legs anyway", short.legs.length, 4);
   check("...the shortfall is filled from Moneyline", short.legs.map((l) => l.pick.pickId).sort(), ["ml0", "ml1", "ml2", "p0"]);
-  check("...and it says so", short.mixNotes, ["Only 1 Props leg qualified (mix asked for 2)."]);
+  check("...and it says so", short.mixNotes, ["Only 1 Props leg qualified (mix asked for 2); filled with Moneyline."]);
 
   const oneGame = snapOf([
     { id: "ml", game: 0, market: "ML", wl: [80, 20] },
@@ -200,6 +200,29 @@ const full = snapOf(FULL);
   ]);
   const capped = run(oneGame, { legCount: 2, maxLegsPerGame: 1, include: ["MONEYLINE", "PROPS"], mix: { MONEYLINE: 50, PROPS: 50 } });
   check("mix vs Max legs 1: Max legs wins (one leg from the one game)", capped.legs.length, 1);
+
+  // A 0% category is off: it never fills a shortfall, even when it outranks the rest.
+  const offSnap = snapOf([
+    { id: "ml0", game: 0, market: "ML", wl: [90, 10] },
+    { id: "ml1", game: 1, market: "ML", wl: [88, 12] },
+    { id: "rl2", game: 2, market: "RL", wl: [70, 30] },
+    { id: "rl3", game: 3, market: "RL", wl: [68, 32] },
+    { id: "rl4", game: 4, market: "RL", wl: [66, 34] },
+    { id: "p5", game: 5, market: "PROP", wl: [65, 35] },
+  ]);
+  const zeroML = { MONEYLINE: 0, SPREAD: 50, TOTALS: 0, PROPS: 50 };
+  const off = run(offSnap, { legCount: 4, mix: zeroML });
+  check("ML 0 / Spread 50 / Props 50, one prop: no Moneyline leg", off.legs.filter((l) => betCategory(l.pick) === "MONEYLINE").length, 0);
+  check("...the shortfall is filled from Spread", off.legs.map((l) => l.pick.pickId).sort(), ["p5", "rl2", "rl3", "rl4"]);
+  check("...and it says so", off.mixNotes, ["Only 1 Props leg qualified (mix asked for 2); filled with Spread."]);
+  const offScored = buildGeneratedParlay(offSnap, { ...BASE, legCount: 4, mix: zeroML }, null, NOW, WILSON_RULES);
+  check("...the same on the legacy (Wilson) path", offScored.legs.filter((l) => betCategory(l.pick) === "MONEYLINE").length, 0);
+  const offShort = run(snapOf([
+    { id: "ml0", game: 0, market: "ML", wl: [90, 10] },
+    { id: "rl1", game: 1, market: "RL", wl: [70, 30] },
+    { id: "p2", game: 2, market: "PROP", wl: [65, 35] },
+  ]), { legCount: 4, mix: zeroML });
+  check("every on category exhausted: a shorter parlay, still no Moneyline", offShort.legs.map((l) => l.pick.pickId).sort(), ["p2", "rl1"]);
 
   const over = run(full, { legCount: 7, maxLegsPerGame: 2, include: ["MONEYLINE", "PROPS"], mix: { MONEYLINE: 80, PROPS: 60 } });
   check("shares over 100% are scaled, not refused: 80/60 of 7 -> 4 ML + 3 Props", [over.legs.filter((l) => betCategory(l.pick) === "MONEYLINE").length, over.legs.filter((l) => betCategory(l.pick) === "PROPS").length], [4, 3]);
