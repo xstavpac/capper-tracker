@@ -1073,7 +1073,11 @@ export function resolveOutcome(
   //    before quarter/period Periods existed, or an importer miss): don't
   //    grade off a slice the importer never assigned -> null. New picks carry
   //    the right Period, so this only ever hits legacy rows.
-  const scope = betScope(pick.betDetail);
+  // With the game's sport, so an NHL pick's bare "1P"/"2P"/"3P" reads as the
+  // period it names (bet-line.ts). A legacy NHL row stored FULL_GAME with that
+  // text now hits the mismatch below and stays PENDING instead of grading off
+  // the full-game score; rows already graded are never re-read here.
+  const scope = betScope(pick.betDetail, LIVE_SPORTS.find((s) => s.key === game.sportKey)?.label);
   if (scope === "UNSUPPORTED_SEGMENT") return null;
 
   // Hockey 3-way moneyline (lib/nhl-three-way.ts): graded on the regulation

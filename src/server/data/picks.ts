@@ -230,7 +230,7 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           // Game matched fine but resolveOutcome couldn't produce WIN/LOSS/
           // PUSH. Spell out which of the three reasons it is so this doesn't
           // always read as the generic "no number" case.
-          const scope = p.betType === "NRFI" ? "FULL_GAME" : betScope(p.betDetail);
+          const scope = p.betType === "NRFI" ? "FULL_GAME" : betScope(p.betDetail, p.sport.name);
           if (scope === "UNSUPPORTED_SEGMENT") {
             unmatchedReason =
               "matched game, but this bet is scoped to a game segment the grader can't resolve (e.g. a single inning outside MLB) - needs manual grading";

@@ -232,7 +232,7 @@ export function recoverUnresolvedLines(
     matches: PlayerCandidate[],
     nearMiss = false
   ): ParsedPick => {
-    const parsed = parsePickText(lineForParsing);
+    const parsed = parsePickText(lineForParsing, sport);
     return {
       capperName,
       sportName: sport,
@@ -273,8 +273,10 @@ export function recoverUnresolvedLines(
     candidates: LeagueCandidate[],
     nearMiss = false
   ): ParsedPick => {
-    const parsed = parsePickText(text);
     const sports = [...new Set(candidates.map((c) => c.sport))];
+    // One league among the candidates is the pick's sport; two leave it for the
+    // user's choice, where resolveAmbiguousPick re-parses under the chosen one.
+    const parsed = parsePickText(text, sports.length === 1 ? sports[0] : undefined);
     return {
       capperName,
       sportName: sports.length === 1 ? sports[0] : "",
@@ -328,7 +330,7 @@ export function recoverUnresolvedLines(
         continue;
       }
       if (res.status === "resolved") {
-        const parsed = parsePickText(text);
+        const parsed = parsePickText(text, res.sport);
         recovered.push({
           capperName,
           sportName: res.sport,
@@ -383,7 +385,7 @@ export function recoverUnresolvedLines(
         stillUnresolved.push(line);
         continue;
       }
-      const parsed = parsePickText(lineForParsing);
+      const parsed = parsePickText(lineForParsing, res.sport);
       recovered.push({
         capperName,
         sportName: res.sport,
@@ -417,7 +419,7 @@ export function recoverUnresolvedLines(
         stillUnresolved.push(line);
         continue;
       }
-      const parsed = parsePickText(lineForParsing);
+      const parsed = parsePickText(lineForParsing, res.sport);
       recovered.push({
         capperName,
         sportName: res.sport,
@@ -486,7 +488,7 @@ export function recoverUnresolvedLines(
         if (res.via === "fuzzy" || (res.via === "surname" && /\s/.test(typed)) || nflPlayerAliasName(typed) !== null) rosterName = res.playerName;
       }
 
-      const parsed = parsePickText(lineForParsing);
+      const parsed = parsePickText(lineForParsing, "NFL");
       recovered.push({
         capperName,
         sportName: "NFL",
@@ -532,7 +534,7 @@ export function recoverUnresolvedLines(
       // Read from the text like every other import path. Stored as FULL_GAME,
       // a "first quarter" line could never grade: the grader re-reads the
       // quarter from the text and declines the mismatch.
-      period: pickPeriodFromText(lineForParsing),
+      period: pickPeriodFromText(lineForParsing, res.sport),
       raw: line,
       teamNicknames: [res.nickname],
       gameNumber,

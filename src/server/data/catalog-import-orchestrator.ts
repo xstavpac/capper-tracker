@@ -189,6 +189,13 @@ export async function runCatalogImportForUser(
   const questions: CatalogQuestion[] = [];
   let candidates: ParsedPick[] = [];
   for (const p of resolved.picks) {
+    // Answered as a sport its "1P"/"2P"/"3P" can't belong to (see
+    // periodShorthandOutsideNhl): an unresolved line, never an import.
+    if (p.unresolvedReason) {
+      unresolvedAfter = [...unresolvedAfter, p.raw];
+      hookSkippedLog.push({ stage: "RECOVERY_UNRESOLVED", capperName: p.capperName, rawText: p.raw, guessedSport: p.sportName, reason: p.unresolvedReason });
+      continue;
+    }
     if (p.ambiguous && p.ambiguousKey) {
       questions.push({
         type: isPlayerAmbiguityKey(p.ambiguousKey) ? "PLAYER_AMBIGUITY" : "AMBIGUOUS_TEAM",

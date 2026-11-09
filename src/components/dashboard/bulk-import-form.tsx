@@ -362,6 +362,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const outcome = await autoResolveAmbiguousPicks(pickSplit.withCapper, ambiguousChoices);
     setResolving(false);
     setParsed(outcome.picks);
+    moveToUnresolved(outcome.picks);
     setAmbiguityLog(outcome.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount })));
     setScrollTrigger((v) => v + 1);
     // Merges both automatic decisions from this pass AND anything carried in
@@ -370,7 +371,7 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (Object.keys(outcome.decisions).length > 0) {
       setAmbiguousChoices((prev) => ({ ...prev, ...outcome.decisions }));
     }
-    const resolvedEntries = outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous);
+    const resolvedEntries = outcome.picks.map((p, idx) => ({ p, idx })).filter((e) => !e.p.ambiguous && !e.p.unresolvedReason);
     fetchOddsFor(resolvedEntries);
     // Questions these two checks raise land in the panel after the first
     // scroll - follow it down once more if any did (and no newer parse has
@@ -537,6 +538,15 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
   // this is what stops "Cardinals?" from being asked once per pick. The
   // choice also lands in ambiguousChoices (STEP 4 memory), so it's honored
   // automatically if the user edits the text and re-parses.
+  // Picks resolveAmbiguousPick could not place under the chosen sport (unresolvedReason) join
+  // the "couldn't be identified" list with that reason.
+  function moveToUnresolved(picks: ParsedPick[]) {
+    const flagged = picks.filter((p) => p.unresolvedReason);
+    if (flagged.length === 0) return;
+    setUnresolvedLines((prev) => [...prev, ...flagged.map((p) => p.raw).filter((raw) => !prev.includes(raw))]);
+    setUnresolvedReasons((prev) => ({ ...prev, ...Object.fromEntries(flagged.map((p) => [p.raw, p.unresolvedReason!])) }));
+  }
+
   function resolveAmbiguousGroup(key: string, choice: AmbiguousOption) {
     if (!parsed) return;
     setAmbiguousChoices((prev) => ({ ...prev, [key]: choice }));
@@ -544,10 +554,11 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     const next = parsed.map((p, idx) => {
       if (p.ambiguousKey !== key || !p.ambiguous) return p;
       const resolved = resolveAmbiguousPick(p, choice);
-      newlyResolved.push({ p: resolved, idx });
+      if (!resolved.unresolvedReason) newlyResolved.push({ p: resolved, idx });
       return resolved;
     });
     setParsed(next);
+    moveToUnresolved(next.filter((p, idx) => p.unresolvedReason && parsed[idx] !== p));
     if (newlyResolved.length > 0) {
       setAmbiguityLog((prev) => [...prev, { key, sport: choice.sport, method: "user", count: newlyResolved.length }]);
     }
@@ -557,7 +568,9 @@ export function BulkImportForm({ existingCapperNames }: { existingCapperNames: s
     if (newlyResolved.length > 0) checkTotalLinesFor(newlyResolved);
   }
 
-  const allEntries = (parsed ?? []).map((p, idx) => ({ p, idx }));
+  // A pick answered as a sport its "1P"/"2P"/"3P" can't belong to stays in `parsed` (every
+  // index-keyed flag below keeps its slot) but is listed with the unresolved lines instead.
+  const allEntries = (parsed ?? []).map((p, idx) => ({ p, idx })).filter((e) => !e.p.unresolvedReason);
   const validEntries = allEntries.filter((e) => !e.p.ambiguous);
   const ambiguousEntries = allEntries.filter((e) => e.p.ambiguous);
   const validPicks = validEntries.map((e) => e.p);
