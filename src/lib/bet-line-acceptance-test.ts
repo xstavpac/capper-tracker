@@ -10,6 +10,7 @@
 // Pure: no DB, no imports beyond the module under test. Run with:
 //   npx tsx src/lib/bet-line-acceptance-test.ts
 import { formatPickLabel, betScope, pickPeriodFromText, periodLabel } from "@/lib/bet-line";
+import { firstHalfLabelPrefixForChipSet } from "@/lib/bet-type-filter";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -74,6 +75,9 @@ check("periodLabel(FIRST_QUARTER)", periodLabel("FIRST_QUARTER"), "1st quarter")
 check("periodLabel(SECOND_HALF)", periodLabel("SECOND_HALF"), "2nd half");
 check("periodLabel(THIRD_PERIOD)", periodLabel("THIRD_PERIOD"), "3rd period");
 check("periodLabel(FIRST_HALF)", periodLabel("FIRST_HALF"), "1st half / F5");
+check("periodLabel(FIRST_HALF) baseball chip set -> F5", periodLabel("FIRST_HALF", firstHalfLabelPrefixForChipSet(["F5_ML"])), "F5");
+check("periodLabel(FIRST_HALF) football chip set -> 1st half (no F5)", periodLabel("FIRST_HALF", firstHalfLabelPrefixForChipSet(["FIRST_HALF_ML"])), "1st half");
+check("periodLabel(SECOND_HALF) ignores the prefix", periodLabel("SECOND_HALF", "F5"), "2nd half");
 check("periodLabel(FULL_GAME)", periodLabel("FULL_GAME"), "full game");
 
 // (a) betDetail with no number + line present -> number appended.

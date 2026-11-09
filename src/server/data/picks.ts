@@ -13,6 +13,7 @@ import {
   type LeagueRecordColumn,
   type PickCategoryKey,
   type PricedColumn,
+  chipSetForLeague,
 } from "@/server/data/stats";
 import {
   queryCapperRecordBundle,
@@ -29,7 +30,9 @@ import type { GameCardStreak } from "@/lib/game-card-record-line";
 import { easternDateRange } from "@/lib/dates";
 import { categoryRecordKey, leagueRecordKey, propMarketRecordKey } from "@/lib/record-keys";
 import { propMarketOf, propSportFamily, type PropMarketKey } from "@/lib/prop-market-key";
-import { nrfiSide, betScope, periodLabel } from "@/lib/bet-line";
+import { nrfiSide, betScope } from "@/lib/bet-line";
+import { segmentUnmatchedReason } from "@/lib/pending-pick-reason";
+import { firstHalfLabelPrefixForChipSet } from "@/lib/bet-type-filter";
 import {
   findMatchingGameResult,
   resolveOutcome,
@@ -231,14 +234,10 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           // PUSH. Spell out which of the three reasons it is so this doesn't
           // always read as the generic "no number" case.
           const scope = p.betType === "NRFI" ? "FULL_GAME" : betScope(p.betDetail, p.sport.name);
-          if (scope === "UNSUPPORTED_SEGMENT") {
-            unmatchedReason =
-              "matched game, but this bet is scoped to a game segment the grader can't resolve (e.g. a single inning outside MLB) - needs manual grading";
-          } else if (scope !== "FULL_GAME" && scope !== p.period) {
-            unmatchedReason =
-              "matched game, but this " + periodLabel(scope) + " pick predates segment grading - needs manual grading or re-import";
-          } else if (scope !== "FULL_GAME") {
-            unmatchedReason = "matched game, but the " + periodLabel(scope) + " score isn't posted for this game yet";
+          const sportFirstHalfPrefix = firstHalfLabelPrefixForChipSet(chipSetForLeague(p.sport.name));
+          const segmentReason = segmentUnmatchedReason(scope, p.period, sportKey, sportFirstHalfPrefix);
+          if (segmentReason) {
+            unmatchedReason = segmentReason;
           } else if (isTextSideAmbiguous(p.betType, p.betDetail ?? p.homeTeam, match.game.homeTeam, match.game.awayTeam, p.pickedSide)) {
             unmatchedReason =
               "matched game, but the bet text names both teams and no side was recorded at import, so it can't tell which team was picked - needs manual grading";
