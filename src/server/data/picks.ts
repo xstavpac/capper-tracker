@@ -311,6 +311,8 @@ export const FILTERED_PICK_SELECT = {
   gradedAt: true,
   pickedSide: true,
   propMarket: true,
+  // The Unique Picks tile groups props by player (lib/unique-picks.ts); one short string, null off props.
+  playerName: true,
   gameNumber: true,
   category: true,
 } as const satisfies Prisma.PickSelect;
