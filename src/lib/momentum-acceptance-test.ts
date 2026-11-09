@@ -137,16 +137,18 @@ check("no late grades: net", noLate.net, -1);
 const oneLate = past0([...inDay, { t: at("2026-11-08T03:15:00"), d: 3 }]);
 check("one late grade: xEnd stays at day end", oneLate.xEnd, DAY_END);
 check("one late grade: no extra point", oneLate.points.length, 3);
-check("one late grade: folded into last in-day point", [oneLate.points[2].t, oneLate.points[2].v, oneLate.points[2].change], [at("2026-11-05T02:00:00"), 2, 1]);
+check("one late grade: folded into the last point, which sits at day end", [oneLate.points[2].t, oneLate.points[2].v, oneLate.points[2].change], [DAY_END, 2, 1]);
 check("one late grade: net equals the full total", oneLate.net, 2);
 check("one late grade: no tick beyond day end", oneLate.xTicks.every((k) => k.t <= DAY_END), true);
 
 const manyLate = past0([...inDay, { t: at("2026-11-06T01:00:00"), d: 1 }, { t: at("2026-11-08T03:15:00"), d: 2 }, { t: at("2026-11-09T01:00:00"), d: -0.5 }]);
 check("many late grades: xEnd at day end", manyLate.xEnd, DAY_END);
 check("many late grades: single last point carries the full total", [manyLate.points.length, manyLate.net], [3, 1.5]);
+check("many late grades: final point x = dayEnd = xEnd", [manyLate.points[2].t, manyLate.points[2].t === manyLate.xEnd], [DAY_END, true]);
+check("no late grades: final point x is still the real last grade", noLate.points[2].t, at("2026-11-05T02:00:00"));
 
 const allLate = past0([{ t: at("2026-11-08T03:15:00"), d: 2 }]);
-check("only late grades: one point, inside the day, net kept", [allLate.points.length, allLate.net, allLate.points[1].t < DAY_END, allLate.xEnd], [2, 2, true, DAY_END]);
+check("only late grades: one point, inside the day, net kept", [allLate.points.length, allLate.net, allLate.points[1].t, allLate.xEnd], [2, 2, DAY_END, DAY_END]);
 const lateNight = past0([{ t: at("2026-11-05T04:30:00"), d: 1 }]);
 check("grade at 11:30 PM CT: axis never exceeds day end, keeps 2h span", [lateNight.xEnd <= DAY_END, lateNight.xEnd - lateNight.xStart >= 2 * 3600000], [true, true]);
 const todayEv = buildMomentum([{ t: at("2026-11-08T03:15:00"), d: 1 }], 0, { now: at("2026-11-08T06:00:00"), isToday: true, tz: CT, dayEnd: at("2026-11-08T05:00:00") });
