@@ -234,7 +234,15 @@ export type GeneratorSettings = {
   // The win-rate gate (lib/parlay/gate.ts), 55 by default. Absent or invalid
   // is 55; LEGACY_RULES ignores it.
   minWinPct?: number;
+  // The "Favorites only" star: generated legs, and Hedge / Contrarian
+  // alternates, come only from picks whose capper the user has favorited
+  // (pick.capperIsFavorite, from the capper roster the pool is read with). Slip
+  // picks are never filtered. Absent is off.
+  favoritesOnly?: boolean;
 };
+
+// The star's filter on one candidate. Off keeps every pick.
+export const keepsFavorite = (favoritesOnly: boolean, pick: Pick<GeneratorPick, "capperIsFavorite">): boolean => !favoritesOnly || pick.capperIsFavorite === true;
 
 // A Regenerate: the seed to draw with, and the generated legs (pick ids) of
 // the parlays already shown, newest first. Under GENERATOR_RULES also:
@@ -542,6 +550,7 @@ export function buildGeneratedParlay(
   };
   const over = (g: GameClock) => isGameOver(g, now);
   const include = toIncludeSelection(settings.include);
+  const favoritesOnly = settings.favoritesOnly === true;
   const categories = selectedCategories(include);
   const mix = toPickMix(settings.mix, categories);
   const maxPerGame = Math.min(MAX_LEGS_PER_GAME, Math.max(1, Math.floor(settings.maxLegsPerGame) || 1));
@@ -702,6 +711,10 @@ export function buildGeneratedParlay(
       passed.notSlip++;
       if (!keepsPick(include, pick)) {
         traced((t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)));
+        continue;
+      }
+      if (!keepsFavorite(favoritesOnly, pick)) {
+        traced((t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)));
         continue;
       }
       passed.included++;
@@ -1019,12 +1032,12 @@ export function buildGeneratedParlay(
   const hedgeSelect: HedgeSelect | null = scoreOf
     ? { draw: variation ? { seed: deriveSeed(variation.seed, "hedge"), beta } : null, picked: [] }
     : null;
-  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, trace, hedgeSelect));
+  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, trace, hedgeSelect));
   // Contrarian's the same way, on its own sub-seed.
   const contrarianSelect: HedgeSelect | null = scoreOf
     ? { draw: variation ? { seed: deriveSeed(variation.seed, "contrarian"), beta } : null, picked: [] }
     : null;
-  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, trace, contrarianSelect));
+  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, trace, contrarianSelect));
   if (scoreOf) traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
   if (selectionTrace) {
     const tr: SelectionTrace = {
@@ -1222,6 +1235,7 @@ function buildSwap(
   legs: EngineLeg[],
   gameById: Map<string, GeneratorGame>,
   include: IncludeSelection,
+  favoritesOnly: boolean,
   snapshot: GeneratorSnapshot,
   mode: SwapMode,
   scope: SwapScope,
@@ -1242,7 +1256,9 @@ function buildSwap(
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
   const out: EngineSwapLeg[] = legs.map((leg) => {
     if (!inSwapScope(scope, leg.source)) return { original: leg, swap: null, unchangedReason: "OUT_OF_SCOPE" };
-    const gamePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p));
+    const typePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p));
+    // The star filters alternates the same way it filters generated legs.
+    const gamePicks = favoritesOnly ? typePicks.filter((p) => keepsFavorite(true, p)) : typePicks;
     const siblings = legs.filter((l) => l !== leg && l.gameId === leg.gameId).map((l) => current.get(l.pick.pickId)!);
     const others = gamePicks.filter((p) => !inParlay.has(p.pickId) && siblings.every((s) => sameGameConflict(asCandidate(p), asCandidate(s)) === null));
     const primary = toParlayLeg(leg.pick);
@@ -1258,6 +1274,7 @@ function buildSwap(
               leg: leg.pick,
               gamePicks,
               allGamePicks: gameById.get(leg.gameId)?.picks.length ?? 0,
+              ...(favoritesOnly ? { favoritesFiltered: typePicks.length - gamePicks.length } : {}),
               slipIds: new Set(snapshot.slipPicks.map((p) => p.pickId)),
               inParlay,
               siblings,

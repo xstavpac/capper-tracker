@@ -392,6 +392,7 @@ export function GeneratorResult({
   parlay,
   reveal,
   requestedLegs,
+  favoritesOnly = false,
   busy,
   noAlternative,
   unavailableTargetLabels,
@@ -408,6 +409,8 @@ export function GeneratorResult({
   reveal: Reveal | null;
   // Total legs, for the counter until the engine says how many it found.
   requestedLegs: number;
+  // The Favorites only star was on for this build: a small pill after the title.
+  favoritesOnly?: boolean;
   busy: boolean;
   // Which legs Hedge and Contrarian swap (swap-scope.ts); remembered by the card.
   swapScope: SwapScope;
@@ -490,6 +493,13 @@ export function GeneratorResult({
           subtitle: analyzing ? "Checking eligible picks against your filters" : subtitle,
           icon: building ? <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" /> : <ReadyCheck />,
         }}
+        titleBadge={
+          favoritesOnly ? (
+            <span data-favorites-pill className="ml-2 inline-flex items-center gap-0.5 rounded-full border border-[#f5c451] bg-[#fff7e0] px-2 py-px align-middle text-[11px] font-semibold text-[#b45309] dark:bg-amber-500/15 dark:text-amber-300">
+              ★ Favorites
+            </span>
+          ) : undefined
+        }
         control={
           <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
             {regenerate && (

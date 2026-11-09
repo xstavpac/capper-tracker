@@ -3,22 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toggleFavoriteCapperAction } from "@/server/actions/cappers";
-
-function StarIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="h-4 w-4"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth={filled ? 0 : 2}
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 2.5l2.9 6.3 6.9.7-5.2 4.7 1.6 6.8L12 17.6l-6.2 3.4 1.6-6.8-5.2-4.7 6.9-.7z" />
-    </svg>
-  );
-}
+import { StarIcon } from "@/components/dashboard/star-icon";
 
 // Optimistic star toggle - flips instantly on click, confirms/reverts against the
 // server action's real result, then refreshes the server-rendered page (which is

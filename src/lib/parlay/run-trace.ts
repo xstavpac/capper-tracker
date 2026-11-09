@@ -37,6 +37,7 @@ export const REASON_LABELS = {
   // Standard candidates
   IS_SLIP_PICK: "Already a slip pick",
   FILTER_BET_TYPE: "Bet Types filter",
+  FILTER_FAVORITES: "Favorites only (capper not a favorite)",
   NO_CATEGORY: "Pick has no record category",
   NO_RECORD: "Capper has no record in this bet",
   NO_PROP_MARKET_RECORD: "Capper has no record in this prop market",
@@ -101,10 +102,11 @@ export type SwapLegTrace = {
   result: "SWAPPED" | ReasonCode;
   // Alternate's rule when swapped.
   rule?: string;
-  // Picks on the game, and where each went: left by the Bet Types filter, already
-  // a leg or in the slip, blocked by a same-game rule against a sibling leg.
+  // Picks on the game, and where each went: left by the Bet Types filter (or, with
+  // the Favorites only star on, by it - FILTER_FAVORITES, absent when the star is
+  // off), already a leg or in the slip, blocked by a same-game rule against a sibling leg.
   gamePicks: number;
-  excluded: { FILTER_BET_TYPE: number; IN_SLIP: number; ALREADY_IN_PARLAY: number; SAME_GAME_CONFLICT: number };
+  excluded: { FILTER_BET_TYPE: number; FILTER_FAVORITES?: number; IN_SLIP: number; ALREADY_IN_PARLAY: number; SAME_GAME_CONFLICT: number };
   // What the classifier said about the rest against this leg: R1..R6 or INACTIVE / UNDERIVABLE /
   // UNCLASSIFIED / EXACT_DUPLICATE / NOT_SAME_GAME.
   classifier: Record<string, number>;

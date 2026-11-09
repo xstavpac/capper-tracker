@@ -45,6 +45,8 @@ import { readStoredMode, writeStoredMode } from "@/lib/parlay/reuse-history";
 import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selection";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
+import { FAVORITES_EMPTY, FAVORITES_STAR_LABEL, FAVORITES_SUBTITLE, NO_FAVORITES_SUBTITLE, readStoredFavoritesOnly, writeStoredFavoritesOnly } from "@/lib/parlay/favorites-only";
+import { StarIcon } from "@/components/dashboard/star-icon";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
 
 const FILL_FROM_OPTIONS: { key: FillFrom; label: string }[] = [
@@ -68,7 +70,8 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSummary?: (s: GeneratorSummary) => void }) {
+// `hasFavorites`: whether the user has favorited any capper (the page reads the cached roster).
+export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { leagues: string[]; hasFavorites?: boolean; onSummary?: (s: GeneratorSummary) => void }) {
   const slip = useParlayPool();
   const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount, userId } = slip;
 
@@ -104,6 +107,16 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     setMinWinPctState(next);
     writeStoredGate(userId, next);
   }
+  // The Favorites only star - remembered the same way. Standard only: Hybrid never reads it.
+  const [favoritesOnly, setFavoritesOnlyState] = useState(false);
+  useEffect(() => {
+    setFavoritesOnlyState(readStoredFavoritesOnly(userId));
+  }, [userId]);
+  function toggleFavoritesOnly() {
+    const next = !favoritesOnly;
+    setFavoritesOnlyState(next);
+    writeStoredFavoritesOnly(userId, next);
+  }
   // Which legs Hedge and Contrarian swap - remembered the same way. Every scope
   // comes with each build, so changing it never rebuilds the parlay.
   const [swapScope, setSwapScopeState] = useState<SwapScope>(SWAP_SCOPE_DEFAULT);
@@ -138,8 +151,9 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     [leagues, isLeagueInScope, pool, targets]
   );
   const settings: GeneratorSettings = useMemo(
-    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct }),
-    [legCount, maxPerGame, include, mix, fillFrom, minWinPct]
+    // favoritesOnly only when on, so a build with the star off is the same request as before it existed.
+    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct, ...(favoritesOnly ? { favoritesOnly: true } : {}) }),
+    [legCount, maxPerGame, include, mix, fillFrom, minWinPct, favoritesOnly]
   );
   const key = poolKey(inputs);
 
@@ -444,7 +458,41 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         </Section>
 
         {/* 2 · Pick filters */}
-        <Section n={2} title="Pick Filters" description="Choose which games to build around, or use the full slate.">
+        <Section
+          n={2}
+          title="Pick Filters"
+          description={
+            !favoritesOnly ? (
+              "Choose which games to build around, or use the full slate."
+            ) : hasFavorites ? (
+              FAVORITES_SUBTITLE
+            ) : (
+              <>
+                {NO_FAVORITES_SUBTITLE}{" "}
+                <Link href="/cappers" className={LINK}>
+                  Go to Cappers
+                </Link>
+              </>
+            )
+          }
+          actions={
+            <button
+              type="button"
+              onClick={toggleFavoritesOnly}
+              aria-pressed={favoritesOnly}
+              aria-label={FAVORITES_STAR_LABEL}
+              title={FAVORITES_STAR_LABEL}
+              className={
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition " +
+                (favoritesOnly
+                  ? "border-[#f5c451] bg-[#fff7e0] text-[#f59e0b] dark:bg-amber-500/15"
+                  : "border-[#DADDE5] bg-white text-[#9AA0AE] hover:text-[#f59e0b] dark:border-border dark:bg-card")
+              }
+            >
+              <StarIcon filled={favoritesOnly} className="h-5 w-5" />
+            </button>
+          }
+        >
           <div className="space-y-3">
             <FilterRow label="Leagues">
               {leagues.map((league) => (
@@ -474,7 +522,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
               <SettingRow
                 icon={<LayersIcon className="h-5 w-5" />}
                 label="Total legs"
-                note={legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length })}
+                note={legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
               >
                 <LegStepper value={legCount} max={maxLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
               </SettingRow>
@@ -539,6 +587,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           parlay={parlay && builtFor === key ? parlay : null}
           reveal={build.reveal}
           requestedLegs={legCount}
+          favoritesOnly={favoritesOnly}
           busy={busy}
           noAlternative={noAlternative}
           unavailableTargetLabels={(parlay?.unavailableTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
@@ -555,7 +604,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
       )}
       {!build.reveal && parlay && builtFor === key && parlay.legs.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No qualified picks {targets.length > 0 ? "in the targeted games" : "in your selected leagues right now"}.
+          {favoritesOnly ? FAVORITES_EMPTY : <>No qualified picks {targets.length > 0 ? "in the targeted games" : "in your selected leagues right now"}.</>}
         </p>
       )}
     </>

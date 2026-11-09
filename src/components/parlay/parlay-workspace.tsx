@@ -48,12 +48,12 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
   );
 }
 
-export function ParlayWorkspace({ leagues }: { leagues: string[] }) {
+export function ParlayWorkspace({ leagues, hasFavorites = true }: { leagues: string[]; hasFavorites?: boolean }) {
   const [summary, setSummary] = useState<GeneratorSummary>(null);
   return (
     <>
       <ParlayStatCards summary={summary} />
-      <GeneratorCard leagues={leagues} onSummary={setSummary} />
+      <GeneratorCard leagues={leagues} hasFavorites={hasFavorites} onSummary={setSummary} />
     </>
   );
 }
