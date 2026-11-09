@@ -102,3 +102,37 @@ Egress estimate:
 - Writes are ingress, not egress.
 - Viewing 14 days of trends reads up to about 10k small rows, roughly 0.8 MB per
   view, or a few KB if the page groups by day in SQL.
+
+## Daily query snapshots (built; supersedes the hourly proposal above)
+
+pg_stat_statements only has totals since the last reset, so after a spike there was no
+way to say which query did it. `/api/cron/db-stats-snapshot` (daily 08:15 UTC, 3:15 am
+Eastern; `CRON_SECRET` like the other crons; shows on the Crons tab) keeps a per-day
+delta for a short list of queries.
+
+- Tracked: `TRACKED_QUERIES` in `src/lib/query-stat-snapshots.ts` - Board window
+  (`boardPicksInWindow`), Capper names (pick-dedup), Capper roster, the three Heavy
+  Consensus reads (rate, stored ids, history), and the two recent-swings reads. The
+  first six reuse the monitor labels above; the swings reads match their own
+  statement openings (checked against `recent-swings.ts` in the acceptance test, not
+  yet against a production capture). Add a query by adding an entry.
+- Tables (migration `20261110120000_add_query_stat_snapshots`, additive, RLS on):
+  `query_stat_baselines(queryid PK, label, calls, rows)` - last-seen cumulative
+  counters; `query_stat_daily(date, label, calls, rows, avgRows, statsReset)` - one
+  row per tracked label per UTC day, zeros included, kept 90 days.
+- Delta: current minus baseline, per queryid, summed per label (a label can be several
+  queryids: IN-list lengths). First run ever writes baselines only. A queryid whose
+  counter is lower than its baseline means the stats were reset: no negative delta; the
+  post-reset counters count and the day is marked `statsReset`. A queryid with no
+  baseline on a later run counts in full. Baselines whose statement vanished are
+  deleted. A second run on the same UTC day adds to that day's row.
+- Statement text is read from pg_stat_statements only for a queryid with no baseline
+  (untracked statements get a label-null baseline, so their text is read once).
+- Page: "Daily trend, tracked queries" under the statement table (sparkline of rows/day,
+  totals, peak day, day-by-day table), and the same data appended to **Copy for Claude**.
+- Resets: nothing here touches reset behavior; Reset stats on the page still works and
+  the next snapshot shows it as a `(reset)` day.
+
+Egress: a run reads about 100-300 counter rows (~30 bytes each, ~10 KB) plus texts for
+new queryids only, and writes at most ~300 baseline rows and 8 daily rows. The page adds
+one read of at most 8 x 30 small rows (~10 KB). Nothing else changes.

@@ -1,5 +1,8 @@
 import { requireAdminOpsPage } from "@/server/admin-gate";
 import { loadDbMonitorSnapshot } from "@/server/data/db-monitor";
+import { loadQueryStatTrend } from "@/server/data/query-stat-snapshots";
+import { buildTrends, formatTrendReport } from "@/lib/query-stat-snapshots";
+import { QueryTrendPanel } from "@/components/admin/query-trend-panel";
 import {
   buildMonitorView,
   formatAvg,
@@ -37,7 +40,10 @@ export default async function DbMonitorPage({
   }
 
   const view = buildMonitorView(result.snapshot, threshold, new Date());
-  const report = formatClaudeReport(view);
+  // The daily snapshot trend: a few hundred tiny rows at most, read after the live stats.
+  const trendRows = await loadQueryStatTrend();
+  const trends = buildTrends(trendRows ?? []);
+  const report = formatClaudeReport(view) + "\n" + formatTrendReport(trends);
 
   return (
     <div className="space-y-6">
@@ -114,6 +120,8 @@ export default async function DbMonitorPage({
           </table>
         </div>
       )}
+
+      <QueryTrendPanel trends={trends} unavailable={trendRows === null} />
 
       <ReportDetails report={report} />
     </div>
