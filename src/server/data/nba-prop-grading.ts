@@ -94,6 +94,9 @@ function statFor(row: NbaPlayerRow, market: Exclude<NbaPropMarket, "DOUBLE_DOUBL
       return row.points;
     case "REBOUNDS":
       return row.rebounds;
+    case "DEFENSIVE_REBOUNDS":
+      // Callers check for a missing column first (gradeNbaPlayerProp); 0 is unreachable for a real game.
+      return row.defensiveRebounds ?? 0;
     case "ASSISTS":
       return row.assists;
     case "THREES_MADE":
@@ -205,6 +208,10 @@ export async function gradeNbaPlayerProp(pick: NbaPropPick, eventId: string, dep
   if (market === "DOUBLE_DOUBLE") {
     const yes = nbaDoubleDoubleSide(pick.betDetail ?? "") === "YES";
     return { outcome: isDoubleDouble(row) === yes ? "WIN" : "LOSS" };
+  }
+  if (market === "DEFENSIVE_REBOUNDS" && row.defensiveRebounds == null) {
+    // This game's box score has no defensive-rebounds column (older game): never grade it as 0.
+    return { outcome: null, reason: "this game's box score has no defensive rebounds column - needs manual grading" };
   }
   return { outcome: gradeAgainstLine(statFor(row, market), lineInfo!.line, lineInfo!.direction) };
 }

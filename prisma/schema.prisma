@@ -137,6 +137,9 @@ enum PropMarket {
   // rushing + receiving TDs, graded from the same box-score columns as anytime TD. Its own value, never
   // TD, so a count pick can't pool with anytime-TD in any per-market record.
   TD_COUNT
+  // NBA defensive rebounds (2026-11): "defensive rebounds" / "dreb", graded from the box score's own
+  // defensiveRebounds column - never total REBOUNDS.
+  DEFENSIVE_REBOUNDS
   // NHL markets (2026-10). Graded from ESPN's NHL summary box score / scoring
   // plays - see server/data/nhl-boxscore.ts and nhl-prop-grading.ts. Additive:
   // no NFL value or grading path changes. POINTS = goals + assists; SAVES is

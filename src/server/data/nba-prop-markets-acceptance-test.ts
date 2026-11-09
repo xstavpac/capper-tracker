@@ -32,7 +32,8 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS", "PASS_ATTEMPTS", "RUSH_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS", "TD_COUNT"];
-const NEW_VALUES = ["REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
+// DEFENSIVE_REBOUNDS (2026-11) was added later: it sits in the enum next to TD_COUNT, not in the NBA tail.
+const NEW_VALUES = ["REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
 
 const filterPick = (propMarket: PropMarket | null, betDetail: string) => ({ betType: "PLAYER_PROP" as const, period: "FULL_GAME" as const, betDetail, propMarket });
 const categoryPick = (sportName: string, propMarket: PropMarket | null, betDetail: string) => ({
@@ -63,11 +64,12 @@ async function main() {
   console.log("########## PART A: the enum ##########");
   {
     const all = Object.values(PropMarket) as string[];
-    check("the nine new values are in the Prisma enum", NEW_VALUES.filter((v) => !all.includes(v)), []);
-    check("the enum's last nine values are the new ones, in order (additive, nothing moved)", all.slice(-9), NEW_VALUES);
-    check("NBA_PROP_MARKETS is POINTS, ASSISTS and the nine new values", [...NBA_PROP_MARKETS], ["POINTS", "ASSISTS", ...NEW_VALUES]);
+    const ORIGINAL_NINE = NEW_VALUES.filter((v) => v !== "DEFENSIVE_REBOUNDS");
+    check("the new values are in the Prisma enum", NEW_VALUES.filter((v) => !all.includes(v)), []);
+    check("the enum's last nine values are the new ones, in order (additive, nothing moved)", all.slice(-9), ORIGINAL_NINE);
+    check("NBA_PROP_MARKETS is POINTS, ASSISTS and the ten new values", [...NBA_PROP_MARKETS], ["POINTS", "ASSISTS", ...NEW_VALUES]);
     check("every NBA market is a real enum value", NBA_PROP_MARKETS.filter((m) => !all.includes(m)), []);
-    check("NBA_ONLY_PROP_MARKETS is exactly the nine new values", [...NBA_ONLY_PROP_MARKETS], NEW_VALUES);
+    check("NBA_ONLY_PROP_MARKETS is exactly the ten new values", [...NBA_ONLY_PROP_MARKETS], NEW_VALUES);
 
     // Reuse: one value, one stat. POINTS / ASSISTS are the only shared ones.
     const shared = (a: readonly string[], b: readonly string[]) => a.filter((m) => b.includes(m));

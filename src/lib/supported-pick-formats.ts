@@ -328,6 +328,12 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         check: { via: "nba-prop", market: "REBOUNDS" },
       },
       {
+        market: "Defensive rebounds",
+        examples: ["Rudy Gobert over 7.5 defensive rebounds", "Rudy Gobert o7.5 dreb"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "DEFENSIVE_REBOUNDS" },
+      },
+      {
         market: "Assists",
         examples: ["Nikola Jokic over 9.5 assists", "Nikola Jokic o9.5 ast"],
         status: "coming-soon",
