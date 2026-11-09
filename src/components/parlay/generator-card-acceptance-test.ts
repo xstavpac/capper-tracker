@@ -20,6 +20,10 @@ import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { GenerateRequest } from "@/server/actions/parlay-generate";
 
+// The result card's title, and its "N legs" chip (not "17 legs" for 7).
+const READY = "Your parlay is ready";
+const readyWith = (text: string, legs: number) => text.includes(READY) && new RegExp("(?<!\\d)" + legs + " legs").test(text);
+
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label}${detail ? "  " + detail : ""}`);
@@ -215,7 +219,7 @@ async function main() {
   // ---- Generate: one request ----
   await generate();
   check("Generate: one request, with the slip's ids, the explicit target only, the in-scope leagues", requests.length === 1 && requests[0].slipPickIds.join() === "g0ml,g1ml" && requests[0].targets.map((t) => t.gameId).join() === "G3" && requests[0].leagues.join() === "NFL,MLB", JSON.stringify(requests[0]));
-  check("result: 'Your parlay · 3 legs'", text().includes("Your parlay · 3 legs"), text().slice(-400));
+  check("result: 'Your parlay is ready' · 3 legs", readyWith(text(), 3), text().slice(-400));
   check("result: the two slip picks marked 'Your pick'", (text().match(/Your pick(?!s)/g) ?? []).length >= 2);
   check("result: every leg shows its W-L", /\(\d+–\d+\)/.test(text()));
   check("result: Primary / Hedge / Contrarian tabs", ["Primary", "Hedge", "Contrarian"].every((t) => el.querySelector(`[role="tab"]`) && Array.from(el.querySelectorAll('[role="tab"]')).some((b) => (b.textContent ?? "").startsWith(t))));
@@ -258,7 +262,7 @@ async function main() {
 
   // ---- A pool change clears the result ----
   await click(button("Use full slate"));
-  check("Use full slate: back to the full slate text, result cleared", text().includes("Choose which games to build around, or use the full slate.") && !text().includes("Your parlay ·"));
+  check("Use full slate: back to the full slate text, result cleared", text().includes("Choose which games to build around, or use the full slate.") && !text().includes(READY));
 
   // The no-targets branch has its own "+ Add games from Live" link.
   await act(() => void (liveLink("+ Add games from Live") as HTMLElement).click());
@@ -284,7 +288,7 @@ async function main() {
     open!.click();
   });
   await settle();
-  check("opening FanDuel keeps the slip, its targets and the result; slip mode ends", ctx.pool.length > 0 && !ctx.slipMode && text().includes("Your parlay ·"), `pool=${ctx.pool.length}`);
+  check("opening FanDuel keeps the slip, its targets and the result; slip mode ends", ctx.pool.length > 0 && !ctx.slipMode && text().includes(READY), `pool=${ctx.pool.length}`);
   await click(button("Clear all picks"));
   check("Clear all picks empties the slip and offers Undo", ctx.pool.length === 0 && Boolean(button("Undo")));
   await click(button("Undo"));

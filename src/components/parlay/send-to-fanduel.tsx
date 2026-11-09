@@ -67,7 +67,8 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
 // `keepWhenEmpty` shows the button, disabled, when there are no legs;
 // otherwise nothing is shown for none. `onOpened` runs when the user opens
 // FanDuel's betslip - the generator clears the slip then.
-export function SendToFanDuel({ legs, keepWhenEmpty, onOpened }: { legs: SendLeg[]; keepWhenEmpty?: boolean; onOpened?: () => void }) {
+// `className` replaces the wrapper's top rule and padding (the generator's PARLAY COMPLETE banner frames it itself).
+export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { legs: SendLeg[]; keepWhenEmpty?: boolean; onOpened?: () => void; className?: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FanDuelLinkResponse | null>(null);
@@ -106,7 +107,7 @@ export function SendToFanDuel({ legs, keepWhenEmpty, onOpened }: { legs: SendLeg
   const brokenGroups = result ? incompleteSameGameGroups(legs, new Set(sent.map((l) => l.pickId))) : [];
 
   return (
-    <div className="border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10">
+    <div className={className ?? "border-t border-[#0F1420]/[0.08] py-3 dark:border-white/10"}>
       <button type="button" onClick={send} disabled={loading || legs.length === 0} className={PILL_OUTLINE}>
         {loading ? "Checking FanDuel…" : result ? "Check FanDuel again" : "Send to FanDuel"}
       </button>

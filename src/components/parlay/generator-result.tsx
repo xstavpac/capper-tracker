@@ -13,7 +13,11 @@
 //   - Hedge and Contrarian swap the legs the "Swap:" control (on those two tabs
 //     only) covers: Suggested (generated legs), Your picks (slip legs) or All.
 //     The Primary always keeps every slip pick as chosen.
-import { useState, type ReactNode } from "react";
+//   - Generate / Regenerate build the card pick by pick (use-build-reveal.ts):
+//     an analyzing step, then the engine's legs one at a time, in their order,
+//     with the combined price of the legs shown so far, then PARLAY COMPLETE.
+//     Presentation only - every leg and price is the engine's answer.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { getRecordColor, PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -23,7 +27,9 @@ import { WIN_PCT_TRACK, WinPctBar } from "@/components/dashboard/category-card";
 import { ClipboardIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL, SEGMENT_OFF, SEGMENT_ON, Tabs, TextSegments } from "@/components/parlay/parlay-controls";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
-import { combineOdds, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
+import { combineOdds, decimalToAmerican, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
+import { ANALYZING_STATUS, completeText, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
+import type { Reveal } from "@/components/parlay/use-build-reveal";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
 import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
@@ -60,12 +66,28 @@ export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], 
 const SWAPPED_FRAME =
   "-mx-2.5 rounded-xl px-2.5 bg-brand-600/[0.06] ring-[1.5px] ring-inset ring-brand-600 shadow-[0_0_0_3px_var(--tw-shadow-color)] shadow-brand-600/[0.12] dark:bg-brand-400/[0.08] dark:ring-brand-400 dark:shadow-brand-400/[0.12]";
 const SWAPPED_TEXT = "text-brand-700 dark:text-brand-300";
+// A leg just added by the pick-by-pick build: it slides up and fades in with the
+// swap highlight (SWAPPED_FRAME), which then fades to the normal row - the same
+// frame with every colour transparent, so the shadow and ring transition smoothly.
+const ARRIVED_FRAME = "-mx-2.5 rounded-xl px-2.5 bg-transparent ring-[1.5px] ring-inset ring-transparent shadow-[0_0_0_3px_var(--tw-shadow-color)] shadow-transparent";
+const ARRIVE_MOTION = "animate-leg-land transition-[background-color,box-shadow] duration-[1900ms] ease-out motion-reduce:animate-none motion-reduce:transition-none";
 
-function LegRow({ n, pick, record, mine, sgp, swappedBy, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; swappedBy?: string; children?: ReactNode }) {
+function LegRow({ n, pick, record, mine, sgp, swappedBy, arrive, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; swappedBy?: string; arrive?: boolean; children?: ReactNode }) {
   const tone = record.winPct === null ? MUTED : getRecordColor(record.winPct) === "green" ? GREEN : RED;
   const live = isGameLive(pick, new Date());
+  // Lit from the moment it lands; the highlight starts fading once the slide-in is done.
+  const [lit, setLit] = useState(Boolean(arrive));
+  useEffect(() => {
+    if (!arrive) return;
+    const t = setTimeout(() => setLit(false), LAND_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the row lands
+  }, []);
+  const highlighted = Boolean(swappedBy) || (arrive && lit);
+  const frame = swappedBy ? SWAPPED_FRAME : arrive ? (lit ? SWAPPED_FRAME : ARRIVED_FRAME) + " " + ARRIVE_MOTION : "";
+  const textTone = (highlighted ? SWAPPED_TEXT : "text-foreground") + (arrive ? " transition-colors duration-[1900ms] motion-reduce:transition-none" : "");
   return (
-    <li className={"flex gap-3 py-3 " + (swappedBy ? SWAPPED_FRAME : "")}>
+    <li className={"flex gap-3 py-3 " + frame}>
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
         <p className={LABEL}>
@@ -80,11 +102,11 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, children }: { n: number
           )}
         </p>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
-          <p className={"min-w-0 text-[15px] font-bold leading-snug [overflow-wrap:anywhere] " + (swappedBy ? SWAPPED_TEXT : "text-foreground")}>
+          <p className={"min-w-0 text-[15px] font-bold leading-snug [overflow-wrap:anywhere] " + textTone}>
             {swappedBy && <span className="sr-only">Swapped by {swappedBy}: </span>}
             {pick.betDetail}
           </p>
-          <p className={"shrink-0 text-sm font-semibold tabular-nums " + (swappedBy ? SWAPPED_TEXT : "text-foreground")}>{formatOdds(pick.odds)}</p>
+          <p className={"shrink-0 text-sm font-semibold tabular-nums " + textTone}>{formatOdds(pick.odds)}</p>
         </div>
         <p className="text-xs font-medium text-muted-foreground">
           <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
@@ -157,7 +179,40 @@ const PRICE_BOX = "mt-2.5 rounded-[12px] border border-[#E6E8EF] bg-white px-3.5
 // honest exceptions said in words: a leg with no price (no number at all) and
 // legs at the importer's -110 placeholder (shown, marked "≈"). A parlay with
 // same-game legs gets no number: FanDuel prices those together.
-export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<GameClock>)[]; sameGame: boolean }) {
+//
+// `tween` (the pick-by-pick build): a new combined price eases from the one shown
+// before (ODDS_TWEEN_MS). Only the shown decimal moves; the American odds and the
+// payout are derived from it with combine-odds.ts's own helpers, and every value
+// lands exactly on combineOdds()'s. Unavailable / Priced at FanDuel never tween.
+function useTweenedDecimal(target: number | null, on: boolean): number | null {
+  const [shown, setShown] = useState(target);
+  const from = useRef(target);
+  useEffect(() => {
+    if (!on || target === null || from.current === null) {
+      from.current = target;
+      setShown(target);
+      return;
+    }
+    const start = from.current;
+    const t0 = performance.now();
+    let raf = 0;
+    // performance.now(), not the frame's timestamp: the two need not share an origin.
+    const step = () => {
+      const k = easeOut((performance.now() - t0) / ODDS_TWEEN_MS);
+      const v = k >= 1 ? target : start + (target - start) * k;
+      from.current = v;
+      setShown(v);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, on]);
+  return on ? shown : target;
+}
+
+export function CombinedPrice({ legs, sameGame, tween = false }: { legs: (CombineLeg & Partial<GameClock>)[]; sameGame: boolean; tween?: boolean }) {
+  const combined = combineOdds(legs);
+  const shownDecimal = useTweenedDecimal(!sameGame && combined.status === "AVAILABLE" ? combined.decimal : null, tween);
   // A leg on a game under way is priced as posted; its odds may have moved.
   const now = new Date();
   const isLive = (l: CombineLeg & Partial<GameClock>) => l.gameTime !== undefined && isGameLive({ gameTime: l.gameTime, gameStatus: l.gameStatus, gameId: l.gameId }, now);
@@ -172,7 +227,6 @@ export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<
       </div>
     );
   }
-  const combined = combineOdds(legs);
   if (combined.legCount === 0) return null;
   if (combined.status === "UNAVAILABLE") {
     return (
@@ -192,12 +246,15 @@ export function CombinedPrice({ legs, sameGame }: { legs: (CombineLeg & Partial<
   }
   const approx = combined.estimated ? "≈ " : "";
   const asPosted = legs.some(isLive) ? " (as posted)" : "";
+  // Mid-tween: the shown decimal, the rest derived from it. Otherwise exactly combineOdds()'s.
+  const midTween = shownDecimal !== null && shownDecimal !== combined.decimal;
+  const price = midTween ? { ...combined, decimal: shownDecimal, american: decimalToAmerican(shownDecimal) ?? combined.american } : combined;
   return (
     <div className={PRICE_BOX}>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-3">
-        <PriceCell label={(combined.estimated ? "Combined odds (estimate)" : "Combined odds") + asPosted} value={approx + formatAmericanOdds(combined.american)} />
-        <PriceCell label="Decimal" value={approx + formatDecimalOdds(combined.decimal)} />
-        <PriceCell label="Payout" value={approx + formatPayout(payoutOn(combined))} sub="on $1" />
+        <PriceCell label={(combined.estimated ? "Combined odds (estimate)" : "Combined odds") + asPosted} value={approx + formatAmericanOdds(price.american)} />
+        <PriceCell label="Decimal" value={approx + formatDecimalOdds(price.decimal)} />
+        <PriceCell label="Payout" value={approx + formatPayout(payoutOn(price))} sub="on $1" />
       </dl>
       {combined.estimated && (
         <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -278,8 +335,63 @@ function ModePicker({ value, onChange, disabled }: { value: SelectionMode; onCha
 type Tab = "PRIMARY" | "AUTO_HEDGE" | "CONTRARIAN";
 const sendLegs = (picks: ExpanderPick[]) => picks.map((p) => ({ pickId: p.pickId, betDetail: p.betDetail, gameId: p.gameId, gameLabel: p.gameLabel }));
 
+// The build's progress: the scan line under the header (while building), the bar
+// (revealed / total) and the status line, its dot pulsing until the parlay is done.
+function BuildProgress({ revealed, total, status, active }: { revealed: number; total: number; status: string; active: boolean }) {
+  const pct = total > 0 ? Math.round((Math.min(revealed, total) / total) * 100) : 0;
+  return (
+    <div data-build-progress className="mb-2">
+      {active && (
+        <div aria-hidden="true" className="relative -mt-1.5 mb-2 h-0.5 overflow-hidden rounded-full">
+          <span className="absolute inset-y-0 left-0 w-1/3 animate-build-scan bg-gradient-to-r from-transparent via-brand-500 to-transparent motion-reduce:hidden" />
+        </div>
+      )}
+      <div role="progressbar" aria-label="Parlay build progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={revealed} className="h-1.5 overflow-hidden rounded-full bg-[#0F1420]/[0.06] dark:bg-white/10">
+        <div className="h-full rounded-full bg-brand-600 transition-[width] duration-500 ease-out motion-reduce:transition-none dark:bg-brand-400" style={{ width: pct + "%" }} />
+      </div>
+      <p role="status" aria-live="polite" className="mt-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span aria-hidden="true" className={"h-2 w-2 shrink-0 rounded-full bg-brand-600 dark:bg-brand-400 " + (active ? "animate-pulse motion-reduce:animate-none" : "")} />
+        {status}
+      </p>
+    </div>
+  );
+}
+
+// A leg still to come: the row's shape, shimmering.
+function PlaceholderLeg() {
+  const bar = "rounded-full bg-[#0F1420]/[0.07] dark:bg-white/10";
+  return (
+    <li aria-hidden="true" data-placeholder-leg className="relative flex gap-3 overflow-hidden py-3">
+      <span className={"h-7 w-7 shrink-0 " + bar} />
+      <div className="min-w-0 flex-1 space-y-2 py-0.5">
+        <span className={"block h-2.5 w-2/5 " + bar} />
+        <span className={"block h-3.5 w-3/4 " + bar} />
+        <span className={"block h-2.5 w-1/3 " + bar} />
+      </div>
+      <span className="pointer-events-none absolute inset-y-0 left-0 w-1/2 animate-build-shimmer bg-[linear-gradient(100deg,transparent_0%,rgba(255,255,255,0.7)_50%,transparent_100%)] motion-reduce:hidden dark:bg-[linear-gradient(100deg,transparent_0%,rgba(255,255,255,0.08)_50%,transparent_100%)]" />
+    </li>
+  );
+}
+
+// The ready title's small blue check, in the header's icon tile.
+function ReadyCheck() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="h-[17px] w-[17px] text-brand-600 dark:text-brand-400">
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
+  );
+}
+
+const BUILDING_TITLE = "Building your parlay";
+export const READY_TITLE = "Your parlay is ready";
+const COUNTER = CONTROL + " shrink-0 px-2.5 py-1 tabular-nums " + TINTS.neutral.control;
+const COMPLETE_BANNER = "mt-2.5 scroll-mb-4 rounded-[12px] border border-brand-600/25 bg-brand-600/[0.06] px-3.5 py-2.5 dark:border-brand-400/30 dark:bg-brand-400/[0.08]";
+const scrollNearest = (el: HTMLElement | null) => el?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+
 export function GeneratorResult({
   parlay,
+  reveal,
+  requestedLegs,
   busy,
   noAlternative,
   unavailableTargetLabels,
@@ -290,7 +402,12 @@ export function GeneratorResult({
   onSelectionMode,
   onSent,
 }: {
-  parlay: GeneratedParlay;
+  // Null only while a build is analyzing and the engine hasn't answered yet.
+  parlay: GeneratedParlay | null;
+  // The pick-by-pick build (use-build-reveal.ts); null: the parlay as built, all at once.
+  reveal: Reveal | null;
+  // Total legs, for the counter until the engine says how many it found.
+  requestedLegs: number;
   busy: boolean;
   // Which legs Hedge and Contrarian swap (swap-scope.ts); remembered by the card.
   swapScope: SwapScope;
@@ -307,117 +424,185 @@ export function GeneratorResult({
   onSent: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("PRIMARY");
-  const legs = parlay.legs;
-  const sameGame = parlay.sameGameGames > 0;
-  const hedge = parlay.hedge[swapScope];
-  const contrarian = parlay.contrarian[swapScope];
-  const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : null;
-  const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : legs.map((l) => l.pick);
-  const regenerate = regenerateState(parlay, noAlternative);
-  const notes = [
-    ...parlay.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
-    // LIMITED has its own banner for the "N of M legs" line; the targeted-game lines after it stay notes.
-    ...(parlay.limited ? parlay.shortfall.slice(1) : parlay.shortfall),
-    ...parlay.mixNotes,
-    ...(unavailableTargetLabels.length > 0
-      ? [`${unavailableTargetLabels.join(", ")}: over or no longer on the board — not used.`]
-      : []),
-  ];
+  // The Primary's rows play their landing once: after another tab, they come back as plain rows.
+  const [leftPrimary, setLeftPrimary] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const oddsRef = useRef<HTMLDivElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const phase = reveal?.phase ?? null;
+  const revealed = reveal?.revealed ?? 0;
+
+  // A build starts: the page brings the card into view. (The card is keyed per build, so this is once each.)
+  useEffect(() => {
+    if (reveal) cardRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on mount only
+  }, []);
+  // Each leg in: keep the newest leg and the combined price under it in view (page scroll).
+  useEffect(() => {
+    if (phase === "building" && revealed > 0) scrollNearest(oddsRef.current);
+  }, [phase, revealed]);
+  useEffect(() => {
+    if (phase === "complete") scrollNearest(bannerRef.current);
+  }, [phase]);
+
+  // One tree for every phase, each part in a fixed place: the rows a build has landed
+  // stay mounted when it completes (no second landing), and the scan line keeps running
+  // from analyzing into building.
+  const analyzing = !parlay || phase === "analyzing";
+  const building = analyzing || phase === "building";
+  const done = !building ? parlay : null;
+  const legs = parlay?.legs ?? [];
+  const total = analyzing ? (reveal?.total ?? requestedLegs) : legs.length;
+  const shownLegs = analyzing ? [] : building ? legs.slice(0, revealed) : legs;
+  // While building: Priced at FanDuel as soon as two shown legs share a game, as the full card would be.
+  const gameIds = shownLegs.map((l) => l.gameId);
+  const sameGame = done ? done.sameGameGames > 0 : new Set(gameIds).size < gameIds.length;
+
+  const hedge = done?.hedge[swapScope];
+  const contrarian = done?.contrarian[swapScope];
+  const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : undefined;
+  const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : shownLegs.map((l) => l.pick);
+  const regenerate = done ? regenerateState(done, noAlternative) : null;
+  // The rows the build lands keep their (fading) highlight until another tab is opened.
+  const arrive = reveal !== null && !leftPrimary;
+  const placeholders = analyzing ? 2 : building && revealed < total ? 1 : 0;
+  const notes = done
+    ? [
+        ...done.dropped.filter((d) => d.reason === "left_out").map((d) => `${d.label}: ${d.note}`),
+        // LIMITED has its own banner for the "N of M legs" line; the targeted-game lines after it stay notes.
+        ...(done.limited ? done.shortfall.slice(1) : done.shortfall),
+        ...done.mixNotes,
+        ...(unavailableTargetLabels.length > 0 ? [`${unavailableTargetLabels.join(", ")}: over or no longer on the board — not used.`] : []),
+      ]
+    : [];
+  const subtitle = !parlay
+    ? "Checking eligible picks against your filters"
+    : `${parlay.gamesUsed} game${plural(parlay.gamesUsed)}` +
+      (parlay.sameGameGames > 0 ? ` · ${parlay.sameGameGames} same-game pair${plural(parlay.sameGameGames)}` : "") +
+      ` · ${pickSummary(parlay)}`;
 
   return (
-    <PanelShell
-      theme={{
-        ...TINTS.neutral,
-        title: `Your parlay · ${legs.length} leg${plural(legs.length)}`,
-        subtitle:
-          `${parlay.gamesUsed} game${plural(parlay.gamesUsed)}` +
-          (sameGame ? ` · ${parlay.sameGameGames} same-game pair${plural(parlay.sameGameGames)}` : "") +
-          ` · ${pickSummary(parlay)}`,
-        icon: <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
-      }}
-      control={
-        <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
-          <ModePicker value={selectionMode} onChange={onSelectionMode} disabled={busy} />
-          <button
-            type="button"
-            onClick={onRegenerate}
-            disabled={busy || regenerate.disabled}
-            title={regenerate.hint}
-            aria-label={"Regenerate: " + regenerate.hint}
-            className={REGENERATE}
-          >
-            <RefreshIcon className="h-3.5 w-3.5 stroke-[2.4]" />
-            {busy ? "Regenerating…" : "Regenerate"}
-          </button>
-          <span className={CONTROL + " shrink-0 px-2.5 py-1 " + TINTS.neutral.control}>{legs.length} legs</span>
-        </div>
-      }
-      footer={null}
-      busy={busy}
-      wrapSubtitle
-      wrapControl
-    >
-      <p className="mb-2 text-xs font-medium text-muted-foreground">{MODE_HELP[selectionMode]}</p>
-      {parlay.limited && (
-        <div role="status" data-limited className="mb-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
-          <p className="text-xs font-semibold text-foreground">{LIMITED_TITLE(parlay.limited.have, parlay.limited.need)}</p>
-          <p className="mt-0.5 text-xs font-medium text-muted-foreground">{LIMITED_BODY}</p>
-        </div>
-      )}
-      {noAlternative && (
-        <p role="status" className="mb-2 text-xs font-medium text-muted-foreground">
-          {noAlternativeText(noAlternative)}
-        </p>
-      )}
-      <UnusedPicks picks={unusedPicks(parlay)} />
-      <Tabs<Tab>
-        label="Parlay variant"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "PRIMARY", label: "Primary" },
-          { key: "AUTO_HEDGE", label: "Hedge", note: `${hedge.swapCount}/${hedge.legs.length}` },
-          { key: "CONTRARIAN", label: "Contrarian", note: `${contrarian.swapCount}/${contrarian.legs.length}` },
-        ]}
-      />
-      {swap && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className={LABEL}>Swap:</span>
-          <TextSegments label="Swap" options={SWAP_SCOPE_OPTIONS} value={swapScope} onChange={onSwapScope} />
-        </div>
-      )}
-      {notes.length > 0 && (
-        <div role="status" className="mt-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
-          {notes.map((n) => (
-            <p key={n} className="text-xs font-medium text-foreground">
-              {n}
-            </p>
-          ))}
-        </div>
-      )}
-      <div className="mt-1">
-        {swap && (
-          <p className="mt-2 text-xs font-medium text-muted-foreground">
-            {swap.swapCount} of {swap.legs.length} legs {SWAP_COPY[swap.mode].verb}
+    <div ref={cardRef} className="scroll-mt-4">
+      <PanelShell
+        theme={{
+          ...TINTS.neutral,
+          title: building ? BUILDING_TITLE : READY_TITLE,
+          subtitle: analyzing ? "Checking eligible picks against your filters" : subtitle,
+          icon: building ? <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" /> : <ReadyCheck />,
+        }}
+        control={
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
+            {regenerate && (
+              <>
+                <ModePicker value={selectionMode} onChange={onSelectionMode} disabled={busy} />
+                <button
+                  type="button"
+                  onClick={onRegenerate}
+                  disabled={busy || regenerate.disabled}
+                  title={regenerate.hint}
+                  aria-label={"Regenerate: " + regenerate.hint}
+                  className={REGENERATE}
+                >
+                  <RefreshIcon className="h-3.5 w-3.5 stroke-[2.4]" />
+                  {busy ? "Regenerating…" : "Regenerate"}
+                </button>
+              </>
+            )}
+            <span className={COUNTER}>{building ? `${analyzing ? 0 : revealed} / ${total}` : `${legs.length} legs`}</span>
+          </div>
+        }
+        footer={null}
+        busy={busy}
+        wrapSubtitle
+        wrapControl
+      >
+        {reveal && (
+          <BuildProgress
+            revealed={analyzing ? 0 : building ? revealed : total}
+            total={total}
+            status={building ? reveal.status || ANALYZING_STATUS : `${total} of ${total} selections added`}
+            active={building}
+          />
+        )}
+        {done && <p className="mb-2 text-xs font-medium text-muted-foreground">{MODE_HELP[selectionMode]}</p>}
+        {done?.limited && (
+          <div role="status" data-limited className="mb-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
+            <p className="text-xs font-semibold text-foreground">{LIMITED_TITLE(done.limited.have, done.limited.need)}</p>
+            <p className="mt-0.5 text-xs font-medium text-muted-foreground">{LIMITED_BODY}</p>
+          </div>
+        )}
+        {done && noAlternative && (
+          <p role="status" className="mb-2 text-xs font-medium text-muted-foreground">
+            {noAlternativeText(noAlternative)}
           </p>
         )}
-        <CombinedPrice legs={shownPicks} sameGame={sameGame} />
-        <ol className={LEG_LIST}>
-          {swap
-            ? swap.legs.map((l, i) => <SwapLegRow key={l.original.pick.pickId} n={i + 1} leg={l} mode={swap.mode} />)
-            : legs.map((l, i) => (
-                <LegRow
-                  key={l.pick.pickId}
-                  n={i + 1}
-                  pick={l.pick}
-                  record={{ text: recordText(l.record, l.basis, l.pick, l.propMarket), winPct: l.record?.winPct ?? null }}
-                  mine={l.source === "SLIP"}
-                  sgp={l.sameGame}
-                />
-              ))}
-        </ol>
-        <SendToFanDuel legs={sendLegs(shownPicks)} onOpened={onSent} />
-      </div>
-    </PanelShell>
+        {done && <UnusedPicks picks={unusedPicks(done)} />}
+        {hedge && contrarian && (
+          <Tabs<Tab>
+            label="Parlay variant"
+            value={tab}
+            onChange={(t) => {
+              setTab(t);
+              if (t !== "PRIMARY") setLeftPrimary(true);
+            }}
+            tabs={[
+              { key: "PRIMARY", label: "Primary" },
+              { key: "AUTO_HEDGE", label: "Hedge", note: `${hedge.swapCount}/${hedge.legs.length}` },
+              { key: "CONTRARIAN", label: "Contrarian", note: `${contrarian.swapCount}/${contrarian.legs.length}` },
+            ]}
+          />
+        )}
+        {swap && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className={LABEL}>Swap:</span>
+            <TextSegments label="Swap" options={SWAP_SCOPE_OPTIONS} value={swapScope} onChange={onSwapScope} />
+          </div>
+        )}
+        {notes.length > 0 && (
+          <div role="status" className="mt-3 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
+            {notes.map((n) => (
+              <p key={n} className="text-xs font-medium text-foreground">
+                {n}
+              </p>
+            ))}
+          </div>
+        )}
+        <div className="mt-1">
+          {swap && (
+            <p className="mt-2 text-xs font-medium text-muted-foreground">
+              {swap.swapCount} of {swap.legs.length} legs {SWAP_COPY[swap.mode].verb}
+            </p>
+          )}
+          <ol className={LEG_LIST}>
+            {swap
+              ? swap.legs.map((l, i) => <SwapLegRow key={l.original.pick.pickId} n={i + 1} leg={l} mode={swap.mode} />)
+              : shownLegs.map((l, i) => (
+                  <LegRow
+                    key={l.pick.pickId}
+                    n={i + 1}
+                    pick={l.pick}
+                    record={{ text: recordText(l.record, l.basis, l.pick, l.propMarket), winPct: l.record?.winPct ?? null }}
+                    mine={l.source === "SLIP"}
+                    sgp={l.sameGame}
+                    arrive={arrive}
+                  />
+                ))}
+            {Array.from({ length: placeholders }, (_, i) => (
+              <PlaceholderLeg key={"placeholder-" + i} />
+            ))}
+          </ol>
+          <div ref={oddsRef} className="scroll-mb-4">
+            <CombinedPrice legs={shownPicks} sameGame={sameGame} tween={arrive && !swap} />
+          </div>
+          {done && legs.length > 0 && (
+            <div ref={bannerRef} data-parlay-complete className={COMPLETE_BANNER}>
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.07em] text-brand-700 dark:text-brand-300">Parlay complete</p>
+              <p className="mt-0.5 text-xs font-medium text-foreground">{completeText(legs.length, done.requested)}</p>
+              <SendToFanDuel legs={sendLegs(shownPicks)} onOpened={onSent} className="mt-2.5" />
+            </div>
+          )}
+        </div>
+      </PanelShell>
+    </div>
   );
 }

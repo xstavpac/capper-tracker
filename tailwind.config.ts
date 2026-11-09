@@ -100,6 +100,15 @@ const config: Config = {
           "0%": { transform: "translateX(-120%)" },
           "32%, 100%": { transform: "translateX(320%)" },
         },
+        // Parlay Generator pick-by-pick build (build-reveal.ts): a leg landing, and the header scan line.
+        "leg-land": {
+          "0%": { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "build-scan": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(300%)" },
+        },
         "fill-bar": {
           from: { transform: "scaleX(0)" },
           to: { transform: "scaleX(var(--fill, 1))" },
@@ -240,6 +249,9 @@ const config: Config = {
         "streak-pulse": "streak-pulse 1.3s ease-in-out infinite",
         "live-dot-ring": "live-dot-ring 1.6s ease-out infinite",
         "pill-shimmer": "pill-shimmer 4s ease-in-out infinite",
+        "build-shimmer": "pill-shimmer 1.6s ease-in-out infinite",
+        "leg-land": "leg-land 340ms ease-out both",
+        "build-scan": "build-scan 1.4s linear infinite",
         "fill-bar": "fill-bar 0.8s ease-out",
         "trend-surge-up": "trend-surge-up 1.6s ease-in-out infinite",
         "trend-surge-down": "trend-surge-down 1.6s ease-in-out infinite",
