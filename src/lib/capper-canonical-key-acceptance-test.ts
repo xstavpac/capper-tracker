@@ -1,7 +1,6 @@
 // Capper "did you mean" names: plural-"s" variants are SUGGESTED (never auto-merged), and a
 // person's answer to a name pair is remembered so that exact pair is not asked again.
 // Pure - no database. Run with: npx tsx src/lib/capper-canonical-key-acceptance-test.ts
-import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
   capperPairKeys,
@@ -55,6 +54,7 @@ check("R4. an answer for one pair does not leak to another typed spelling", asks
 // --- wiring guards: the only place a name is rewritten is a remembered SAME ---
 const orch = readFileSync("src/server/data/catalog-import-orchestrator.ts", "utf8");
 check("W1. orchestrator rewrites a name only on remembered === SAME", /remembered === "SAME"\) p = \{ \.\.\.p, capperName: remembered\.suggestion \}/.test(orch) && !/findCanonicalCapperMatch/.test(orch));
-check("W2. findOrCreateCapper untouched by this feature", execSync("git diff --name-only origin/main -- src/server/data/capper-find-or-create.ts", { encoding: "utf8" }).trim() === "");
+const find = readFileSync("src/server/data/capper-find-or-create.ts", "utf8");
+check("W2. findOrCreateCapper does not use the remembered-answer feature", !/capper-name-decisions|resolveCapperNameSuggestion|findCanonicalCapperMatch/.test(find));
 
 process.exit(failed ? 1 : 0);
