@@ -22,6 +22,10 @@ import { ALL_PICKS_IN, legRange, legsNote, nothingToVary, NO_COMPARABLE, pickSum
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { GenerateRequest } from "@/server/actions/parlay-generate";
 
+// The result card's title, and its "N legs" chip (not "17 legs" for 7).
+const READY = "Your parlay is ready";
+const readyWith = (text: string, legs: number) => text.includes(READY) && new RegExp("(?<!\\d)" + legs + " legs").test(text);
+
 let failures = 0;
 function check(label: string, pass: boolean, detail = "") {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label}${detail ? "  " + detail : ""}`);
@@ -198,7 +202,7 @@ async function main() {
   // ---- Generate: exactly 7 legs, the summary, the collapsed unused line ----
   await generate();
   check("Generate · one request", requests.length === 1, `requests=${requests.length}`);
-  check("result · 'Your parlay · 7 legs'", text().includes("Your parlay · 7 legs"));
+  check("result · 'Your parlay is ready' · 7 legs", readyWith(text(), 7));
   check("result · '7 of your 20 picks used'", text().includes("7 of your 20 picks used") && !text().includes("generated"));
   check("result · the engine's capacity now bounds the stepper at 20", text().includes("Up to 25 · 7 of your 20 picks."));
   for (let i = 0; i < 14; i++) await click(button("More legs"));
@@ -224,7 +228,7 @@ async function main() {
     await click(regen());
     seen.add(parlayIds());
   }
-  check("Regenerate · no request, a different 7 on the taps", requests.length === 1 && seen.size > 1 && text().includes("7 of your 20 picks used") && text().includes("Your parlay · 7 legs"), `requests=${requests.length} distinct=${seen.size}`);
+  check("Regenerate · no request, a different 7 on the taps", requests.length === 1 && seen.size > 1 && text().includes("7 of your 20 picks used") && readyWith(text(), 7), `requests=${requests.length} distinct=${seen.size}`);
 
   // ---- 6 picks, 6 legs: all in; Regenerate disabled ----
   for (const p of PICKS.slice(6)) await act(() => ctx.removeFromPool(p.pickId));
@@ -233,7 +237,7 @@ async function main() {
   await settle();
   check("6 picks · Your picks only still chosen", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true", `pool=${ctx.pool.length}`);
   await generate();
-  check("6 picks, 6 legs · 'Your parlay · 6 legs', the old summary", text().includes("Your parlay · 6 legs") && text().includes("6 from your picks, 0 generated"));
+  check("6 picks, 6 legs · 'Your parlay is ready' · 6 legs, the old summary", readyWith(text(), 6) && text().includes("6 from your picks, 0 generated"));
   check("6 picks, 6 legs · no unused line", unusedButton() === undefined);
   const off = button("Regenerate: " + ALL_PICKS_IN);
   check("6 picks, 6 legs · Regenerate is disabled", Boolean(off) && off!.disabled, `label=${buttons().map((b) => b.getAttribute("aria-label")).filter((l) => l?.startsWith("Regenerate")).join()}`);
@@ -246,7 +250,7 @@ async function main() {
   await click(fillFrom("Best available"));
   await act(() => ctx.setLegCount(8));
   await generate();
-  check("Best available · 8 legs: 6 from your picks, 2 generated (unchanged text)", text().includes("Your parlay · 8 legs") && text().includes("6 from your picks, 2 generated") && !text().includes("picks used"), text().slice(-300));
+  check("Best available · 8 legs: 6 from your picks, 2 generated (unchanged text)", readyWith(text(), 8) && text().includes("6 from your picks, 2 generated") && !text().includes("picks used"), text().slice(-300));
   const regenBest = buttons().find((b) => (b.getAttribute("aria-label") ?? "").startsWith("Regenerate"));
   check("Best available · Regenerate enabled, the usual tooltip", Boolean(regenBest) && !regenBest!.disabled && regenBest!.getAttribute("title") === "Another parlay of comparable strength");
   check("Best available · no unused line", unusedButton() === undefined);

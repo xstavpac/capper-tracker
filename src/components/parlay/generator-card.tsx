@@ -14,6 +14,10 @@
 // Primary; Regenerate and every setting that doesn't change the pool run the
 // engine here on that pool (generator-session.ts) - no request. Changing the
 // pool (picks, targets, leagues) clears the result until the next Generate.
+//
+// Generate and Regenerate show the result pick by pick (use-build-reveal.ts) -
+// the engine's answer as it is, revealed in steps. Settings rebuilds and Refresh
+// show it at once, as does prefers-reduced-motion.
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { generateParlayAction } from "@/server/actions/parlay-generate";
@@ -27,6 +31,7 @@ import { FilterRow, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Se
 import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
 import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/components/parlay/hybrid-mode";
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
+import { useBuildReveal } from "@/components/parlay/use-build-reveal";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
 import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
@@ -167,7 +172,17 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
     // eslint-disable-next-line react-hooks/exhaustive-deps -- picksKey stands in for pool
   }, [picksKey]);
 
-  async function run(kind: "generate" | "regenerate" | "refresh") {
+  // The pick-by-pick build. `runs` numbers every build: an answer for one that was
+  // superseded (a newer build, Clear result, a pool change) is dropped, never shown.
+  const build = useBuildReveal();
+  const runs = useRef(0);
+  async function run(kind: "generate" | "regenerate" | "refresh", animate = false) {
+    const run = ++runs.current;
+    // A new build ends any sequence still running.
+    build.cancel();
+    // Generate starts analyzing now, while the server works; Regenerate (no request)
+    // once it has its answer, so a Regenerate that changes nothing changes nothing.
+    let seq = animate && kind === "generate" ? build.start() : null;
     setBusy(true);
     setError(null);
     try {
@@ -182,7 +197,9 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           : kind === "generate"
             ? await session.current.generate(inputs, settings)
             : await session.current.regenerate(inputs, settings, selectionMode);
+      if (run !== runs.current) return;
       if ("error" in res) {
+        build.cancel();
         setError(res.error);
         return;
       }
@@ -190,13 +207,19 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         setNoAlternative(res.parlay.noAlternativeReason ?? "NO_COMPARABLE");
         return;
       }
+      if (animate && kind === "regenerate") seq = build.start();
       setNoAlternative(null);
       setParlay(res.parlay);
       setBuiltFor(key);
+      // Zero legs: the empty state as ever, no sequence.
+      if (seq !== null && res.parlay.legs.length > 0) build.land(seq, res.parlay.legs.length);
+      else build.cancel();
     } catch {
+      if (run !== runs.current) return;
+      build.cancel();
       setError("Couldn't generate a parlay right now - try again.");
     } finally {
-      setBusy(false);
+      if (run === runs.current) setBusy(false);
     }
   }
 
@@ -210,15 +233,34 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
       setNoAlternative(null);
       return;
     }
+    // A settings rebuild: shown at once (and it ends any build still revealing).
     void run("generate");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reruns on the pool or the settings changing, nothing else
   }, [key, settingsKey]);
+
+  // A different pool also ends a build in progress, its answer included.
+  const firstKey = useRef(true);
+  useEffect(() => {
+    if (firstKey.current) {
+      firstKey.current = false;
+      return;
+    }
+    if (!build.reveal) return;
+    runs.current++;
+    build.cancel();
+    setBusy(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on a pool change only
+  }, [key]);
 
   useEffect(() => {
     onSummary?.(parlay ? { legs: parlay.legs.length, fromSlip: parlay.fromSlip, generated: parlay.generated } : null);
   }, [parlay, onSummary]);
 
   function clear() {
+    // Ends any build in progress; an answer still on its way is dropped.
+    runs.current++;
+    build.cancel();
+    setBusy(false);
     setParlay(null);
     setBuiltFor(null);
     setError(null);
@@ -467,7 +509,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         {/* Clear · Generate */}
         <div className="mt-3.5 flex flex-wrap items-center justify-end gap-3 border-t border-[#0F1420]/[0.08] pt-3.5 dark:border-white/10">
           <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" onClick={clear} disabled={!parlay && !error} className={PILL_OUTLINE}>
+            <button type="button" onClick={clear} disabled={!parlay && !error && !build.reveal} className={PILL_OUTLINE}>
               Clear result
             </button>
             {parlay && builtFor === key && (
@@ -475,7 +517,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
                 Refresh
               </button>
             )}
-            <button type="button" onClick={() => void run("generate")} disabled={busy || inputs.leagues.length === 0} className={PILL_PRIMARY}>
+            <button type="button" onClick={() => void run("generate", true)} disabled={busy || inputs.leagues.length === 0} className={PILL_PRIMARY}>
               <BoltIcon className="h-4 w-4" />
               {busy ? "Generating…" : "Generate parlay"}
             </button>
@@ -488,16 +530,21 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
         {error && <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{error}</p>}
       </PanelShell>
 
-      {parlay && builtFor === key && (
+      {(build.reveal || (parlay && builtFor === key)) && (
         <GeneratorResult
-          key={parlay.generatedKey + "|" + parlay.legs.length}
-          parlay={parlay}
+          // Keyed on the build, never on the leg count or the legs shown so far: one card
+          // from analyzing to complete. A build in progress is keyed on its sequence (its
+          // generatedKey isn't known until the answer, and two Generates can share one).
+          key={build.reveal ? "build-" + build.reveal.id : parlay!.generatedKey}
+          parlay={parlay && builtFor === key ? parlay : null}
+          reveal={build.reveal}
+          requestedLegs={legCount}
           busy={busy}
           noAlternative={noAlternative}
-          unavailableTargetLabels={parlay.unavailableTargets.map((id) => targetLabel.get(id) ?? "A targeted game")}
+          unavailableTargetLabels={(parlay?.unavailableTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
           swapScope={swapScope}
           onSwapScope={setSwapScope}
-          onRegenerate={() => void run("regenerate")}
+          onRegenerate={() => void run("regenerate", true)}
           selectionMode={selectionMode}
           onSelectionMode={setSelectionMode}
           onSent={() => {
@@ -506,7 +553,7 @@ export function GeneratorCard({ leagues, onSummary }: { leagues: string[]; onSum
           }}
         />
       )}
-      {parlay && builtFor === key && parlay.legs.length === 0 && (
+      {!build.reveal && parlay && builtFor === key && parlay.legs.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No qualified picks {targets.length > 0 ? "in the targeted games" : "in your selected leagues right now"}.
         </p>
