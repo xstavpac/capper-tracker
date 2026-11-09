@@ -120,6 +120,38 @@ check("last point equals the tile", [momentumMatchesTile(u.net, tile), momentumM
 const full = momentumEvents([pick("WIN", "2026-11-07T20:15:03", 1, 150), pick("LOSS", "2026-11-07T22:00:00", 2), pick("WIN", "2026-11-07T23:00:00", 1, -120), pick("LOSS", null, 1)]);
 check("events -> series ends on the same net as summing the picks", buildMomentum(full.events, full.unstamped, { now: NOW, isToday: true, tz: CT }).net, Math.round((1.5 - 2 + 100 / 120 - 1) * 100) / 100);
 
+// ---- past day: late grades fold into the last in-day point; the axis stays inside the day ----
+// Eastern Nov 4 2026 ends at 2026-11-05T05:00Z (EST). Viewer in Central.
+const DAY_END = at("2026-11-05T05:00:00");
+const past0 = (events: { t: number; d: number }[], unstamped = 0, dayEnd: number | undefined = DAY_END) =>
+  buildMomentum(events, unstamped, { now: at("2026-11-09T12:00:00"), isToday: false, tz: CT, dayEnd });
+const inDay = [
+  { t: at("2026-11-04T20:00:00"), d: 1 },
+  { t: at("2026-11-05T02:00:00"), d: -2 },
+];
+const noLate = past0(inDay);
+check("no late grades: xEnd = last grade (unchanged)", noLate.xEnd, at("2026-11-05T02:00:00"));
+check("no late grades: same as before the clamp existed", JSON.stringify(noLate), JSON.stringify(past0(inDay, 0, undefined)));
+check("no late grades: net", noLate.net, -1);
+
+const oneLate = past0([...inDay, { t: at("2026-11-08T03:15:00"), d: 3 }]);
+check("one late grade: xEnd stays at day end", oneLate.xEnd, DAY_END);
+check("one late grade: no extra point", oneLate.points.length, 3);
+check("one late grade: folded into last in-day point", [oneLate.points[2].t, oneLate.points[2].v, oneLate.points[2].change], [at("2026-11-05T02:00:00"), 2, 1]);
+check("one late grade: net equals the full total", oneLate.net, 2);
+check("one late grade: no tick beyond day end", oneLate.xTicks.every((k) => k.t <= DAY_END), true);
+
+const manyLate = past0([...inDay, { t: at("2026-11-06T01:00:00"), d: 1 }, { t: at("2026-11-08T03:15:00"), d: 2 }, { t: at("2026-11-09T01:00:00"), d: -0.5 }]);
+check("many late grades: xEnd at day end", manyLate.xEnd, DAY_END);
+check("many late grades: single last point carries the full total", [manyLate.points.length, manyLate.net], [3, 1.5]);
+
+const allLate = past0([{ t: at("2026-11-08T03:15:00"), d: 2 }]);
+check("only late grades: one point, inside the day, net kept", [allLate.points.length, allLate.net, allLate.points[1].t < DAY_END, allLate.xEnd], [2, 2, true, DAY_END]);
+const lateNight = past0([{ t: at("2026-11-05T04:30:00"), d: 1 }]);
+check("grade at 11:30 PM CT: axis never exceeds day end, keeps 2h span", [lateNight.xEnd <= DAY_END, lateNight.xEnd - lateNight.xStart >= 2 * 3600000], [true, true]);
+const todayEv = buildMomentum([{ t: at("2026-11-08T03:15:00"), d: 1 }], 0, { now: at("2026-11-08T06:00:00"), isToday: true, tz: CT, dayEnd: at("2026-11-08T05:00:00") });
+check("today ignores dayEnd: xEnd = max(last, now)", todayEv.xEnd, at("2026-11-08T06:00:00"));
+
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);
   process.exit(1);

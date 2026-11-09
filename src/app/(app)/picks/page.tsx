@@ -15,7 +15,7 @@ import { getParlaysForUser } from "@/server/data/parlays";
 import { LegStatusButtons } from "@/components/dashboard/leg-status-buttons";
 import { RowDeleteButton } from "@/components/dashboard/row-delete-button";
 import { deleteParlayAction } from "@/server/actions/parlays";
-import { formatEastern, easternDefaultDayKey, easternDayStart } from "@/lib/dates";
+import { formatEastern, easternDefaultDayKey, easternDayStart, easternDateRange } from "@/lib/dates";
 import { chipSetForLeague, type PickCategoryKey } from "@/server/data/stats";
 import { PicksFilterBar } from "@/components/picks/picks-filter-bar";
 import { PickLedger, type LedgerSectionSummary } from "@/components/picks/pick-ledger";
@@ -321,7 +321,7 @@ export default async function PicksPage({
 
           {/* One day only: a range has no single "today" to chart. Same rows and filters as the Net Units tile. */}
           {!isRange && (
-            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} />
+            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} dayEnd={easternDateRange(startDateKey, startDateKey).end.getTime()} />
           )}
 
           <AtAGlance label={dateChipLabel + " at a glance"} columns={backed ? 3 : 2}>
