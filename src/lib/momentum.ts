@@ -193,11 +193,12 @@ export function buildMomentum(
       last.d += e.d;
     } else buckets.push({ t: e.t, d: e.d });
   }
-  const extra = late + unstamped;
-  if (extra !== 0) {
-    if (buckets.length > 0) buckets[buckets.length - 1].d += extra;
-    else buckets.push({ t: dayEnd != null ? dayEnd - MIN : now, d: extra });
-  }
+  // Unstamped rows fold into the last real point. Late grades get their own final point at the day's
+  // end (the last real grade keeps its real time and tooltip); with no real in-day point it is the only one.
+  if (unstamped !== 0 && buckets.length > 0) buckets[buckets.length - 1].d += unstamped;
+  else late += unstamped;
+  if (dayEnd != null && lateCount > 0) buckets.push({ t: dayEnd, d: late });
+  else if (late !== 0) buckets.push({ t: dayEnd != null ? dayEnd - MIN : now, d: late });
   const empty = buckets.length === 0;
 
   let xStart = empty ? floorToHour(now, tz) - 6 * H : floorToHour(buckets[0].t, tz);
@@ -205,13 +206,10 @@ export function buildMomentum(
   if (dayEnd != null && !empty) xStart = Math.min(xStart, floorToHour(dayEnd - MIN_SPAN_MS, tz));
   const points: MomentumPoint[] = [{ t: xStart, v: 0, change: 0, prevT: null }];
   let run = 0;
-  for (let i = 0; i < buckets.length; i++) {
-    const b = buckets[i];
+  for (const b of buckets) {
     const prev = points[points.length - 1];
     run += b.d;
-    // With late grades folded in, the final point sits at the day's end so the line reaches the axis end.
-    const t = lateCount > 0 && dayEnd != null && i === buckets.length - 1 ? dayEnd : b.t;
-    points.push({ t: Math.max(t, prev.t), v: round2(run), change: round2(b.d), prevT: prev.t });
+    points.push({ t: Math.max(b.t, prev.t), v: round2(run), change: round2(b.d), prevT: prev.t });
   }
   const lastPoint = points[points.length - 1];
   const rawEnd = empty ? now : isToday ? Math.max(lastPoint.t, now) : lastPoint.t;
