@@ -1324,6 +1324,7 @@ type PlayerPropPick = {
   betDetail: string | null;
   homeTeam: string;
   awayTeam: string;
+  period?: string | null;
 };
 
 // Which of the 5 markets (TD, or one of the 4 new structured ones) a

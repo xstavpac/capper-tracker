@@ -22,7 +22,7 @@
 // SAVES a goalie absent from the box score pushes; a goalie who appears
 // (including one pulled mid-game) grades on his actual SV.
 import { isLikelyDuplicateName, normalizeName } from "@/lib/fuzzy-match";
-import { parsePlayerPropLine } from "@/lib/bet-line";
+import { betScope, parsePlayerPropLine, periodLabel } from "@/lib/bet-line";
 import { stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { isNhlPropMarket, nhlAnytimeGoalSide, normalizeNhlNPlus, parseNhlPlayerProp, type NhlPropMarket } from "@/lib/nhl-prop";
 import { fetchNhlBoxScore, type NhlBoxScore } from "@/server/data/nhl-boxscore";
@@ -34,6 +34,8 @@ export type NhlPropPick = {
   betDetail: string | null;
   homeTeam: string;
   awayTeam: string;
+  // The stored Period. Optional: no period reads as FULL_GAME.
+  period?: string | null;
 };
 
 export type NhlPropResolution = { outcome: "WIN" | "LOSS" | "PUSH" } | { outcome: null; reason: string };
@@ -87,6 +89,14 @@ function matchByName<T>(
 const lastWord = (full: string) => full.trim().split(/\s+/).pop() ?? full;
 
 export async function gradeNhlPlayerProp(pick: NhlPropPick, eventId: string, deps: NhlPropDeps = {}): Promise<NhlPropResolution> {
+  // This grader reads the full-game box score only. A prop for one period (stored period, or a
+  // legacy row stored FULL_GAME whose text names the period) must never grade off those totals:
+  // there are no per-period player stats, so it stays PENDING for manual grading.
+  const segment = pick.period && pick.period !== "FULL_GAME" ? pick.period : betScope(pick.betDetail, "NHL");
+  if (segment !== "FULL_GAME") {
+    return { outcome: null, reason: "period player stats unavailable (" + periodLabel(segment) + " prop) - needs manual grading" };
+  }
+
   const parsed = pick.betDetail ? parseNhlPlayerProp(pick.betDetail) : null;
   const market: NhlPropMarket | null = isNhlPropMarket(pick.propMarket) ? pick.propMarket : (parsed?.propMarket ?? null);
   if (!market) {

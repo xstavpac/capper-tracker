@@ -1,3 +1,4 @@
+import { PERIOD_TOKEN_RE } from "@/lib/period-token";
 import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 // NBA player-prop text parsing - the NBA twin of nhl-prop.ts, kept in its own
@@ -235,6 +236,7 @@ export function parseNbaProp(text: string, opts: { abbreviations?: boolean } = {
     .replace(DOUBLE_DOUBLE_NO_RE, " ")
     .replace(hit.strip, " ")
     .replace(SCOPED_RE, " ")
+    .replace(PERIOD_TOKEN_RE, " ")
     .replace(/\b(?:to\s+)?(?:record|get|have|post|notch)\s+an?\b/gi, " ")
     .replace(/\b(?:nba|made|total|anytime|any\s*time)\b/gi, " ")
     // A stake written without parentheses ("... -115 2u", "1.5 units").

@@ -1,3 +1,4 @@
+import { PERIOD_TOKEN_RE } from "@/lib/period-token";
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
 import { parseNbaPlayerProp, type NbaPropMarket } from "@/lib/nba-prop";
@@ -516,6 +517,7 @@ export function parseTouchdownProp(
 
   const playerName = text
     .replace(/\([^)]*\)/g, " ")
+    .replace(PERIOD_TOKEN_RE, " ")
     .replace(/\bany\s*time\b/gi, " ")
     .replace(/\batd\b/gi, " ")
     .replace(/\bor\s+more\b/gi, " ")
@@ -746,6 +748,7 @@ export function parsePlayerProp(rawText: string): { playerName: string; propMark
 
   const playerName = text
     .replace(/\([^)]*\)/g, " ")
+    .replace(PERIOD_TOKEN_RE, " ")
     .replace(statPattern, " ")
     .replace(/\b(over|under)\b/gi, " ")
     // The "o"/"u" shorthand for over/under ("Mike Evans o56.5", "...o 56.5")
