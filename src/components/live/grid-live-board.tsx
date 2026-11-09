@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
-import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
+import { orderBoardGames, matchScoreToGame, hiddenLaterGameCount } from "@/components/live/live-scoreboard-ordering";
+import { useLiveListScope } from "@/components/live/live-list-scope";
+import { needsExpandToShow } from "@/lib/live-list-scope";
 import { easternDateKey } from "@/lib/dates";
 import { useSharedLiveScores } from "@/components/live/use-live-scores";
 import { resolveGridLiveSelection, type GridLiveSelection } from "@/lib/grid-live-selection";
@@ -142,8 +144,16 @@ export function GridLiveBoard({
       })),
     [odds, scores, activeSport]
   );
+  // The list shows today's and live games until "See more" is on (live-list-scope.tsx); the
+  // category panel and Feed read the same toggle. Only what is DISPLAYED narrows - odds and
+  // matchedPicksByGame above still cover the whole lookahead window.
+  const { showAll, setShowAll } = useLiveListScope();
   const sortedGames = useMemo(
-    () => orderBoardGames(gamesWithScores, easternDateKey(new Date())),
+    () => orderBoardGames(gamesWithScores, easternDateKey(new Date()), new Date(), { todayOnly: !showAll }),
+    [gamesWithScores, showAll]
+  );
+  const hiddenCount = useMemo(
+    () => hiddenLaterGameCount(gamesWithScores, easternDateKey(new Date())),
     [gamesWithScores]
   );
   const sortedGameIds = useMemo(() => sortedGames.map(({ game }) => game.id), [sortedGames]);
@@ -172,6 +182,9 @@ export function GridLiveBoard({
   // keeps this from also fighting the "don't jump the page" fix with its own
   // scroll reset.
   function handleSelectGame(gameId: string) {
+    // A game the collapsed list hides (a jump from elsewhere, a link) opens the list first, in
+    // the same render as the selection, so the poll-tick check below finds it on the board.
+    if (!showAll && needsExpandToShow(gamesWithScores, easternDateKey(new Date()), gameId)) setShowAll(true);
     setSelection({ gameId });
     router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId, { scroll: false });
     setScrollTrigger((t) => t + 1);
@@ -213,6 +226,7 @@ export function GridLiveBoard({
     <div className="grid grid-cols-1 items-start gap-3.5 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] min-[1500px]:grid-cols-[minmax(0,380px)_minmax(0,1fr)] min-[1700px]:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
       <GridLiveGameList
         sortedGames={sortedGames}
+        hiddenCount={hiddenCount}
         matchedPicksByGame={matchedPicksByGame}
         activeSport={activeSport}
         selectedGameId={selection.gameId}

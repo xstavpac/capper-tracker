@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { OddsGame, ScoreGame } from "@/server/data/odds";
+import { SeeMoreGamesButton, useLiveListScope } from "@/components/live/live-list-scope";
+import { needsExpandToShow } from "@/lib/live-list-scope";
 import { computeBoardPulse, type BoardPulseGame } from "@/lib/board-pulse";
 import { easternDateKey } from "@/lib/dates";
 import { LocalGameTime } from "@/components/local-game-time";
-import { orderBoardGames, matchScoreToGame, teamScore } from "@/components/live/live-scoreboard-ordering";
+import { orderBoardGames, hiddenLaterGameCount, matchScoreToGame, teamScore } from "@/components/live/live-scoreboard-ordering";
 import { getTeamColor } from "@/lib/team-colors";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
@@ -57,7 +60,10 @@ export function LiveScoreboard({
   heavyRate: HeavyConsensusRate | null;
 }) {
   const scores = useSharedLiveScores();
-  useRegisterLiveGameJump(scrollToGameCard);
+  const { showAll, setShowAll } = useLiveListScope();
+  // A category-panel jump to a game the collapsed list hides: open the list, then scroll once
+  // the card exists (the effect below runs after that render commits).
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
 
   // Recomputed on every render (not memoized) since `scores` is client state
   // that changes on each poll tick - a game that goes live or finishes must
@@ -70,7 +76,26 @@ export function LiveScoreboard({
     gameIndex,
     score: matchScoreToGame(scores, game, activeSport),
   }));
-  const sortedGames = orderBoardGames(gamesWithScores, easternDateKey(new Date()));
+  // Today's and live games until "See more" is on - the same toggle Grid and the category panel
+  // read (live-list-scope.tsx). Only the DISPLAY narrows; `odds` and the matched picks still
+  // cover the whole lookahead window.
+  const todayKey = easternDateKey(new Date());
+  const sortedGames = orderBoardGames(gamesWithScores, todayKey, new Date(), { todayOnly: !showAll });
+  const hiddenCount = hiddenLaterGameCount(gamesWithScores, todayKey);
+
+  useRegisterLiveGameJump((gameId) => {
+    if (!showAll && needsExpandToShow(gamesWithScores, todayKey, gameId)) {
+      setShowAll(true);
+      setPendingJump(gameId);
+      return;
+    }
+    scrollToGameCard(gameId);
+  });
+  useEffect(() => {
+    if (pendingJump === null || !showAll) return;
+    scrollToGameCard(pendingJump);
+    setPendingJump(null);
+  }, [pendingJump, showAll]);
 
   // Built from the FIXED today-scoped slate (boardPulseOdds), NOT sortedGames -
   // orderBoardGames drops finished games from the board, and feeding that
@@ -201,6 +226,7 @@ export function LiveScoreboard({
             </div>
           );
         })}
+        <SeeMoreGamesButton hiddenCount={hiddenCount} />
       </div>
     </div>
   );

@@ -7,8 +7,9 @@ import { getHeavyConsensusRate } from "@/server/data/heavy-consensus";
 import { getDefaultLiveSport } from "@/server/data/live-default-sport";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
-import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
 import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
+import { resolveInitialScope } from "@/lib/live-list-scope";
+import { LiveListScopeProvider } from "@/components/live/live-list-scope";
 import { LiveCategoryPanel } from "@/components/live/live-category-panel";
 import { easternDateKey } from "@/lib/dates";
 import { ThemedPage } from "@/components/dashboard/themed-page";
@@ -119,15 +120,14 @@ export default async function LivePage({
   // stale after this initial render (e.g. the selected game finishing) -
   // see that component for why it can't be resolved once, here, and left
   // alone.
-  const initialSelection = isGrid
-    ? resolveGridLiveSelection(
-        orderBoardGames(
-          odds.map((game) => ({ game, score: matchScoreToGame(scores, game, activeSport) })),
-          todayKey
-        ).map(({ game }) => game.id),
-        searchParams.gameId ?? null
-      )
-    : null;
+  // The list opens on today's and live games (orderBoardGames' todayOnly scope); a ?gameId= for a
+  // later-day game opens it expanded, so the link still lands on that game.
+  const initialScope = resolveInitialScope(
+    odds.map((game) => ({ game, score: matchScoreToGame(scores, game, activeSport) })),
+    todayKey,
+    searchParams.gameId ?? null
+  );
+  const initialSelection = isGrid ? resolveGridLiveSelection(initialScope.gameIds, searchParams.gameId ?? null) : null;
 
   // The one score poll on the page is mounted exactly when a board is, as
   // before - the category panel reads it through the provider and counts
@@ -163,6 +163,7 @@ export default async function LivePage({
         <LiveScoresProvider key={activeSport} activeSport={activeSport} initialScores={scores}>
           {/* A category-panel row sends the viewer to its game on whichever board is mounted. */}
           <LiveGameJumpProvider>
+          <LiveListScopeProvider key={activeSport} sportKey={activeSport} initialShowAll={initialScope.showAll}>
           {categoryPanel}
           {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard keeps its own
               max-w-5xl wrapper below. */}
@@ -193,6 +194,7 @@ export default async function LivePage({
               />
             </div>
           )}
+          </LiveListScopeProvider>
           </LiveGameJumpProvider>
         </LiveScoresProvider>
       ) : (

@@ -45,10 +45,13 @@ export function visibleGameIndexes(
   games: LiveCategoryGame[],
   scores: ScoreGame[],
   todayKey: string,
-  sportKey?: string
+  sportKey?: string,
+  // The boards' display scope (live-list-scope.tsx): true = today's and live games only, the
+  // default; false = the whole lookahead window once "See more" is on. A tile's count follows it.
+  todayOnly: boolean = false
 ): Set<number> {
   const withScores = games.map((game, gameIndex) => ({ game, gameIndex, score: matchScoreToGame(scores, game, sportKey) }));
-  return new Set(orderBoardGames(withScores, todayKey).map((g) => g.gameIndex));
+  return new Set(orderBoardGames(withScores, todayKey, new Date(), { todayOnly }).map((g) => g.gameIndex));
 }
 
 // A tile's pool: every pick on a visible card except CANCELLED ones, grouped by

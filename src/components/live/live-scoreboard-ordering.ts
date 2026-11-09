@@ -123,18 +123,44 @@ export function slateCutoffKey(
   return addDaysToDateKey(anchorKey ?? todayKey, lookaheadDays);
 }
 
+// The default display scope (BoardScopeOptions below): games that are live, or dated today or
+// earlier in Eastern time (a still-live carry-over from last night counts as "earlier"). Applied
+// to the already-windowed, Final-free list, so it only ever narrows what orderBoardGames shows.
+function isTodayOrLive<T extends OrderableGame>({ game, score }: T, todayKey: string): boolean {
+  return score?.status === "live" || easternDateKey(new Date(game.commenceTime)) <= todayKey;
+}
+
+// `todayOnly` is the Live tab's default display scope: today's and live games, with the rest of
+// the lookahead window behind a "See more" toggle (live-list-scope.tsx). It is a DISPLAY filter
+// only - the server still loads, and matches picks against, the whole window. If nothing is left
+// in that scope AFTER Finals are removed (a Tuesday with the next game Thursday, or today's last
+// game just ended) the whole window shows instead of an empty board. Omitted/false = the full
+// window, exactly as before.
+export type BoardScopeOptions = { todayOnly?: boolean };
+
+// How many games the default scope is hiding behind "See more": 0 when the scope shows the whole
+// window anyway (nothing hidden, or the empty-scope fallback above).
+export function hiddenLaterGameCount<T extends OrderableGame>(games: T[], todayKey: string, now: Date = new Date()): number {
+  return orderBoardGames(games, todayKey, now).length - orderBoardGames(games, todayKey, now, { todayOnly: true }).length;
+}
+
 // `todayKey` is passed in (not read from the clock here) so the caller
 // controls it - the component passes easternDateKey(new Date()) fresh on
 // every render, tests pass a fixed day. `now` is only read for the unmatched
 // carry-over bound (rule 1); tests pass a fixed instant.
-export function orderBoardGames<T extends OrderableGame>(games: T[], todayKey: string, now: Date = new Date()): T[] {
+export function orderBoardGames<T extends OrderableGame>(
+  games: T[],
+  todayKey: string,
+  now: Date = new Date(),
+  scope: BoardScopeOptions = {}
+): T[] {
   const cutoffKey = slateCutoffKey(
     games.map(({ game }) => game.commenceTime),
     todayKey
   );
   const unmatchedCarryoverMs = UNMATCHED_CARRYOVER_VISIBLE_HOURS * 60 * 60 * 1000;
 
-  const visible = games.filter(({ game, score }) => {
+  const windowed = games.filter(({ game, score }) => {
     if (score?.status === "final") return false; // finished - off the board entirely; the score ticker still carries the final
     const start = new Date(game.commenceTime);
     const key = easternDateKey(start);
@@ -143,6 +169,8 @@ export function orderBoardGames<T extends OrderableGame>(games: T[], todayKey: s
     if (score?.status === "live") return true; // a still-live carry-over - stays until its score says Final
     return now.getTime() - start.getTime() < unmatchedCarryoverMs; // a carry-over with no live score to go on
   });
+  const scoped = scope.todayOnly ? windowed.filter((g) => isTodayOrLive(g, todayKey)) : windowed;
+  const visible = scoped.length > 0 ? scoped : windowed;
 
   return [...visible].sort((a, b) => {
     const rankDiff = statusRank(a.score?.status) - statusRank(b.score?.status);

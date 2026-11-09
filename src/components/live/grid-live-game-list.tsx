@@ -9,6 +9,7 @@ import { LiveProgressBar, LiveProgressLabel } from "@/components/live/live-progr
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { CalendarIcon } from "@/components/dashboard/cappers-icons";
 import { unplayedLabel } from "@/lib/feed-game-status";
+import { SeeMoreGamesButton } from "@/components/live/live-list-scope";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -27,6 +28,7 @@ import { unplayedLabel } from "@/lib/feed-game-status";
 // (see grid-live-board.tsx) so it stays bookmarkable/shareable.
 export function GridLiveGameList({
   sortedGames,
+  hiddenCount,
   matchedPicksByGame,
   activeSport,
   selectedGameId,
@@ -34,6 +36,8 @@ export function GridLiveGameList({
   onOpenGame,
 }: {
   sortedGames: { game: OddsGame; gameIndex: number; score: ScoreGame | undefined }[];
+  // Games the default today-and-live scope hides (the "See more" button's count; 0 = no button).
+  hiddenCount: number;
   matchedPicksByGame: ExpanderPick[][];
   activeSport: string;
   selectedGameId: string | null;
@@ -148,6 +152,7 @@ export function GridLiveGameList({
           </button>
         );
       })}
+      <SeeMoreGamesButton hiddenCount={hiddenCount} />
       </div>
     </section>
   );
