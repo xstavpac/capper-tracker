@@ -461,9 +461,9 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
-    "name": "/picks date range, 18 columns (getFilteredPicksForUser, #301)",
+    "name": "/picks date range, 19 columns (getFilteredPicksForUser, #301 + playerName)",
     "run": "aacbcd6",
-    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" >= $2 AND \"public\".\"picks\".\"gameTime\" < $3) ORDER BY \"public\".\"picks\".\"gameTime\" DESC OFFSET $4",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"playerName\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" >= $2 AND \"public\".\"picks\".\"gameTime\" < $3) ORDER BY \"public\".\"picks\".\"gameTime\" DESC OFFSET $4",
     "expectLabel": "/picks",
     "expectFlags": []
   },
