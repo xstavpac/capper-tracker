@@ -25,7 +25,11 @@ const formatLine = (line: number, side: FanDuelSentLine["side"]) => (side ? side
 
 const isSent = (leg: FanDuelLegResult) => leg.status === "matched" || leg.status === "adjusted";
 
-function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string }) {
+// The Worse line chip, its "harder to win" suffix and the banner are for a link carrying two or more legs. They
+// count the legs actually sent, not the slip's: a 2-leg slip that sends one is a one-leg bet and gets none.
+export const warnsWorseLine = (sentCount: number) => sentCount > 1;
+
+export function LegLine({ leg, betDetail, warnWorse = true }: { leg: FanDuelLegResult; betDetail: string; warnWorse?: boolean }) {
   if (leg.status === "matched" || leg.status === "adjusted") {
     const moved = leg.fanDuelOdds !== null && leg.pickOdds !== null && leg.fanDuelOdds !== leg.pickOdds;
     const line = leg.sentLine;
@@ -35,13 +39,13 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
           <p className="text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{betDetail}</p>
           {line && (
             <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-              {line.worse && (
+              {line.worse && warnWorse && (
                 <span className="mr-1.5 whitespace-nowrap rounded-full bg-red-100 px-1.5 py-0.5 font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
                   Worse line
                 </span>
               )}
               <span className="font-semibold">Sent as {formatLine(line.fanDuel, line.side)}</span> · pick {formatLine(line.pick, line.side)}
-              {line.worse && <span className="text-red-700 dark:text-red-300"> · harder to win than your pick</span>}
+              {line.worse && warnWorse && <span className="text-red-700 dark:text-red-300"> · harder to win than your pick</span>}
             </p>
           )}
           {leg.warning && <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">{leg.warning}</p>}
@@ -103,7 +107,8 @@ export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { le
   const betDetailById = new Map(legs.map((l) => [l.pickId, l.betDetail]));
   const sent = result?.legs.filter(isSent) ?? [];
   const notSent = result?.legs.filter((l) => !isSent(l)) ?? [];
-  const worseLines = sent.filter((l) => l.sentLine?.worse).length;
+  const warnWorse = warnsWorseLine(sent.length);
+  const worseLines = warnWorse ? sent.filter((l) => l.sentLine?.worse).length : 0;
   const brokenGroups = result ? incompleteSameGameGroups(legs, new Set(sent.map((l) => l.pickId))) : [];
 
   return (
@@ -122,7 +127,7 @@ export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { le
               </p>
               <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
                 {sent.map((leg) => (
-                  <LegLine key={leg.pickId} leg={leg} betDetail={betDetailById.get(leg.pickId) ?? ""} />
+                  <LegLine key={leg.pickId} leg={leg} betDetail={betDetailById.get(leg.pickId) ?? ""} warnWorse={warnWorse} />
                 ))}
               </ul>
             </>
