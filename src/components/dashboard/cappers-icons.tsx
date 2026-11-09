@@ -143,6 +143,14 @@ export const PlusIcon = ({ className }: P) => (
   </svg>
 );
 
+// Two overlapping sheets: "unique" (de-duplicated) picks.
+export const CopyIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M4 16V6a2 2 0 0 1 2 -2h10" />
+  </svg>
+);
+
 export const ClipboardIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>
     <rect x="5" y="4" width="14" height="17" rx="2" />
