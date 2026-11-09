@@ -508,14 +508,12 @@ async function realResponses() {
     { pick: 6, fanDuel: 6.5, side: "Under", worse: false },
     null,
   ]);
-  check("hockey total cap is 0.5: 1.5 away (13 -> 11.5) is Line unavailable, not sent", wings.legs["Over 13"], ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Over 11.5, more than 0.5 away from your pick."]);
-  check("hockey total cap is 0.5: 2.0 away (13.5 -> 11.5) is Line unavailable", wings.legs["Over 13.5"], [
-    "line_unavailable",
-    null,
-    null,
-    "Line unavailable — FanDuel's closest line is Over 11.5, more than 0.5 away from your pick.",
-  ]);
-  check("Over 1 can only go at Over 2.5 (-6000): 1.5 away, past the hockey cap - Line unavailable, never sent as a worse line", wings.legs["Over 1"], ["line_unavailable", null, null, "Line unavailable — FanDuel's closest line is Over 2.5, more than 0.5 away from your pick."]);
+  // PR C: full-game NHL totals of 13, 13.5 and 1 are no NHL line at all (ambiguous-line-plausibility: 4.5-8.5), so the
+  // final check stops them before the ladder: never sent, never as a worse line. (The 0.5 hockey cap itself is proven
+  // on a real line in fanduel-generator-guards-acceptance-test.ts: 6 -> 7.5.)
+  check("Over 13: not an NHL full-game line - Needs clarification, not sent", wings.legs["Over 13"], ["needs_clarification", null, null, "Needs clarification — a total of 13 isn't a real NHL line, so this pick may be stored on the wrong game. Fix the pick and send again."]);
+  check("Over 13.5: the same", wings.legs["Over 13.5"], ["needs_clarification", null, null, "Needs clarification — a total of 13.5 isn't a real NHL line, so this pick may be stored on the wrong game. Fix the pick and send again."]);
+  check("Over 1 (the ladder's only nearby price is Over 2.5 at -6000): Needs clarification, never sent as a worse line", wings.legs["Over 1"], ["needs_clarification", null, null, "Needs clarification — a total of 1 isn't a real NHL line, so this pick may be stored on the wrong game. Fix the pick and send again."]);
   check("first-period total: the totals_p1 market", wings.legs["Devils Red Wings Over 1.5 First Period"], ["matched", -122, null, null]);
   check(
     "no opposite side: FanDuel has Red Wings 2.5 only as an Over - the Under looks only at UNDER lines (nearest 3.5, 1.0 away, past the hockey cap), never at Over 2.5",
@@ -893,7 +891,7 @@ function noEmptyReasons() {
     notSent.filter((l) => !filled(l.reason) || !filled(notSentDisplay(l).label) || notSentDisplay(l).reason !== l.reason),
     []
   );
-  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "line_unavailable", "market_unavailable", "not_found", "over", "unsupported"]);
+  check("every not-sent status is among them (ambiguous: the doubleheader leg)", Array.from(new Set(notSent.map((l) => l.status))).sort(), ["ambiguous", "error", "line_unavailable", "market_unavailable", "needs_clarification", "not_found", "over", "unsupported"]);
   check("no leg in any scenario is told to add itself on FanDuel", ALL_RESULTS.filter((l) => /add (it )?on FanDuel/i.test(l.reason ?? "")), []);
 
   // What the page shows, whatever comes back: each status this build knows, and
