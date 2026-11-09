@@ -53,7 +53,11 @@ export async function buildReviewDrafts(questions: CatalogQuestion[]): Promise<R
             ]
           : [{ id: "", name: q.pick.capperName, label: "" }];
         for (const c of cappers) {
-          const r = await resolve(toItem(picked, c.name));
+          // An answer the line's "1P"/"2P"/"3P" can't belong to has no pick to store: the choice
+          // shows why, and answering it inserts nothing (resolveReviewItem's no-pick path).
+          const r: PickRowResolution = picked.unresolvedReason
+            ? { ok: false, reason: picked.unresolvedReason }
+            : await resolve(toItem(picked, c.name));
           choices.push(
             choiceFrom(
               {

@@ -323,8 +323,9 @@ const BET_SCOPE_RULES: [RegExp, BetScope][] = [
   [/\b4q\b/, "FOURTH_QUARTER"],
   // ---- Hockey periods (NHL) ----
   // Spelled forms only for the "Nth period" phrasing; "P1/P2/P3" solid is
-  // safe, but the reverse "1P/2P/3P" is deliberately NOT matched - "3P" is
-  // an NBA three-pointers prop.
+  // safe, but the reverse "1P/2P/3P" is deliberately NOT matched here - "3P"
+  // is an NBA three-pointers prop. betScope reads it only for an NHL pick
+  // (NHL_PERIOD_SHORTHAND_RULES below).
   [/\b(1st|first)[\s.-]*period\b/, "FIRST_PERIOD"],
   [/\b(2nd|second)[\s.-]*period\b/, "SECOND_PERIOD"],
   [/\b(3rd|third)[\s.-]*period\b/, "THIRD_PERIOD"],
@@ -360,10 +361,31 @@ const BET_SCOPE_RULES: [RegExp, BetScope][] = [
   ],
 ];
 
-export function betScope(betDetail: string | null): BetScope {
+// The bare "1P"/"2P"/"3P" hockey shorthand. Only read when the caller says the
+// pick is NHL: elsewhere "3P" is a basketball three-pointers prop. Checked
+// after every rule above, so a text the sport-blind rules already scope keeps
+// that scope.
+const NHL_PERIOD_SHORTHAND_RULES: [RegExp, BetScope][] = [
+  [/\b1p\b/, "FIRST_PERIOD"],
+  [/\b2p\b/, "SECOND_PERIOD"],
+  [/\b3p\b/, "THIRD_PERIOD"],
+];
+
+// The bare 1P/2P/3P shorthand anywhere in the text, whatever the sport.
+export const PERIOD_SHORTHAND_RE = /\b[1-3]p\b/i;
+
+// `sport` is the pick's sport name ("NHL", "NBA", ...) when the caller knows
+// it. Only an explicit "NHL" changes anything (it adds the 1P/2P/3P shorthand);
+// every other sport, and no sport at all, reads exactly the rules above.
+export function betScope(betDetail: string | null, sport?: string | null): BetScope {
   const t = (betDetail ?? "").toLowerCase();
   for (const [re, scope] of BET_SCOPE_RULES) {
     if (re.test(t)) return scope;
+  }
+  if (sport === "NHL") {
+    for (const [re, scope] of NHL_PERIOD_SHORTHAND_RULES) {
+      if (re.test(t)) return scope;
+    }
   }
   return "FULL_GAME";
 }
@@ -371,10 +393,12 @@ export function betScope(betDetail: string | null): BetScope {
 // The scope token exactly as the capper wrote it ("1H", "1st Half", "Q3"), or
 // null for a full-game text. Lets a caller that is about to discard part of a
 // pick's text (parsePickText's parentheticals) carry the token over, so the
-// stored betDetail still names the segment betScope reads it back from.
-export function betScopeToken(text: string): string | null {
+// stored betDetail still names the segment betScope reads it back from. Same
+// `sport` rule as betScope: "1P" is a token only for an NHL pick.
+export function betScopeToken(text: string, sport?: string | null): string | null {
   const t = text.toLowerCase();
-  for (const [re] of BET_SCOPE_RULES) {
+  const rules = sport === "NHL" ? [...BET_SCOPE_RULES, ...NHL_PERIOD_SHORTHAND_RULES] : BET_SCOPE_RULES;
+  for (const [re] of rules) {
     const m = re.exec(t);
     if (m) return text.slice(m.index, m.index + m[0].length);
   }
@@ -385,8 +409,8 @@ export function betScopeToken(text: string): string | null {
 // betScope, but with the ungradeable UNSUPPORTED_SEGMENT collapsed to
 // FULL_GAME (there's no Period value for it, and grading re-derives the real
 // scope from the text anyway and declines it there).
-export function pickPeriodFromText(betDetail: string | null): SegmentPeriod {
-  const scope = betScope(betDetail);
+export function pickPeriodFromText(betDetail: string | null, sport?: string | null): SegmentPeriod {
+  const scope = betScope(betDetail, sport);
   return scope === "UNSUPPORTED_SEGMENT" ? "FULL_GAME" : scope;
 }
 

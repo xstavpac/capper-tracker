@@ -17,6 +17,7 @@ import {
   normalizeNPlusPlayerProp,
   parsePlayerPropLine,
   type SegmentPeriod,
+  PERIOD_SHORTHAND_RE,
 } from "@/lib/bet-line";
 import { isKnownFullPlayerName, withRosterName } from "@/lib/player-roster-fallback";
 import { findFeedTeamHits, findSharedMascotTeams, type FeedTeam } from "@/lib/feed-teams";
@@ -98,6 +99,12 @@ export type ParsedPick = {
   // guess. See resolveGameAndOdds (bulk-picks.ts) and pickBestScheduleCandidate
   // (server/data/odds.ts) for how this is actually used to resolve a game.
   gameNumber: 1 | 2 | null;
+  // Set by resolveAmbiguousPick when the chosen answer leaves the pick's text
+  // unreadable: a bare "1P"/"2P"/"3P" is a hockey period only in the NHL, so a
+  // line with one that resolves to any other sport can't be stored as a
+  // full-game bet. A pick carrying this goes to the unresolved list (with this
+  // as its reason), never to the import. Absent otherwise.
+  unresolvedReason?: string;
 };
 
 // One leg of a parsed MLP (moneyline-parlay) line - same shape as the
@@ -165,7 +172,7 @@ function splitMlpLegs(text: string): { legs: [string, string]; explicitUnits: nu
 // findTeamNicknames for a normal single pick - never a looser/parallel parse
 // for a leg.
 function parseMlpLeg(fragment: string, sportName: string): { leg: ParsedParlayLeg; units: number } {
-  const parsed = parsePickText(fragment);
+  const parsed = parsePickText(fragment, sportName);
   return {
     leg: {
       sportName,
@@ -2169,7 +2176,10 @@ function isTeamNameParenthetical(text: string, start: number, end: number): bool
   });
 }
 
-export function parsePickText(description: string): {
+// `sport`: the pick's sport name when the caller already knows it. Passed to
+// bet-line's betScope, which reads the bare "1P"/"2P"/"3P" shorthand as a
+// hockey period only for "NHL"; any other sport, or none, reads what it always did.
+export function parsePickText(description: string, sport?: string): {
   betType: ParsedPick["betType"];
   odds: number | null;
   units: number;
@@ -2240,7 +2250,7 @@ export function parsePickText(description: string): {
   let parenThreeWayToken: string | null = null;
   let cleanDescription = description.replace(/\([^)]*\)/g, (paren, offset: number) => {
     if (isTeamNameParenthetical(description, offset, offset + paren.length)) return paren;
-    parenScopeToken ??= betScopeToken(paren.slice(1, -1));
+    parenScopeToken ??= betScopeToken(paren.slice(1, -1), sport);
     parenThreeWayToken ??= threeWayToken(paren.slice(1, -1));
     return "";
   });
@@ -2268,7 +2278,7 @@ export function parsePickText(description: string): {
   // the stored text still names it: grading and resolveAmbiguousPick both
   // re-read the period from this text. After the price check above, which
   // needs the price to be the last thing in the text.
-  if (parenScopeToken && betScope(cleanDescription) === "FULL_GAME") {
+  if (parenScopeToken && betScope(cleanDescription, sport) === "FULL_GAME") {
     cleanDescription = cleanDescription + " " + parenScopeToken;
   }
   if (parenThreeWayToken && !threeWayWording(cleanDescription)) {
@@ -2281,7 +2291,7 @@ export function parsePickText(description: string): {
   // "P2" means. A segment the grader has no score source for at all (a lone
   // inning outside MLB's F5 path) collapses to FULL_GAME here and is declined
   // later in grading, not graded against the full-game score.
-  const period = pickPeriodFromText(cleanDescription);
+  const period = pickPeriodFromText(cleanDescription, sport);
 
   // Bare team name with no qualifier (e.g. "Tampa Bay Rays") defaults to
   // MONEYLINE, not SPREAD - a straight team-name pick is the standard
@@ -2368,19 +2378,25 @@ function lineForPlausibility(text: string): { betType: ParsedPick["betType"]; li
 // rather than re-deriving it via regex, since the user just told us exactly
 // which team they meant.
 export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption): ParsedPick {
+  const unresolvedReason = periodShorthandOutsideNhl(pick, choice.sport);
   if (pick.sharedCollegeBase) {
     const base = pick.sharedCollegeBase;
     // A conflicting alias ("USF") can resolve to a different school than the one
     // it parsed as; every other choice keeps the nicknames it parsed with.
     const sameSchool = base.teamNicknames.some((n) => (TEAM_NICKNAME_CANONICAL[n] ?? n) === choice.nickname);
-    return { ...base, sportName: choice.sport, teamNicknames: sameSchool ? base.teamNicknames : [choice.nickname] };
+    return {
+      ...base,
+      sportName: choice.sport,
+      teamNicknames: sameSchool ? base.teamNicknames : [choice.nickname],
+      ...(unresolvedReason ? { unresolvedReason } : {}),
+    };
   }
   // pick.description may already carry a "(G1)"/"(G2)" suffix from the
   // original ambiguous push (see withGameNumberSuffix) - parsePickText
   // strips every parenthetical unconditionally, so it's removed here along
   // with any other parens, then re-appended below from pick.gameNumber
   // (untouched by the ...pick spread) rather than trusted to survive in text.
-  const parsed = parsePickText(pick.description);
+  const parsed = parsePickText(pick.description, choice.sport);
   // A near-miss player confirmed: grading reads the roster's name, not the typo (`raw` keeps the capper's line).
   const description =
     choice.playerName && choice.typedName ? withRosterName(parsed.cleanDescription, choice.typedName, choice.playerName) : parsed.cleanDescription;
@@ -2404,7 +2420,21 @@ export function resolveAmbiguousPick(pick: ParsedPick, choice: AmbiguousOption):
     teamNicknames: [choice.nickname],
     ambiguous: undefined,
     ambiguousKey: undefined,
+    ...(unresolvedReason ? { unresolvedReason } : {}),
   };
+}
+
+export const PERIOD_SHORTHAND_OUTSIDE_NHL_REASON =
+  "1P/2P/3P is a hockey period, but this line was answered as another sport - enter it manually";
+
+// The reason an ambiguous pick (team or player) can't be imported under the
+// sport just chosen for it, or null. Its text has the bare "1P"/"2P"/"3P"
+// shorthand, which is a period only in the NHL; under any other sport it would
+// silently store as a full-game bet. Reads the line as written (`raw`) as well as
+// the stored text, since a parse under a non-NHL sport drops a "(1P)" parenthetical.
+export function periodShorthandOutsideNhl(pick: Pick<ParsedPick, "description" | "raw">, sport: string): string | null {
+  if (sport === "NHL") return null;
+  return PERIOD_SHORTHAND_RE.test(pick.description) || PERIOD_SHORTHAND_RE.test(pick.raw) ? PERIOD_SHORTHAND_OUTSIDE_NHL_REASON : null;
 }
 
 // Uses teamPhraseRegex (escapes punctuation, treats internal whitespace
@@ -3887,7 +3917,7 @@ export function parseCatalog(
       if (!detected.sportName) {
         const pairResolved = resolveAmbiguousPair(remainder);
         if (pairResolved) {
-          const parsed = parsePickText(remainder);
+          const parsed = parsePickText(remainder, pairResolved.sportName);
           results.push({
             capperName: inlineMatch,
             sportName: pairResolved.sportName,
@@ -3937,7 +3967,7 @@ export function parseCatalog(
 
         const matchupPick = findMatchupPlayerPick(remainder);
         if (matchupPick) {
-          const parsed = parsePickText(remainder);
+          const parsed = parsePickText(remainder, "MMA");
           results.push({
             capperName: inlineMatch,
             sportName: "MMA",
@@ -3957,7 +3987,7 @@ export function parseCatalog(
 
         const playerPick = findPlayerPick(remainder, rosterFullNames);
         if (playerPick) {
-          const parsed = parsePickText(remainder);
+          const parsed = parsePickText(remainder, "ATP");
           results.push({
             capperName: inlineMatch,
             sportName: "ATP",
@@ -4003,7 +4033,7 @@ export function parseCatalog(
         continue;
       }
 
-      const parsed = parsePickText(detected.rest);
+      const parsed = parsePickText(detected.rest, detected.sportName);
       results.push({
         capperName: inlineMatch,
         sportName: detected.sportName,
@@ -4168,7 +4198,7 @@ export function parseCatalog(
         continue;
       }
 
-      const parsed = parsePickText(effectiveRest);
+      const parsed = parsePickText(effectiveRest, detected.sportName);
       results.push({
         capperName: currentCapper,
         sportName: detected.sportName,
@@ -4191,7 +4221,7 @@ export function parseCatalog(
     // matchup or a tennis player.
     const pairResolved = resolveAmbiguousPair(pickText);
     if (pairResolved) {
-      const parsed = parsePickText(pickText);
+      const parsed = parsePickText(pickText, pairResolved.sportName);
       results.push({
         capperName: currentCapper,
         sportName: pairResolved.sportName,
@@ -4241,7 +4271,7 @@ export function parseCatalog(
 
     const matchupPick = findMatchupPlayerPick(pickText);
     if (matchupPick) {
-      const parsed = parsePickText(pickText);
+      const parsed = parsePickText(pickText, "MMA");
       results.push({
         capperName: currentCapper,
         sportName: "MMA",
@@ -4261,7 +4291,7 @@ export function parseCatalog(
 
     const playerPick = findPlayerPick(pickText, rosterFullNames);
     if (playerPick) {
-      const parsed = parsePickText(pickText);
+      const parsed = parsePickText(pickText, "ATP");
       results.push({
         capperName: currentCapper,
         sportName: "ATP",
