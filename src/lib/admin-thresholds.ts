@@ -38,6 +38,7 @@ export const CRON_GRACE_MINUTES = {
   "refresh-odds": 60,
   "nhl-goal-scorer-odds": 60,
   "refresh-rosters": 60,
+  "db-stats-snapshot": 60,
 } as const;
 
 // A run still RUNNING this long past its route's maxDuration was killed.

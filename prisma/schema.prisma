@@ -1566,6 +1566,36 @@ enum CronRunStatus {
 // runCronLogged (server/data/cron-runs.ts): inserted when the run starts,
 // updated when it ends. No retention prune: ~100 runs a day, ~3k rows a
 // month, and this project only deletes by id.
+// Daily per-query activity from pg_stat_statements, for the handful of tracked queries
+// (src/lib/query-stat-snapshots.ts). pg_stat_statements only keeps totals since the last
+// reset; the delta between two snapshots is what lets a spike be attributed to a query.
+model QueryStatDaily {
+  id         String   @id @default(cuid())
+  date       DateTime @db.Date // UTC date of the run that recorded the delta
+  label      String // the tracked query's label (TRACKED_QUERIES)
+  calls      BigInt
+  rows       BigInt
+  avgRows    Float // rows / calls, 0 when there were no calls
+  statsReset Boolean  @default(false) // a counter went backwards: that day's figure is only the post-reset part
+  createdAt  DateTime @default(now())
+
+  @@unique([date, label])
+  @@map("query_stat_daily")
+}
+
+// Last-seen cumulative counters per pg_stat_statements queryid, so the next snapshot can
+// subtract. `label` is null for a statement that is not tracked (kept so its text is only
+// read from pg_stat_statements once).
+model QueryStatBaseline {
+  queryid   String   @id
+  label     String?
+  calls     BigInt
+  rows      BigInt
+  updatedAt DateTime @default(now())
+
+  @@map("query_stat_baselines")
+}
+
 model CronRun {
   id          String        @id @default(cuid())
   name        String // the route's name under /api/cron, e.g. "grade-picks"

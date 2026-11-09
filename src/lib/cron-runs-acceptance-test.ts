@@ -59,7 +59,7 @@ const T = (iso: string) => new Date(iso);
   expect("0 */4 at 03:59 -> 00:00", previousFireTime("0 */4 * * *", T("2026-10-19T03:59:00Z")).toISOString(), "2026-10-19T00:00:00.000Z");
   expect("55 6 at 06:54 -> yesterday 06:55", previousFireTime("55 6 * * *", T("2026-10-19T06:54:00Z")).toISOString(), "2026-10-18T06:55:00.000Z");
   expect("55 6 at 06:55 -> today", previousFireTime("55 6 * * *", T("2026-10-19T06:55:00Z")).toISOString(), "2026-10-19T06:55:00.000Z");
-  expect("describeSchedule", CRON_JOBS.map((j) => describeSchedule(j.schedule)), ["every 15 min", "daily 06:55 UTC", "daily 05:05 UTC", "every 4h at :00", "daily 16:30 UTC", "daily 10:45 UTC"]);
+  expect("describeSchedule", CRON_JOBS.map((j) => describeSchedule(j.schedule)), ["every 15 min", "daily 06:55 UTC", "daily 05:05 UTC", "every 4h at :00", "daily 16:30 UTC", "daily 10:45 UTC", "daily 08:15 UTC"]);
   let threw = false;
   try {
     previousFireTime("0 0 1 * *", new Date());

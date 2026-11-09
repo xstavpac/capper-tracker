@@ -6,7 +6,7 @@ import type { AdminReport } from "@/lib/admin-report";
 // finished run's HTTP response becomes a cron_runs row (status, rows
 // touched, a small summary), and whether a cron is failing or overdue.
 
-export type CronName = "grade-picks" | "refresh-scores" | "refresh-odds" | "backfill-odds" | "nhl-goal-scorer-odds" | "refresh-rosters";
+export type CronName = "grade-picks" | "refresh-scores" | "refresh-odds" | "backfill-odds" | "nhl-goal-scorer-odds" | "refresh-rosters" | "db-stats-snapshot";
 
 export type CronJob = {
   name: CronName;
@@ -24,6 +24,7 @@ export const CRON_JOBS: CronJob[] = [
   { name: "backfill-odds", path: "/api/cron/backfill-odds", schedule: "0 */4 * * *", maxDurationSec: 300, what: "add games missing from today's snapshots" },
   { name: "nhl-goal-scorer-odds", path: "/api/cron/nhl-goal-scorer-odds", schedule: "30 16 * * *", maxDurationSec: 300, what: "second pass for NHL goal scorer / 3-way markets" },
   { name: "refresh-rosters", path: "/api/cron/refresh-rosters", schedule: "45 10 * * *", maxDurationSec: 60, what: "NFL / NHL / NBA / MLB roster tables" },
+  { name: "db-stats-snapshot", path: "/api/cron/db-stats-snapshot", schedule: "15 8 * * *", maxDurationSec: 60, what: "daily per-query pg_stat_statements deltas for the DB Monitor trend" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -191,6 +192,10 @@ const SUMMARIZE: Record<CronName, (b: any) => { rowsTouched: number; summary: Re
     if (failed.length) summary.failedOrAborted = failed.join(",");
     return { rowsTouched: num(summary.rowsWritten), summary };
   },
+  "db-stats-snapshot": (b) => ({
+    rowsTouched: num(b.dailyRows),
+    summary: { statements: num(b.statements), tracked: num(b.tracked), stale: num(b.stale), resets: num(b.resets), firstRun: b.firstRun ? 1 : 0 },
+  }),
 };
 
 // HTTP 5xx is ERROR. A 2xx whose body says ok:false (refresh-odds' "every
