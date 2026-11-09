@@ -17,7 +17,7 @@
 //     an analyzing step, then the engine's legs one at a time, in their order,
 //     with the combined price of the legs shown so far, then PARLAY COMPLETE.
 //     Presentation only - every leg and price is the engine's answer.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { getRecordColor, PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
@@ -29,9 +29,9 @@ import { LABEL, SEGMENT_OFF, SEGMENT_ON, Tabs, TextSegments } from "@/components
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, decimalToAmerican, formatAmericanOdds, formatDecimalOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import { ANALYZING_STATUS, completeText, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
-import type { Reveal } from "@/components/parlay/use-build-reveal";
+import { prefersReducedMotion, type Reveal } from "@/components/parlay/use-build-reveal";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
-import type { EngineLeg, EngineSwap, EngineSwapLeg, GeneratedParlay, LegRecord } from "@/lib/parlay/generator";
+import { autoPickNext, defaultSwapTab, type EngineLeg, type EngineSwap, type EngineSwapLeg, type GeneratedParlay, type LegAlternatives, type LegRecord, type SwapTab } from "@/lib/parlay/generator";
 import type { RankRecordSource } from "@/lib/parlay/pick-record";
 import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
 import { SELECTION_MODES, type SelectionMode } from "@/lib/parlay/selection";
@@ -72,7 +72,34 @@ const SWAPPED_TEXT = "text-brand-700 dark:text-brand-300";
 const ARRIVED_FRAME = "-mx-2.5 rounded-xl px-2.5 bg-transparent ring-[1.5px] ring-inset ring-transparent shadow-[0_0_0_3px_var(--tw-shadow-color)] shadow-transparent";
 const ARRIVE_MOTION = "animate-leg-land transition-[background-color,box-shadow] duration-[1900ms] ease-out motion-reduce:animate-none motion-reduce:transition-none";
 
-function LegRow({ n, pick, record, mine, sgp, swappedBy, arrive, children }: { n: number; pick: ExpanderPick; record: { text: string; winPct: number | null }; mine: boolean; sgp: boolean; swappedBy?: string; arrive?: boolean; children?: ReactNode }) {
+function LegRow({
+  n,
+  pick,
+  record,
+  mine,
+  sgp,
+  swappedBy,
+  arrive,
+  handSwapped,
+  action,
+  overlay,
+  children,
+}: {
+  n: number;
+  pick: ExpanderPick;
+  record: { text: string; winPct: number | null };
+  mine: boolean;
+  sgp: boolean;
+  swappedBy?: string;
+  arrive?: boolean;
+  // Chosen by hand from this leg's swap tray: a small "Swapped" tag.
+  handSwapped?: boolean;
+  // The leg's Swap button, under the odds.
+  action?: ReactNode;
+  // Covers the row while a hand swap finds its pick.
+  overlay?: ReactNode;
+  children?: ReactNode;
+}) {
   const tone = record.winPct === null ? MUTED : getRecordColor(record.winPct) === "green" ? GREEN : RED;
   const live = isGameLive(pick, new Date());
   // Lit from the moment it lands; the highlight starts fading once the slide-in is done.
@@ -87,7 +114,8 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, arrive, children }: { n
   const frame = swappedBy ? SWAPPED_FRAME : arrive ? (lit ? SWAPPED_FRAME : ARRIVED_FRAME) + " " + ARRIVE_MOTION : "";
   const textTone = (highlighted ? SWAPPED_TEXT : "text-foreground") + (arrive ? " transition-colors duration-[1900ms] motion-reduce:transition-none" : "");
   return (
-    <li className={"flex gap-3 py-3 " + frame}>
+    <li className={"flex gap-3 py-3 " + (overlay ? "relative " : "") + frame} aria-busy={overlay ? true : undefined}>
+      {overlay}
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
         <p className={LABEL}>
@@ -100,6 +128,11 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, arrive, children }: { n
               Your pick
             </span>
           )}
+          {handSwapped && (
+            <span data-swapped-tag className={TAG + " bg-brand-600/10 text-brand-700 dark:bg-brand-400/15 dark:text-brand-300"}>
+              Swapped
+            </span>
+          )}
         </p>
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <p className={"min-w-0 text-[15px] font-bold leading-snug [overflow-wrap:anywhere] " + textTone}>
@@ -108,12 +141,15 @@ function LegRow({ n, pick, record, mine, sgp, swappedBy, arrive, children }: { n
           </p>
           <p className={"shrink-0 text-sm font-semibold tabular-nums " + textTone}>{formatOdds(pick.odds)}</p>
         </div>
-        <p className="text-xs font-medium text-muted-foreground">
-          <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
-            {pick.capperName}
-          </Link>
-          {pick.category && " · " + PICK_CATEGORY_LABELS[pick.category]}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 text-xs font-medium text-muted-foreground">
+            <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
+              {pick.capperName}
+            </Link>
+            {pick.category && " · " + PICK_CATEGORY_LABELS[pick.category]}
+          </p>
+          {action}
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
           <p className={"text-[11.5px] font-semibold tabular-nums " + tone}>{record.text}</p>
           <WinPctBar winPct={record.winPct ?? 0} decided={record.winPct !== null} className={"w-24 " + WIN_PCT_TRACK} />
@@ -136,8 +172,8 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   if (!leg.swap) {
     const reason =
       leg.unchangedReason === "OUT_OF_SCOPE"
-        ? original.source === "SLIP"
-          ? "your pick - Swap is set to Suggested"
+        ? original.source === "SLIP" || original.handSwapped
+          ? (original.source === "SLIP" ? "your pick" : "your swapped-in pick") + " - Swap is set to Suggested"
           : "suggested leg - Swap is set to Your picks"
         : leg.unchangedReason === "NOT_MAJORITY"
           ? "your pick's side isn't the majority of your cappers"
@@ -158,6 +194,155 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
         <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}
       </p>
     </LegRow>
+  );
+}
+
+// ---- Swap one leg by hand (the leg's swap tray) ---------------------------------
+// The tray's alternatives are the engine's (legAlternatives, generator.ts); this
+// only shows them and says which one was chosen.
+export const SWAP_OVERLAY_MS = 750;
+export const SWAP_FINDING = "Finding another eligible pick…";
+export const swappingStatus = (n: number) => `Re-scoring leg ${n} · ${SWAP_FINDING}`;
+export const swappedStatus = (n: number) => `Leg ${n} swapped · Combined odds updated`;
+export const SWAP_TRAY_ROWS = 3;
+export const SWAP_EMPTY: Record<SwapTab, string> = {
+  THIS_GAME: "No other eligible picks on this game.",
+  OTHER_GAMES: "No other eligible games with your current filters.",
+};
+const SWAP_TAB_LABELS: Record<SwapTab, string> = { THIS_GAME: "This game", OTHER_GAMES: "Other games" };
+const swapSubtitle = (tab: SwapTab, matchup: string) => (tab === "THIS_GAME" ? `Other eligible picks on ${matchup}` : `Replaces ${matchup} with a game not in your parlay`);
+
+function SwapArrowsIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className}>
+      <path d="M7 4L3 8l4 4" />
+      <path d="M3 8h13a4 4 0 0 1 4 4" />
+      <path d="M17 20l4-4-4-4" />
+      <path d="M21 16H8a4 4 0 0 1-4-4" />
+    </svg>
+  );
+}
+
+// The small pill under a leg's odds; an invisible 10px above and below makes the tap target 42px.
+const SWAP_PILL =
+  "relative inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold transition after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
+const SWAP_PILL_OFF = "border-[#DADDE5] bg-white text-foreground hover:border-brand-600 hover:text-brand-600 dark:border-border dark:bg-card dark:hover:border-brand-400 dark:hover:text-brand-400";
+const SWAP_PILL_ON = "border-brand-600 bg-brand-600 text-white dark:border-brand-400 dark:bg-brand-400 dark:text-[#0F1420]";
+
+function SwapButton({ n, open, trayId, onClick }: { n: number; open: boolean; trayId: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-swap-button
+      onClick={onClick}
+      aria-expanded={open}
+      aria-controls={open ? trayId : undefined}
+      aria-label={open ? `Close the swap tray for leg ${n}` : `Swap leg ${n}`}
+      className={SWAP_PILL + " " + (open ? SWAP_PILL_ON : SWAP_PILL_OFF)}
+    >
+      <SwapArrowsIcon className="h-3 w-3" />
+      {open ? "Close" : "Swap"}
+    </button>
+  );
+}
+
+function SwapOverlay() {
+  return (
+    <div data-swap-overlay className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-xl bg-white/90 dark:bg-card/90">
+      <p className="text-xs font-semibold text-foreground">{SWAP_FINDING}</p>
+      <div aria-hidden="true" className="relative h-1 w-28 overflow-hidden rounded-full bg-[#0F1420]/[0.07] dark:bg-white/10">
+        <span className="absolute inset-y-0 left-0 w-1/2 animate-build-shimmer bg-gradient-to-r from-transparent via-brand-500 to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+const TRAY_BUTTON = "inline-flex min-h-[40px] items-center justify-center rounded-full px-3.5 text-xs font-semibold transition disabled:opacity-50";
+
+function SwapTray({
+  id,
+  n,
+  matchup,
+  alternatives,
+  tab,
+  onTab,
+  favoritesOnly,
+  onUse,
+  onKeep,
+}: {
+  id: string;
+  n: number;
+  matchup: string;
+  alternatives: LegAlternatives;
+  tab: SwapTab;
+  onTab: (t: SwapTab) => void;
+  favoritesOnly: boolean;
+  onUse: (pickId: string) => void;
+  onKeep: () => void;
+}) {
+  const rows = (tab === "THIS_GAME" ? alternatives.thisGame : alternatives.otherGames).slice(0, SWAP_TRAY_ROWS);
+  const next = autoPickNext(alternatives, tab);
+  return (
+    <div id={id} data-swap-tray role="region" aria-label={`Swap leg ${n}`} className="mt-2.5 animate-tray-down rounded-xl bg-[#F4F5F8] p-3 motion-reduce:animate-none dark:bg-white/[0.06]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <p className="text-xs font-semibold text-foreground">Swap leg {n} · eligible picks not already in this parlay</p>
+        <p className="text-[11px] font-semibold text-muted-foreground">{favoritesOnly ? "★ Favorites only" : "All cappers"}</p>
+      </div>
+      <div className="mt-2">
+        <Tabs<SwapTab>
+          label={`Swap leg ${n} from`}
+          value={tab}
+          onChange={onTab}
+          tabs={[
+            { key: "THIS_GAME", label: SWAP_TAB_LABELS.THIS_GAME, note: String(alternatives.thisGame.length) },
+            { key: "OTHER_GAMES", label: SWAP_TAB_LABELS.OTHER_GAMES, note: String(alternatives.otherGames.length) },
+          ]}
+        />
+      </div>
+      <p data-swap-subtitle className="mt-2 text-[11.5px] font-medium text-muted-foreground [overflow-wrap:anywhere]">
+        {swapSubtitle(tab, matchup)}
+      </p>
+      {rows.length === 0 ? (
+        <p data-swap-empty className="mt-2 text-xs font-medium text-foreground">
+          {SWAP_EMPTY[tab]}
+        </p>
+      ) : (
+        <ul className="mt-1.5 divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+          {rows.map((l) => (
+            <li key={l.pick.pickId} data-swap-alternative={l.pick.pickId} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2">
+              <div className="min-w-0 flex-1 basis-48">
+                <p className={LABEL + " [overflow-wrap:anywhere]"}>
+                  {l.pick.leagueName} · {l.gameLabel} · {formatGameTime(l.gameTime)}
+                </p>
+                <p className="text-sm font-bold leading-snug text-foreground [overflow-wrap:anywhere]">{l.pick.betDetail}</p>
+                <p className="text-[11.5px] font-medium text-muted-foreground [overflow-wrap:anywhere]">
+                  {l.pick.capperIsFavorite && (
+                    <span className="mr-0.5 text-[#f59e0b]" aria-label="Favorite capper">
+                      ★
+                    </span>
+                  )}
+                  {l.pick.capperName} · {recordText(l.record, l.basis, l.pick, l.propMarket)}
+                </p>
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-2.5">
+                <span className="text-sm font-semibold tabular-nums text-foreground">{formatOdds(l.pick.odds)}</span>
+                <button type="button" onClick={() => onUse(l.pick.pickId)} aria-label={`Use ${l.pick.betDetail} for leg ${n}`} className={TRAY_BUTTON + " bg-brand-600 text-white hover:bg-brand-700 dark:bg-brand-500 dark:hover:bg-brand-400"}>
+                  Use
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+        <button type="button" onClick={onKeep} className={TRAY_BUTTON + " border border-[#DADDE5] bg-white text-foreground hover:bg-[#0F1420]/[0.03] dark:border-border dark:bg-card"}>
+          Keep this leg
+        </button>
+        <button type="button" disabled={!next} onClick={() => next && onUse(next.pick.pickId)} className={TRAY_BUTTON + " border border-brand-600 bg-white text-brand-600 hover:bg-brand-600/[0.06] dark:border-brand-400 dark:bg-card dark:text-brand-400"}>
+          Auto-pick next best
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -402,6 +587,7 @@ export function GeneratorResult({
   selectionMode,
   onSelectionMode,
   onSent,
+  legSwap,
 }: {
   // Null only while a build is analyzing and the engine hasn't answered yet.
   parlay: GeneratedParlay | null;
@@ -425,8 +611,40 @@ export function GeneratorResult({
   onSelectionMode: (m: SelectionMode) => void;
   // The user opened FanDuel's betslip with this parlay.
   onSent: () => void;
+  // Swapping one leg by hand (the card's session, on its snapshot): a leg's
+  // alternatives, and replacing it with one - false when it no longer can.
+  // Absent: no Swap buttons.
+  legSwap?: {
+    alternatives: (legIndex: number) => LegAlternatives;
+    apply: (legIndex: number, pickId: string) => boolean;
+  };
 }) {
   const [tab, setTab] = useState<Tab>("PRIMARY");
+  // The one open swap tray, and its tab.
+  const [tray, setTray] = useState<{ index: number; tab: SwapTab } | null>(null);
+  // The leg under the "Finding another eligible pick…" overlay.
+  const [swapping, setSwapping] = useState<number | null>(null);
+  const [swapStatus, setSwapStatus] = useState<string | null>(null);
+  // The leg a hand swap just replaced: its new row lands with the build's highlight.
+  const [landed, setLanded] = useState<number | null>(null);
+  // Combined odds ease to the new price after an animated swap.
+  const [swapTween, setSwapTween] = useState(false);
+  const swapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // A parlay the card sent for another reason than this card's swap (a rebuild) clears the swap state.
+  const ownSwap = useRef(false);
+  useEffect(() => {
+    if (ownSwap.current) {
+      ownSwap.current = false;
+      return;
+    }
+    if (swapTimer.current) clearTimeout(swapTimer.current);
+    setTray(null);
+    setSwapping(null);
+    setSwapStatus(null);
+    setLanded(null);
+    setSwapTween(false);
+  }, [parlay]);
+  useEffect(() => () => void (swapTimer.current && clearTimeout(swapTimer.current)), []);
   // The Primary's rows play their landing once: after another tab, they come back as plain rows.
   const [leftPrimary, setLeftPrimary] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -466,6 +684,42 @@ export function GeneratorResult({
   const swap = tab === "AUTO_HEDGE" ? hedge : tab === "CONTRARIAN" ? contrarian : undefined;
   const shownPicks = swap ? swap.legs.map((l) => (l.swap ?? l.original).pick) : shownLegs.map((l) => l.pick);
   const regenerate = done ? regenerateState(done, noAlternative) : null;
+  // Swap one leg: the Primary tab of a finished build only, one swap at a time.
+  const canSwap = Boolean(legSwap) && done !== null && !swap && swapping === null && !busy;
+  const trayIndex = canSwap && tray && tray.index < legs.length ? tray.index : null;
+  const alternatives = useMemo(
+    () => (trayIndex !== null && legSwap ? legSwap.alternatives(trayIndex) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the legs on screen and the leg open
+    [trayIndex, parlay]
+  );
+  const toggleTray = (index: number) => {
+    if (trayIndex === index) return setTray(null);
+    const alts = legSwap!.alternatives(index);
+    setTray({ index, tab: defaultSwapTab(alts) });
+  };
+  const chooseAlternative = (index: number, pickId: string) => {
+    setTray(null);
+    const n = index + 1;
+    const finish = () => {
+      swapTimer.current = null;
+      ownSwap.current = true;
+      const ok = legSwap!.apply(index, pickId);
+      if (!ok) ownSwap.current = false;
+      setSwapping(null);
+      setLanded(ok ? index : null);
+      setSwapStatus(ok ? swappedStatus(n) : null);
+    };
+    // Reduced motion: replaced at once - no overlay, no tween.
+    if (prefersReducedMotion()) {
+      setSwapTween(false);
+      finish();
+      return;
+    }
+    setSwapTween(true);
+    setSwapping(index);
+    setSwapStatus(swappingStatus(n));
+    swapTimer.current = setTimeout(finish, SWAP_OVERLAY_MS);
+  };
   // The rows the build lands keep their (fading) highlight until another tab is opened.
   const arrive = reveal !== null && !leftPrimary;
   const placeholders = analyzing ? 2 : building && revealed < total ? 1 : 0;
@@ -530,9 +784,15 @@ export function GeneratorResult({
           <BuildProgress
             revealed={analyzing ? 0 : building ? revealed : total}
             total={total}
-            status={building ? reveal.status || ANALYZING_STATUS : `${total} of ${total} selections added`}
-            active={building}
+            status={building ? reveal.status || ANALYZING_STATUS : (swapStatus ?? `${total} of ${total} selections added`)}
+            active={building || swapping !== null}
           />
+        )}
+        {!reveal && swapStatus && (
+          <p role="status" aria-live="polite" data-swap-status className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span aria-hidden="true" className={"h-2 w-2 shrink-0 rounded-full bg-brand-600 dark:bg-brand-400 " + (swapping !== null ? "animate-pulse motion-reduce:animate-none" : "")} />
+            {swapStatus}
+          </p>
         )}
         {done && <p className="mb-2 text-xs font-medium text-muted-foreground">{MODE_HELP[selectionMode]}</p>}
         {done?.limited && (
@@ -594,15 +854,32 @@ export function GeneratorResult({
                     record={{ text: recordText(l.record, l.basis, l.pick, l.propMarket), winPct: l.record?.winPct ?? null }}
                     mine={l.source === "SLIP"}
                     sgp={l.sameGame}
-                    arrive={arrive}
-                  />
+                    arrive={arrive || landed === i}
+                    handSwapped={l.handSwapped === true}
+                    action={canSwap ? <SwapButton n={i + 1} open={trayIndex === i} trayId={"swap-tray-" + i} onClick={() => toggleTray(i)} /> : undefined}
+                    overlay={swapping === i ? <SwapOverlay /> : undefined}
+                  >
+                    {trayIndex === i && alternatives && (
+                      <SwapTray
+                        id={"swap-tray-" + i}
+                        n={i + 1}
+                        matchup={l.gameLabel}
+                        alternatives={alternatives}
+                        tab={tray!.tab}
+                        onTab={(t) => setTray({ index: i, tab: t })}
+                        favoritesOnly={favoritesOnly}
+                        onUse={(pickId) => chooseAlternative(i, pickId)}
+                        onKeep={() => setTray(null)}
+                      />
+                    )}
+                  </LegRow>
                 ))}
             {Array.from({ length: placeholders }, (_, i) => (
               <PlaceholderLeg key={"placeholder-" + i} />
             ))}
           </ol>
           <div ref={oddsRef} className="scroll-mb-4">
-            <CombinedPrice legs={shownPicks} sameGame={sameGame} tween={arrive && !swap} />
+            <CombinedPrice legs={shownPicks} sameGame={sameGame} tween={(arrive || swapTween) && !swap} />
           </div>
           {done && legs.length > 0 && (
             <div ref={bannerRef} data-parlay-complete className={COMPLETE_BANNER}>

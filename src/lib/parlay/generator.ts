@@ -286,6 +286,10 @@ export type EngineLeg = {
   // A generated player prop gated on its per-market record (recordForGate):
   // which market, so the record is labelled with it. Absent otherwise.
   propMarket?: PropMarketKey;
+  // Chosen by hand from the leg's swap tray (applyLegSwap). Hedge / Contrarian
+  // count it as one of your picks (Swap: Suggested leaves it alone). Never set
+  // by a build: Generate / Regenerate clear it.
+  handSwapped?: true;
 };
 
 export type DroppedSlipPick = {
@@ -525,6 +529,63 @@ function effectiveGate(settings: GeneratorSettings, rules: GeneratorRules): numb
 
 const toLegRecord = (r: { wins: number; losses: number; winPct: number }): LegRecord => ({ wins: r.wins, losses: r.losses, n: r.wins + r.losses, winPct: r.winPct });
 
+// Step 3's checks on one pick that don't depend on the other legs: Include
+// Picks, the star, a record, the gate. The build and legAlternatives (a leg's
+// swap tray) both qualify through this, so the tray holds exactly the picks a
+// build could have taken. A failure says at which step, and how to trace it.
+type QualifyContext = {
+  include: IncludeSelection;
+  favoritesOnly: boolean;
+  snapshot: GeneratorSnapshot;
+  rules: GeneratorRules;
+  gate: number;
+  scoreOf: ((pick: GeneratorPick) => PickScore) | null;
+};
+type Qualified = { ok: true; candidate: Candidate } | { ok: false; at: "INCLUDED" | "HAS_RECORD" | "PASSES_GATE"; drop: (t: TraceCollector) => void };
+
+function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyContext): Qualified {
+  const { include, favoritesOnly, snapshot, rules, gate, scoreOf } = ctx;
+  if (!keepsPick(include, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)) };
+  if (!keepsFavorite(favoritesOnly, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)) };
+  const gated = gateRecord(pick, snapshot, rules);
+  if (!gated) return { ok: false, at: "HAS_RECORD", drop: (t) => t.drop("HAS_RECORD", noRecordReason(pick), pickRef(pick), pick.propMarket ?? pick.category ?? undefined) };
+  const pickScore = scoreOf?.(pick) ?? null;
+  if (pickScore ? !passesGate(pickScore, gate) : !qualifies(gated.record, gate)) {
+    return {
+      ok: false,
+      at: "PASSES_GATE",
+      drop: (t) =>
+        t.drop(
+          "PASSES_GATE",
+          "BELOW_GATE",
+          pickRef(pick),
+          pickScore?.status === "SCORED"
+            ? pickScore.gate.raw && !pickScore.gate.raw.clears && pickScore.rankScore >= (pickScore.gate.requiredEdge ?? 0)
+              ? // The long-shot rule (scoring.ts ls1): the edge clears, the raw record doesn't clear the price.
+                `raw ${pickScore.gate.raw.wins}-${pickScore.gate.raw.decided - pickScore.gate.raw.wins} ${((pickScore.gate.raw.wins / pickScore.gate.raw.decided) * 100).toFixed(1)}% < bar ${(pickScore.gate.raw.bar * 100).toFixed(1)}% (${gate}%)`
+              : `edge ${(pickScore.rankScore * 100).toFixed(1)} < ${((pickScore.gate.requiredEdge ?? 0) * 100).toFixed(1)} (${gate}%)`
+            : `${Math.round(gated.record.winPct)}% (${gated.record.wins}-${gated.record.losses}) < ${gate}%`
+        ),
+    };
+  }
+  const { record, basis, propMarket } = gated;
+  const wilson = wilsonLowerBound(record.wins, record.losses, rules.z);
+  return {
+    ok: true,
+    candidate: {
+      pick,
+      game,
+      record: toLegRecord(record),
+      basis,
+      ...(propMarket ? { propMarket } : {}),
+      wilsonLowerBound: wilson,
+      score: pickScore?.status === "SCORED" ? pickScore.rankScore * 100 : wilson,
+      pickScore,
+      category: betCategory(pick),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // The engine
 // ---------------------------------------------------------------------------
@@ -697,6 +758,7 @@ export function buildGeneratedParlay(
   const slipOnGame = new Map<string, GeneratorPick[]>();
   for (const p of slipLegs) slipOnGame.set(p.gameId, [...(slipOnGame.get(p.gameId) ?? []), p]);
   const candidatesOf = new Map<string, Candidate[]>();
+  const qualifyCtx: QualifyContext = { include, favoritesOnly, snapshot, rules, gate, scoreOf };
   // How many picks passed each step, for the run trace.
   const passed = { scope: 0, notSlip: 0, included: 0, record: 0, gate: 0, noConflict: 0 };
   for (const game of eligible) {
@@ -709,58 +771,23 @@ export function buildGeneratedParlay(
         continue;
       }
       passed.notSlip++;
-      if (!keepsPick(include, pick)) {
-        traced((t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)));
-        continue;
-      }
-      if (!keepsFavorite(favoritesOnly, pick)) {
-        traced((t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)));
+      const q = qualifyPick(pick, game, qualifyCtx);
+      if (!q.ok) {
+        if (q.at !== "INCLUDED") passed.included++;
+        if (q.at === "PASSES_GATE") passed.record++;
+        traced(q.drop);
         continue;
       }
       passed.included++;
-      const gated = gateRecord(pick, snapshot, rules);
-      if (!gated) {
-        traced((t) => t.drop("HAS_RECORD", noRecordReason(pick), pickRef(pick), pick.propMarket ?? pick.category ?? undefined));
-        continue;
-      }
       passed.record++;
-      const pickScore = scoreOf?.(pick) ?? null;
-      if (pickScore ? !passesGate(pickScore, gate) : !qualifies(gated.record, gate)) {
-        traced((t) =>
-          t.drop(
-            "PASSES_GATE",
-            "BELOW_GATE",
-            pickRef(pick),
-            pickScore?.status === "SCORED"
-              ? pickScore.gate.raw && !pickScore.gate.raw.clears && pickScore.rankScore >= (pickScore.gate.requiredEdge ?? 0)
-                ? // The long-shot rule (scoring.ts ls1): the edge clears, the raw record doesn't clear the price.
-                  `raw ${pickScore.gate.raw.wins}-${pickScore.gate.raw.decided - pickScore.gate.raw.wins} ${((pickScore.gate.raw.wins / pickScore.gate.raw.decided) * 100).toFixed(1)}% < bar ${(pickScore.gate.raw.bar * 100).toFixed(1)}% (${gate}%)`
-                : `edge ${(pickScore.rankScore * 100).toFixed(1)} < ${((pickScore.gate.requiredEdge ?? 0) * 100).toFixed(1)} (${gate}%)`
-              : `${Math.round(gated.record.winPct)}% (${gated.record.wins}-${gated.record.losses}) < ${gate}%`
-          )
-        );
-        continue;
-      }
       passed.gate++;
-      const { record, basis, propMarket } = gated;
       // Never against a slip pick on its game.
       if (onGame.some((s) => !(sureOfGame(game, s) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(s)) !== null)) {
         traced((t) => t.drop("NO_SLIP_CONFLICT", "SLIP_CONFLICT", pickRef(pick), conflictSub(game, pick, onGame) ?? undefined));
         continue;
       }
       passed.noConflict++;
-      const wilson = wilsonLowerBound(record.wins, record.losses, rules.z);
-      list.push({
-        pick,
-        game,
-        record: toLegRecord(record),
-        basis,
-        ...(propMarket ? { propMarket } : {}),
-        wilsonLowerBound: wilson,
-        score: pickScore?.status === "SCORED" ? pickScore.rankScore * 100 : wilson,
-        pickScore,
-        category: betCategory(pick),
-      });
+      list.push(q.candidate);
     }
     list.sort(byRank);
     candidatesOf.set(game.gameId, list);
@@ -1074,6 +1101,202 @@ export function buildGeneratedParlay(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Swap one leg by hand (the leg's swap tray)
+// ---------------------------------------------------------------------------
+// Every other leg stays exactly as it is. The tray's two tabs:
+//   THIS_GAME   - other picks on the swapped leg's game. Max legs per game and
+//                 the same-game rules hold against the game's other legs (the
+//                 swapped leg itself doesn't count).
+//   OTHER_GAMES - games with no leg in the parlay, one row each: the game's
+//                 best-ranked eligible pick, games in that pick's ranking order.
+//                 Choosing one takes the swapped leg's game out (unless another
+//                 leg is on it).
+// Best available: the build's own candidates (qualifyPick - Include Picks, the
+// star, a record, the win-rate gate), never a pick already in the parlay or in
+// the slip, ordered by the build's ranking (byRank). Your picks only: the slip
+// picks not in the parlay (game not over), ungated like every slip pick, in the
+// slip's order (rankSlip), either/or by blocks() as rule 6 has it. Pick Mix
+// doesn't shape a hand swap. Live games follow the build's rule with no
+// refetch: a game that has kicked off since the snapshot is only offered when
+// it's targeted or holds a slip pick. Runs on the held snapshot: no request.
+export type SwapTab = "THIS_GAME" | "OTHER_GAMES";
+export type LegAlternatives = { thisGame: EngineLeg[]; otherGames: EngineLeg[] };
+
+export function legAlternatives(
+  snapshot: GeneratorSnapshot,
+  settings: GeneratorSettings,
+  legs: readonly EngineLeg[],
+  legIndex: number,
+  now: Date,
+  rules: GeneratorRules = GENERATOR_RULES
+): LegAlternatives {
+  const out: LegAlternatives = { thisGame: [], otherGames: [] };
+  const swapped = legs[legIndex];
+  if (!swapped) return out;
+  const maxPerGame = Math.min(MAX_LEGS_PER_GAME, Math.max(1, Math.floor(settings.maxLegsPerGame) || 1));
+  const others = legs.filter((_, i) => i !== legIndex);
+  const inParlay = new Set(legs.map((l) => l.pick.pickId));
+  const parlayGames = new Set(legs.map((l) => l.gameId));
+  const legsOn = (gameId: string) => others.filter((l) => l.gameId === gameId).map((l) => l.pick);
+  const tabOf = (gameId: string): SwapTab | null => (gameId === swapped.gameId ? "THIS_GAME" : parlayGames.has(gameId) ? null : "OTHER_GAMES");
+  // Picks arrive best first, so the first one on a game is its best: Other games keeps only that one.
+  const otherGameIds = new Set<string>();
+  const add = (tab: SwapTab, leg: EngineLeg) => {
+    if (tab === "THIS_GAME") return void out.thisGame.push(leg);
+    if (otherGameIds.has(leg.gameId)) return;
+    otherGameIds.add(leg.gameId);
+    out.otherGames.push(leg);
+  };
+  const gate = effectiveGate(settings, rules);
+  const scoreOf = rules.scorer === "SCORING" ? scorerFor(snapshot, gate) : null;
+
+  if (settings.fillFrom === "YOUR_PICKS_ONLY") {
+    const unused = snapshot.slipPicks.filter((p) => !inParlay.has(p.pickId) && !isGameOver(p, now));
+    for (const p of rankSlip(unused, snapshot.leagueRecords, scoreOf)) {
+      const tab = tabOf(p.gameId);
+      if (!tab) continue;
+      const onGame = legsOn(p.gameId);
+      if (onGame.length >= maxPerGame) continue;
+      if (onGame.some((l) => blocks(toBuildCandidate(p, snapshot.leagueRecords), toBuildCandidate(l, snapshot.leagueRecords)).blocked)) continue;
+      add(tab, slipLegOf(p, snapshot.leagueRecords));
+    }
+    return out;
+  }
+
+  const ctx: QualifyContext = { include: toIncludeSelection(settings.include), favoritesOnly: settings.favoritesOnly === true, snapshot, rules, gate, scoreOf };
+  const slipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
+  const targeted = snapshot.targets.length > 0;
+  // A game that started is only in play as a target or a slip pick's game (snapshotIsStale's rule).
+  const kept = new Set([...snapshot.targets, ...snapshot.slipPicks.map((p) => p.gameId)]);
+  const inPlay = (g: GeneratorGame) => !hasKickedOff(g.gameTime, now) || kept.has(g.gameId);
+  // With targets, generated legs come only from the targeted games and your picks' games (rule 2).
+  const allowed = (g: GeneratorGame) => !targeted || kept.has(g.gameId) || g.gameId === swapped.gameId;
+  const found: { tab: SwapTab; c: Candidate }[] = [];
+  for (const game of snapshot.games) {
+    if (isGameOver(game, now)) continue;
+    const tab = tabOf(game.gameId);
+    if (!tab || !inPlay(game) || !allowed(game)) continue;
+    const onGame = legsOn(game.gameId);
+    if (onGame.length >= maxPerGame) continue;
+    for (const pick of game.picks) {
+      if (inParlay.has(pick.pickId) || slipIds.has(pick.pickId)) continue;
+      const q = qualifyPick(pick, game, ctx);
+      if (!q.ok) continue;
+      if (onGame.some((l) => !(sureOfGame(game, l) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(l)) !== null)) continue;
+      found.push({ tab, c: q.candidate });
+    }
+  }
+  found.sort((a, b) => byRank(a.c, b.c));
+  for (const { tab, c } of found) add(tab, generatedLegOf(c));
+  return out;
+}
+
+// The tray opens on This game when it has anything, else Other games.
+export const defaultSwapTab = (alts: LegAlternatives): SwapTab => (alts.thisGame.length > 0 ? "THIS_GAME" : "OTHER_GAMES");
+
+// "Auto-pick next best": the active tab's top row, or null when it's empty.
+export const autoPickNext = (alts: LegAlternatives, tab: SwapTab): EngineLeg | null => (tab === "THIS_GAME" ? alts.thisGame : alts.otherGames)[0] ?? null;
+
+function slipLegOf(p: GeneratorPick, records: CapperLeagueRecords): EngineLeg {
+  const r = bestAvailableRecord(p, records);
+  return {
+    pick: p,
+    gameId: p.gameId,
+    gameLabel: p.gameLabel,
+    gameTime: p.gameTime,
+    source: "SLIP",
+    record: r ? { wins: r.wins, losses: r.losses, n: r.n, winPct: r.winPct } : null,
+    basis: r?.source ?? null,
+    wilsonLowerBound: null,
+    sameGame: false,
+  };
+}
+
+function generatedLegOf(c: Candidate): EngineLeg {
+  return {
+    pick: c.pick,
+    gameId: c.game.gameId,
+    gameLabel: c.game.gameLabel,
+    gameTime: c.game.gameTime,
+    source: "GENERATED",
+    record: c.record,
+    basis: c.basis,
+    wilsonLowerBound: c.wilsonLowerBound,
+    ...(c.pickScore ? { score: c.score } : {}),
+    sameGame: false,
+    ...(c.propMarket ? { propMarket: c.propMarket } : {}),
+  };
+}
+
+// Hedge and Contrarian for every Swap setting, rebuilt for these legs - after a
+// hand swap, so they describe the parlay shown. `variation`: the seed and mode
+// of the Regenerate that built the parlay (null for Generate), so a leg the
+// swap didn't touch keeps its draw.
+export function rebuildSwaps(
+  snapshot: GeneratorSnapshot,
+  settings: GeneratorSettings,
+  legs: EngineLeg[],
+  now: Date,
+  variation: Pick<Variation, "seed" | "mode"> | null,
+  rules: GeneratorRules = GENERATOR_RULES
+): Pick<GeneratedParlay, "hedge" | "contrarian"> {
+  const gate = effectiveGate(settings, rules);
+  const scoreOf = rules.scorer === "SCORING" ? scorerFor(snapshot, gate) : null;
+  const include = toIncludeSelection(settings.include);
+  const favoritesOnly = settings.favoritesOnly === true;
+  const gameById = new Map(snapshot.games.filter((g) => !isGameOver(g, now)).map((g) => [g.gameId, g]));
+  const beta = SELECTION_BETA[variation?.mode ?? DEFAULT_SELECTION_MODE];
+  const select = (salt: string): HedgeSelect | null => (scoreOf ? { draw: variation ? { seed: deriveSeed(variation.seed, salt), beta } : null, picked: [] } : null);
+  const hedgeSelect = select("hedge");
+  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, rules, gate, scoreOf, undefined, hedgeSelect));
+  const contrarianSelect = select("contrarian");
+  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, rules, gate, scoreOf, undefined, contrarianSelect));
+  return { hedge, contrarian };
+}
+
+// The parlay with leg `legIndex` replaced, in place, by `pickId` - which must be
+// one of the leg's alternatives right now (null when it isn't). The new leg is
+// handSwapped. Everything that follows from the leg set is worked out again: SGP
+// flags, games used, same-game games, the slip counts, the picks left unused,
+// and Hedge / Contrarian. The leg count, the build's notes and the Regenerate
+// history (historyIds, generatedKey) stay: a hand-swapped combination is not one
+// Regenerate counts as shown.
+export function applyLegSwap(
+  snapshot: GeneratorSnapshot,
+  settings: GeneratorSettings,
+  parlay: GeneratedParlay,
+  legIndex: number,
+  pickId: string,
+  now: Date,
+  variation: Pick<Variation, "seed" | "mode"> | null,
+  rules: GeneratorRules = GENERATOR_RULES
+): GeneratedParlay | null {
+  const alts = legAlternatives(snapshot, settings, parlay.legs, legIndex, now, rules);
+  const chosen = [...alts.thisGame, ...alts.otherGames].find((l) => l.pick.pickId === pickId);
+  if (!chosen) return null;
+  const out = parlay.legs[legIndex];
+  const legs: EngineLeg[] = parlay.legs.map((l, i) => (i === legIndex ? { ...chosen, handSwapped: true as const } : { ...l }));
+  const perGame = new Map<string, number>();
+  for (const l of legs) perGame.set(l.gameId, (perGame.get(l.gameId) ?? 0) + 1);
+  for (const l of legs) l.sameGame = (perGame.get(l.gameId) ?? 0) > 1;
+  const fromSlip = legs.filter((l) => l.source === "SLIP").length;
+  // A slip pick swapped out is one of your picks not used this time; one swapped in no longer is.
+  const dropped = parlay.dropped.filter((d) => d.pickId !== chosen.pick.pickId);
+  if (out.source === "SLIP") dropped.push({ pickId: out.pick.pickId, label: pickLabel(out.pick), reason: "not_selected", against: null, note: "swapped out — not in this parlay" });
+  return {
+    ...parlay,
+    legs,
+    fromSlip,
+    slipUsed: fromSlip,
+    generated: legs.length - fromSlip,
+    gamesUsed: perGame.size,
+    sameGameGames: Array.from(perGame.values()).filter((n) => n > 1).length,
+    dropped,
+    ...rebuildSwaps(snapshot, settings, legs, now, variation, rules),
+  };
+}
+
 // Regenerate's draws: up to VARIATION_TRIES seeded draws, keeping the first
 // that is not in the history - or, failing that, the first that at least
 // differs from the last parlay. Neither: `primary`, not varied.
@@ -1255,7 +1478,8 @@ function buildSwap(
   const inParlay = new Set([...legs.map((l) => l.pick.pickId), ...snapshot.slipPicks.map((p) => p.pickId)]);
   const current = new Map<string, GeneratorPick>(legs.map((l) => [l.pick.pickId, l.pick]));
   const out: EngineSwapLeg[] = legs.map((leg) => {
-    if (!inSwapScope(scope, leg.source)) return { original: leg, swap: null, unchangedReason: "OUT_OF_SCOPE" };
+    // A leg picked by hand from its swap tray counts as one of your picks.
+    if (!inSwapScope(scope, leg.handSwapped ? "SLIP" : leg.source)) return { original: leg, swap: null, unchangedReason: "OUT_OF_SCOPE" };
     const typePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p));
     // The star filters alternates the same way it filters generated legs.
     const gamePicks = favoritesOnly ? typePicks.filter((p) => keepsFavorite(true, p)) : typePicks;

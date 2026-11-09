@@ -23,9 +23,15 @@
 // Hedge and Contrarian come with every build (GeneratedParlay.hedge /
 // .contrarian), so showing them is never a request either.
 //
+// Swapping one leg by hand (the leg's swap tray: alternatives / swapLeg) runs
+// on the held snapshot too - never a request, even once the snapshot is stale
+// (a game that started since is offered only where a build would offer it).
+// Hedge and Contrarian are rebuilt for the new legs with the seed and mode of
+// the build on screen; the Regenerate history is left alone.
+//
 // Client-safe: no React, no server imports at runtime - the action is passed
 // in, so a test can count what it does.
-import { buildGeneratedParlay, GENERATOR_RULES, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { applyLegSwap, buildGeneratedParlay, GENERATOR_RULES, legAlternatives, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type LegAlternatives, type Variation } from "@/lib/parlay/generator";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
@@ -72,6 +78,8 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
   let shown = new Set<string>();
   let recent: RecentLeg[][] = [];
   let requests = 0;
+  // The seed and mode of the build on screen (null: a Generate / Refresh), for a hand swap's Hedge / Contrarian.
+  let shownVariation: Pick<Variation, "seed" | "mode"> | null = null;
 
   // The legs a Regenerate varies: the generated ones, or the slip picks drawn
   // under Your picks only with more picks than legs (historyIds, generator.ts).
@@ -86,6 +94,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
   const recentLegs = (): RecentLeg[] =>
     mergeRecentLegs(recent.flat(), deps.reuse ? readReuseHistory(deps.reuse.userId(), now().getTime(), deps.reuse.store) : []);
   const resetCard = () => {
+    shownVariation = null;
     history = [];
     shown = new Set();
     recent = [];
@@ -169,8 +178,23 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
       }
       seed = (seed + 1) >>> 0;
       const parlay = build(inputs, settings, { seed, history, mode, recentLegs: recentLegs(), shown: Array.from(shown) });
-      if (parlay.variety !== "NO_ALTERNATIVE") remember(parlay);
+      if (parlay.variety !== "NO_ALTERNATIVE") {
+        remember(parlay);
+        shownVariation = { seed, mode };
+      }
       return { parlay, fetched };
+    },
+
+    // Leg `legIndex`'s swap tray: This game / Other games, best first. Empty with no snapshot.
+    alternatives(parlay: GeneratedParlay, legIndex: number, settings: GeneratorSettings): LegAlternatives {
+      if (!snapshot) return { thisGame: [], otherGames: [] };
+      return legAlternatives(snapshot, settings, parlay.legs, legIndex, now());
+    },
+
+    // The parlay with that leg replaced by `pickId` (one of its alternatives), or null.
+    swapLeg(parlay: GeneratedParlay, legIndex: number, pickId: string, settings: GeneratorSettings): GeneratedParlay | null {
+      if (!snapshot) return null;
+      return applyLegSwap(snapshot, settings, parlay, legIndex, pickId, now(), shownVariation);
     },
 
     // For the UI and tests: how many requests this session has made.
