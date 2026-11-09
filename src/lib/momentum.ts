@@ -205,10 +205,13 @@ export function buildMomentum(
   if (dayEnd != null && !empty) xStart = Math.min(xStart, floorToHour(dayEnd - MIN_SPAN_MS, tz));
   const points: MomentumPoint[] = [{ t: xStart, v: 0, change: 0, prevT: null }];
   let run = 0;
-  for (const b of buckets) {
+  for (let i = 0; i < buckets.length; i++) {
+    const b = buckets[i];
     const prev = points[points.length - 1];
     run += b.d;
-    points.push({ t: Math.max(b.t, prev.t), v: round2(run), change: round2(b.d), prevT: prev.t });
+    // With late grades folded in, the final point sits at the day's end so the line reaches the axis end.
+    const t = lateCount > 0 && dayEnd != null && i === buckets.length - 1 ? dayEnd : b.t;
+    points.push({ t: Math.max(t, prev.t), v: round2(run), change: round2(b.d), prevT: prev.t });
   }
   const lastPoint = points[points.length - 1];
   const rawEnd = empty ? now : isToday ? Math.max(lastPoint.t, now) : lastPoint.t;
