@@ -26,12 +26,15 @@ export function MomentumCard({
   unstamped,
   tileNet,
   isToday,
+  dayEnd,
 }: {
   events: MomentumEvent[];
   unstamped: number;
   // The Net Units tile's number; the card's last point must equal it (dev-only warning otherwise).
   tileNet: number;
   isToday: boolean;
+  // Epoch ms of the selected Eastern day's end (exclusive); late grades fold into the last in-day point.
+  dayEnd?: number;
 }) {
   const uid = useId().replace(/:/g, "");
   const [tz, setTz] = useState<string | null>(null);
@@ -41,7 +44,7 @@ export function MomentumCard({
     setNow(Date.now());
   }, []);
 
-  const m = useMemo(() => (tz ? buildMomentum(events, unstamped, { now, isToday, tz }) : null), [events, unstamped, now, isToday, tz]);
+  const m = useMemo(() => (tz ? buildMomentum(events, unstamped, { now, isToday, tz, dayEnd }) : null), [events, unstamped, now, isToday, tz, dayEnd]);
 
   useEffect(() => {
     if (m && process.env.NODE_ENV !== "production" && !momentumMatchesTile(m.net, tileNet)) {

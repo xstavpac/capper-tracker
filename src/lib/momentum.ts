@@ -170,25 +170,40 @@ export function xTicksFor(xStart: number, xEnd: number, tz: string): MomentumTic
 export function buildMomentum(
   events: MomentumEvent[],
   unstamped: number,
-  opts: { now: number; isToday: boolean; tz: string }
+  opts: { now: number; isToday: boolean; tz: string; dayEnd?: number }
 ): Momentum {
   const { now, isToday, tz } = opts;
+  // Past day: the selected Eastern day's end (exclusive). Picks are in the day by GAME time but may be
+  // graded much later (futures, multi-day parlays, regrades). Those late grades are folded into the
+  // last in-day point so the axis stays inside the day and the last point still equals the Net Units tile.
+  const dayEnd = !isToday && opts.dayEnd != null ? opts.dayEnd : null;
+  let late = 0;
+  let lateCount = 0;
   // One point per grading minute: a game's picks are stamped within a minute of each other.
   const buckets: { t: number; d: number }[] = [];
   for (const e of events) {
+    if (dayEnd != null && e.t >= dayEnd) {
+      late += e.d;
+      lateCount++;
+      continue;
+    }
     const last = buckets[buckets.length - 1];
     if (last && Math.floor(last.t / MIN) === Math.floor(e.t / MIN)) {
       last.t = e.t;
       last.d += e.d;
     } else buckets.push({ t: e.t, d: e.d });
   }
-  if (unstamped !== 0) {
-    if (buckets.length > 0) buckets[buckets.length - 1].d += unstamped;
-    else buckets.push({ t: now, d: unstamped });
-  }
+  // Unstamped rows fold into the last real point. Late grades get their own final point at the day's
+  // end (the last real grade keeps its real time and tooltip); with no real in-day point it is the only one.
+  if (unstamped !== 0 && buckets.length > 0) buckets[buckets.length - 1].d += unstamped;
+  else late += unstamped;
+  if (dayEnd != null && lateCount > 0) buckets.push({ t: dayEnd, d: late });
+  else if (late !== 0) buckets.push({ t: dayEnd != null ? dayEnd - MIN : now, d: late });
   const empty = buckets.length === 0;
 
-  const xStart = empty ? floorToHour(now, tz) - 6 * H : floorToHour(buckets[0].t, tz);
+  let xStart = empty ? floorToHour(now, tz) - 6 * H : floorToHour(buckets[0].t, tz);
+  // A clamped axis can't grow past the day's end, so a late-night start is pulled back to keep MIN_SPAN_MS.
+  if (dayEnd != null && !empty) xStart = Math.min(xStart, floorToHour(dayEnd - MIN_SPAN_MS, tz));
   const points: MomentumPoint[] = [{ t: xStart, v: 0, change: 0, prevT: null }];
   let run = 0;
   for (const b of buckets) {
@@ -198,7 +213,13 @@ export function buildMomentum(
   }
   const lastPoint = points[points.length - 1];
   const rawEnd = empty ? now : isToday ? Math.max(lastPoint.t, now) : lastPoint.t;
-  const xEnd = Math.max(rawEnd, xStart + MIN_SPAN_MS);
+  // Past day: never beyond the day's end, and exactly the day's end when late grades were folded.
+  const xEnd =
+    dayEnd != null && !empty
+      ? lateCount > 0
+        ? dayEnd
+        : Math.min(Math.max(rawEnd, xStart + MIN_SPAN_MS), dayEnd)
+      : Math.max(rawEnd, xStart + MIN_SPAN_MS);
 
   const vals = points.map((p) => p.v);
   const vmin = Math.min(...vals);
