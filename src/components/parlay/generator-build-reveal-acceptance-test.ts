@@ -2,7 +2,7 @@
 // generator-result.tsx) on jsdom with motion allowed, the real slip provider and the
 // real engine; only the server calls are stubbed, as in generator-card-acceptance-test.ts.
 // Real timers: the build takes ~4s per run here.
-//   - the schedule: gap = clamp(6500 / N, 420, 780), the whole build within ~7s,
+//   - the schedule: gap = clamp(6500 / N, 260, 780), the whole build within ~7s,
 //     generic status text only;
 //   - analyzing -> building -> complete on Generate and on Regenerate, the counter,
 //     the progress bar, the status line, the odds row under the legs landing on the
@@ -16,7 +16,7 @@ import type { Root } from "react-dom/client";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { GenerateRequest } from "@/server/actions/parlay-generate";
-import { ANALYZE_MIN_MS, ANALYZING_STATUS, BUILD_BUDGET_MS, completeText, GAP_MIN_MS, LAND_MS, ODDS_TWEEN_MS, findingStatus, revealGap, revealSchedule } from "@/lib/parlay/build-reveal";
+import { ANALYZE_MIN_MS, ANALYZING_STATUS, BUILD_BUDGET_MS, completeText, LAND_MS, ODDS_TWEEN_MS, findingStatus, revealGap, revealSchedule } from "@/lib/parlay/build-reveal";
 import { combineOdds, formatAmericanOdds } from "@/lib/parlay/combine-odds";
 
 let failures = 0;
@@ -28,14 +28,14 @@ function check(label: string, pass: boolean, detail = "") {
 // ---- The schedule (pure) ----
 check("gap: 780ms for small parlays", revealGap(1) === 780 && revealGap(3) === 780 && revealGap(8) === 780);
 check("gap: 6500 / N in between", revealGap(10) === 650 && revealGap(13) === 500);
-check("gap: never under 420ms", revealGap(20) === 420 && revealGap(25) === 420);
-for (const n of [1, 3, 8, 12, 25]) {
+check("gap: 6500 / 20 = 325ms; 260ms at the 25-leg cap, never under", revealGap(20) === 325 && revealGap(25) === 260 && revealGap(40) === 260);
+for (const n of [1, 3, 8, 12, 20, 25]) {
   const steps = revealSchedule(n);
   const lands = steps.filter((s) => s.kind === "land");
   const done = steps.find((s) => s.kind === "complete")!;
   const inOrder = lands.every((s, i) => s.kind === "land" && s.index === i && (i === 0 || s.at > lands[i - 1].at));
-  // clamp(6500 / N, 420, 780): ~6.5s of legs up to 15; past that the 420ms floor wins (25 legs: 10.5s).
-  const bound = n <= 15 ? BUILD_BUDGET_MS : n * GAP_MIN_MS;
+  // clamp(6500 / N, 260, 780): the legs take at most 6.5s at every size up to the 25-leg cap.
+  const bound = BUILD_BUDGET_MS;
   check(`schedule · ${n} legs: every leg lands once, in order, the legs in ${bound}ms`, lands.length === n && inOrder && lands[n - 1].at <= bound && done.at === lands[n - 1].at + Math.max(LAND_MS, ODDS_TWEEN_MS), `last leg=${lands[n - 1].at} end=${done.at}`);
   const statusFirst = steps.filter((s) => s.kind === "status").every((s) => s.at < lands[s.index].at && s.at > (s.index === 0 ? 0 : lands[s.index - 1].at));
   check(`schedule · ${n} legs: each status line comes between the last leg and the next`, statusFirst);

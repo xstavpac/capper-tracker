@@ -6,9 +6,10 @@
 
 // The analyzing step lasts at least this long, or until the server answers.
 export const ANALYZE_MIN_MS = 1000;
-// Per-leg gap: 780ms, shrinking for big parlays so the build stays near 6.5s.
+// Per-leg gap: 780ms, shrinking for big parlays so the legs never take more than 6.5s:
+// clamp(6500 / N, 260, 780) - 260ms x 25 legs (the cap) is exactly 6.5s.
 export const GAP_MAX_MS = 780;
-export const GAP_MIN_MS = 420;
+export const GAP_MIN_MS = 260;
 export const BUILD_BUDGET_MS = 6500;
 // The status line changes this far into a gap (about 55% of it before the leg lands).
 export const STATUS_AT = 0.45;
