@@ -103,21 +103,37 @@ async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: 
   }
   const raw = await res.json();
   const bookmakers: { key?: string; markets?: FanDuelMarket[] }[] = Array.isArray(raw?.bookmakers) ? raw.bookmakers : [];
-  return bookmakers.find((b) => b.key === "fanduel")?.markets ?? [];
+  const markets = bookmakers.find((b) => b.key === "fanduel")?.markets ?? [];
+  logThinResponse(ctx, bookmakers, markets);
+  return markets;
 }
 
-// A failed fetch is not kept: the next tap tries again.
+// What a 200 that carries less than was asked for looks like, so a "Not found" / "Line unavailable" that
+// resolves on a re-check can be told apart from a rate limit (a 429, logged above). Keys and counts only.
+function logThinResponse(ctx: { sportKey: string; eventId: string; marketKeys: string[] }, bookmakers: { key?: string }[], markets: FanDuelMarket[]) {
+  const returned = markets.map((m) => m.key);
+  const missing = ctx.marketKeys.filter((k) => !returned.includes(k));
+  if (markets.length > 0 && missing.length === 0) return;
+  console.warn(
+    LOG_TAG + " thin 200",
+    JSON.stringify({ ...ctx, bookmakerKeys: bookmakers.map((b) => b.key ?? null), returnedMarketKeys: returned, missingMarketKeys: missing, noFanDuelMarkets: markets.length === 0 })
+  );
+}
+
+// A failed fetch is not kept, and neither is an empty one (no events listed, or a 200 with no FanDuel markets):
+// an answer that thin is as likely a feed that hasn't caught up as a true "not offered", and keeping it for
+// CACHE_TTL_MS made a re-check inside the window read the same thin answer. The next tap tries again.
 function remember<T>(value: Promise<T | null>, forget: () => void): Promise<T | null> {
   value.then(
     (v) => {
-      if (v === null) forget();
+      if (v === null || (Array.isArray(v) && v.length === 0)) forget();
     },
     () => forget()
   );
   return value;
 }
 
-function oddsApiDeps(now: Date): FanDuelDeps {
+export function oddsApiDeps(now: Date): FanDuelDeps {
   const apiKey = process.env.ODDS_API_KEY;
   const at = now.getTime();
   dropExpired(at);
