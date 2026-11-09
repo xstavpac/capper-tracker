@@ -1498,8 +1498,8 @@ export const RESOLVABLE_SPORT_KEYS = [
   "basketball_wnba",
   "americanfootball_nfl",
   "americanfootball_ncaaf",
-  // NCAAB: picks stay PENDING for every period but FULL_GAME until halves
-  // grading lands (resolveOutcome's NCAAB-PR-C guard in grading.ts).
+  // NCAAB: FULL_GAME and FIRST_HALF grade; every other period stays PENDING
+  // (resolveOutcome's NCAAB period guard in grading.ts).
   "basketball_ncaab",
   // NHL: free score source (getNhlLiveScores) is confirmed live and has an
   // acceptance test; full-game grading needs no NHL-specific code (see
@@ -1729,7 +1729,7 @@ export type EspnGameSegments = {
   // Ordered per-quarter (football/basketball) or per-period (hockey)
   // {home, away} scores, straight from ESPN's summary-endpoint linescores.
   // Any overtime / shootout entries are left on the end (index >= 4 for
-  // football/basketball, >= 3 for hockey), so a Q4 / P3 read never picks
+  // football/basketball, >= 2 for NCAAB halves, >= 3 for hockey), so a Q4 / P3 read never picks
   // them up. null if the linescores are missing or any entry is non-numeric.
   linescore: { home: number; away: number }[] | null;
   // Q1+Q2 sum - the first-half score for football/basketball, grading's
@@ -1745,14 +1745,30 @@ export type EspnGameSegments = {
 // `header.competitions[0].competitors[].linescores[].displayValue` shape,
 // string values only (no numeric `value` field). Football/basketball have 4
 // quarter entries; NHL has 3 period entries, plus a 4th for OT and a 5th for
-// a shootout on games that reach them.
+// a shootout on games that reach them. NCAAB (confirmed live 2026-11-09, 33
+// regulation finals + 13 OT finals) has 2 HALF entries, plus one per OT on
+// the end - a 4-entry NCAAB linescore is a double-OT game, not quarters.
 const ESPN_SUMMARY_SPORT_PATH: Record<string, string> = {
   americanfootball_nfl: "football/nfl",
   americanfootball_ncaaf: "football/college-football",
   basketball_nba: "basketball/nba",
   basketball_wnba: "basketball/wnba",
+  basketball_ncaab: "basketball/mens-college-basketball",
   icehockey_nhl: "hockey/nhl",
 };
+
+// The first-half score from a per-segment linescore. Quarter sports sum Q1+Q2;
+// NCAAB's linescore[0] IS the first half (summing [0]+[1] there is all of
+// regulation). Both need >= 2 entries so a truncated array never passes as
+// final. NHL has no half. Exported pure for the acceptance test.
+export function firstHalfFromLinescore(
+  sportKey: string,
+  linescore: { home: number; away: number }[] | null
+): { home: number; away: number } | null {
+  if (sportKey === "icehockey_nhl" || !linescore || linescore.length < 2) return null;
+  if (sportKey === "basketball_ncaab") return { home: linescore[0].home, away: linescore[0].away };
+  return { home: linescore[0].home + linescore[1].home, away: linescore[0].away + linescore[1].away };
+}
 
 function parseEspnLinescores(data: any): { home: number; away: number }[] | null {
   const competitors = data?.header?.competitions?.[0]?.competitors ?? [];
@@ -1786,11 +1802,7 @@ export async function getEspnGameSegments(sportKey: string, eventId: string): Pr
 
   const data = await res.json();
   const linescore = parseEspnLinescores(data);
-  const firstHalf =
-    sportKey !== "icehockey_nhl" && linescore && linescore.length >= 2
-      ? { home: linescore[0].home + linescore[1].home, away: linescore[0].away + linescore[1].away }
-      : null;
-  return { linescore, firstHalf };
+  return { linescore, firstHalf: firstHalfFromLinescore(sportKey, linescore) };
 }
 
 export type NflPlayerTdStats = {
