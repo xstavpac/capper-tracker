@@ -417,10 +417,13 @@ export function pickPeriodFromText(betDetail: string | null, sport?: string | nu
 // Human-readable label for a Period / BetScope value, for pick-list badges
 // and the pending-picks triage reasons. Accepts a plain string so callers can
 // pass a Prisma Period without a cast.
-export function periodLabel(period: string): string {
+export function periodLabel(period: string, firstHalfPrefix: "F5" | "1H" | "1H / F5" = "1H / F5"): string {
   switch (period) {
     case "FIRST_HALF":
-      return "1st half / F5";
+      // Sport-aware: "F5" only for baseball, "1st half" for football/basketball.
+      // Callers pass firstHalfLabelPrefixForChipSet(chipSetForLeague(sport)); with
+      // no sport known the label stays the combined "1st half / F5".
+      return firstHalfPrefix === "F5" ? "F5" : firstHalfPrefix === "1H" ? "1st half" : "1st half / F5";
     case "SECOND_HALF":
       return "2nd half";
     case "FIRST_QUARTER":
