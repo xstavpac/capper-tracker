@@ -151,6 +151,7 @@ export function mixCountsText(legs: number, mix: PickMix, categories: readonly B
 }
 
 // A category that couldn't fill its share: "Only 3 Props legs qualified (mix asked for 4)."
-export function mixShortNote(category: BetCategory, got: number, wanted: number): string {
-  return `Only ${got} ${BET_CATEGORY_LABELS[category]} leg${got === 1 ? "" : "s"} qualified (mix asked for ${wanted}).`;
+export function mixShortNote(category: BetCategory, got: number, wanted: number, filledWith: readonly BetCategory[] = []): string {
+  const base = `Only ${got} ${BET_CATEGORY_LABELS[category]} leg${got === 1 ? "" : "s"} qualified (mix asked for ${wanted})`;
+  return filledWith.length > 0 ? `${base}; filled with ${filledWith.map((c) => BET_CATEGORY_LABELS[c]).join(" and ")}.` : `${base}.`;
 }

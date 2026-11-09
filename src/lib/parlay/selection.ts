@@ -203,6 +203,9 @@ export type FillRules<T, L> = {
   conflict: (a: L, b: L, gameId: string) => boolean;
   // Pick Mix: legs each category still wants, or null.
   quota?: Partial<Record<string, number>> | null;
+  // Pick Mix categories whose share is 0: never a leg, in the strict or the open
+  // pass, so a shortfall is never filled from a category the user turned off.
+  excludeCategories?: readonly string[];
   // One leg per game (with no leg yet) before any same-game leg.
   oneLegPerGameFirst: boolean;
 };
@@ -226,7 +229,9 @@ export function fillLegs<T, L>(order: readonly Ranked<T>[], rules: FillRules<T, 
     const leg = rules.legOf(c.item);
     return legs.every((l) => !rules.conflict(leg, l, c.gameId));
   };
-  const allows = (c: Ranked<T>, strict: boolean) => !strict || (c.category !== undefined && (left![c.category] ?? 0) > 0);
+  const off = new Set(rules.excludeCategories ?? []);
+  const allows = (c: Ranked<T>, strict: boolean) =>
+    !(c.category !== undefined && off.has(c.category)) && (!strict || (c.category !== undefined && (left![c.category] ?? 0) > 0));
   const take = (c: Ranked<T>) => {
     chosen.push(c);
     picked.add(c.id);
