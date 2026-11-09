@@ -145,17 +145,16 @@ async function main() {
   const inc = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
     nhlLeg("Avalanche over 1.5 1P", { betDetail: "Avalanche over 1.5 1P", line: 1.5, odds: -110, oddsSource: "DEFAULTED" }),
   ]);
-  // PR C: a full-game NHL total of 1.5 is no NHL line at all (ambiguous-line-plausibility: 4.5-8.5), so the final
-  // check stops it before the ladder is read - the stored game is the problem, not FanDuel's line.
+  // PR C: a full-game NHL total outside 4.5-8.5 (ambiguous-line-plausibility) is sent only on FanDuel's exact line.
+  // The ladder starts at 2.5, so 1.5 is never moved to it: the stored game is the problem, not FanDuel's line.
   check(
-    "FULL_GAME over 1.5 (really a 1P bet): Needs clarification before the ladder, not sent, no sent-as line",
+    "FULL_GAME over 1.5 (really a 1P bet): Needs clarification, not moved to the ladder's 2.5, not sent",
     [inc.by["Avalanche over 1.5 1P"].status, inc.by["Avalanche over 1.5 1P"].sentLine, inc.url],
     ["needs_clarification", null, null]
   );
   check("...and the reason names the impossible line, not 'Worse line'", inc.by["Avalanche over 1.5 1P"].reason, "Needs clarification — a total of 1.5 isn't a real NHL line, so this pick may be stored on the wrong game. Fix the pick and send again.");
-  // The price guard on the same live ladder, at a line NHL actually posts: Over 4.5 is -450. (The -1000 no-odds bar
-  // is proven on checkPrice directly above: the ladder's only prices past it, Over 2.5 / 3.5, are no NHL full-game
-  // line, and the final check now stops those first.)
+  // The price guard on the same live ladder: Over 4.5 is -450. Over 2.5 is outside the bounds but on the ladder, so
+  // it reaches the price check, where the -1000 no-odds bar stops its -6000.
   const exact = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
     nhlLeg("Over 4.5 stated", { betDetail: "Over 4.5", line: 4.5, odds: 150, oddsSource: "STATED" }),
     nhlLeg("Over 2.5 no odds", { betDetail: "Over 2.5", line: 2.5, odds: -110, oddsSource: "DEFAULTED" }),
@@ -165,7 +164,11 @@ async function main() {
     [exact.by["Over 4.5 stated"].status, exact.by["Over 4.5 stated"].sentLine, exact.by["Over 4.5 stated"].fanDuelOdds, exact.url],
     ["price_mismatch", null, null, null]
   );
-  check("a no-odds full-game Over 2.5 (-6000) is stopped as an impossible NHL line before any price", exact.by["Over 2.5 no odds"].status, "needs_clarification");
+  check(
+    "a no-odds full-game Over 2.5 (on the ladder, -6000) is Potentially incorrect market match, not sent",
+    [exact.by["Over 2.5 no odds"].status, exact.by["Over 2.5 no odds"].fanDuelOdds],
+    ["price_mismatch", null]
+  );
   check("a blocked leg shows the label, never 'Worse line'", [notSentDisplay(exact.by["Over 4.5 stated"]).label, /worse/i.test(JSON.stringify(exact.by["Over 4.5 stated"]))], ["Potentially incorrect market match", false]);
   const edge = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [nhlLeg("Over 4.5 no odds", { betDetail: "Over 4.5", line: 4.5, odds: -110, oddsSource: "DEFAULTED" })]);
   check("a no-odds Over 4.5 at the ladder's -450 is above the -1000 bar: sent", [edge.by["Over 4.5 no odds"].status, edge.by["Over 4.5 no odds"].fanDuelOdds], ["matched", -450]);

@@ -703,6 +703,14 @@ export function storedGameProblem(leg: FanDuelLegInput, now: Date): string | nul
   return plausible.length === 0 ? storedLineImplausible(leg.leagueName, BET_WORDS[leg.betType], line) : null;
 }
 
+// A full-game total outside the import's bounds can still be a real alternate total (NHL Over 3.5 / Under 9.5 sit on
+// FanDuel's alt ladder). Such a leg is not blocked up front: it is sent only if FanDuel lists that exact line for the
+// event, never moved to a nearer one; otherwise it keeps check 2's question. Out-of-season legs never get this far.
+function ladderCanSettle(leg: FanDuelLegInput, now: Date): boolean {
+  if (leg.betType !== "TOTAL" || leg.period !== "FULL_GAME" || !leg.sportKey) return false;
+  return !(SPORT_SEASON_CONFIG[leg.sportKey] && !isSportInSeason(leg.sportKey, now));
+}
+
 const NCAAF_KEY = "americanfootball_ncaaf";
 const NCAAB_KEY = "basketball_ncaab";
 const LEAGUE_LABEL: Record<string, string> = { [NCAAF_KEY]: "NCAAF", [NCAAB_KEY]: "NCAAB" };
@@ -793,6 +801,8 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   // game's leg goes on like any other: its ids and line are read from FanDuel
   // now, so a line that moved in play is sent as "adjusted" or says why not.
   const pending: { leg: FanDuelLegInput; target: FanDuelLegTarget }[] = [];
+  // Legs whose full-game total is outside the bounds: sent only on FanDuel's exact line, else this question.
+  const exactLadderOnly = new Map<string, string>();
   for (const leg of legs) {
     if (isGameOver(leg, deps.now) || (!leg.onBoard && hasKickedOff(leg.gameTime, deps.now))) {
       settle(leg, "over", leg.onBoard ? "Game is over." : "Game is over or no longer on the board.");
@@ -802,12 +812,17 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     // through it too - only its price gap is relaxed (checkPrice).
     const storedProblem = storedGameProblem(leg, deps.now);
     if (storedProblem) {
-      settle(leg, "needs_clarification", storedProblem);
-      continue;
+      if (!ladderCanSettle(leg, deps.now)) {
+        settle(leg, "needs_clarification", storedProblem);
+        continue;
+      }
+      exactLadderOnly.set(leg.pickId, storedProblem);
     }
     const target = fanDuelLegTarget(leg);
     if (!target.ok) {
-      settle(leg, target.status ?? "unsupported", target.reason);
+      const ladderQuestion = exactLadderOnly.get(leg.pickId);
+      if (ladderQuestion) settle(leg, "needs_clarification", ladderQuestion);
+      else settle(leg, target.status ?? "unsupported", target.reason);
       continue;
     }
     pending.push({ leg, target: target.target });
@@ -848,6 +863,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       // Not in the listings that were read is not "not on FanDuel" while the
       // preseason listing is unread.
       if (match.status === "not_found" && listing.incomplete) settle(leg, "error", FEED_DOWN);
+      else if (exactLadderOnly.has(leg.pickId)) settle(leg, "needs_clarification", exactLadderOnly.get(leg.pickId)!);
       else settle(leg, match.status, match.reason);
       continue;
     }
@@ -859,6 +875,12 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   // markets of only the legs whose line the main market didn't have.
   const selections = new Map<string, FanDuelSelection>();
   const finish = ({ leg, target }: Wanted, match: FanDuelMatch) => {
+    const ladderQuestion = exactLadderOnly.get(leg.pickId);
+    if (ladderQuestion && match.status !== "matched") {
+      // FanDuel doesn't list this exact line for the game: the stored line stays in question, never sent as another.
+      settle(leg, "needs_clarification", ladderQuestion);
+      return;
+    }
     let warning: string | null = null;
     if (match.status === "matched" || match.status === "adjusted") {
       // A price nowhere near the pick's is a different bet, whatever the market and line say: not sent, and never
@@ -891,7 +913,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
         outcomeName: "side" in target.outcome ? teamName(target.outcome.side) : target.outcome.name,
         ...(target.team ? { description: teamName(target.team) } : target.player ? { player: { name: target.player, sportKey: leg.sportKey ?? undefined } } : {}),
         point: target.point,
-        ...(nearest ? { maxLineMove: target.maxLineMove, easier: target.easier } : {}),
+        ...(nearest && !exactLadderOnly.has(leg.pickId) ? { maxLineMove: target.maxLineMove, easier: target.easier } : {}),
       });
 
       const mainKeys = Array.from(new Set(wanted.map((w) => w.target.marketKey))).sort();

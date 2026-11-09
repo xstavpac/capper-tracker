@@ -64,6 +64,23 @@ function board(e: FanDuelEvent): FanDuelMarket[] {
         { name: e.awayTeam, price: -110, point: 6.5, sid: String(n + 4), link: link(n + ".2", String(n + 4)) },
       ],
     },
+    {
+      key: "totals",
+      sid: null,
+      outcomes: [
+        { name: "Over", price: -110, point: 6.5, sid: String(n + 5), link: link(n + ".3", String(n + 5)) },
+        { name: "Under", price: -110, point: 6.5, sid: String(n + 6), link: link(n + ".3", String(n + 6)) },
+      ],
+    },
+    // FanDuel's NHL alt-total ladder: every .5 from 2.5 to 11.5 (no 1.5, no 13.5).
+    {
+      key: "alternate_totals",
+      sid: null,
+      outcomes: [2.5, 3.5, 4.5, 5.5, 7.5, 8.5, 9.5, 10.5, 11.5].flatMap((p, i) => [
+        { name: "Over", price: p === 3.5 ? -300 : 100, point: p, sid: String(n + 100 + 2 * i), link: link(n + ".4", String(n + 100 + 2 * i)) },
+        { name: "Under", price: p === 9.5 ? -400 : 100, point: p, sid: String(n + 101 + 2 * i), link: link(n + ".4", String(n + 101 + 2 * i)) },
+      ]),
+    },
   ];
 }
 
@@ -148,8 +165,14 @@ async function main() {
 
     const wrongLine = leg("asu-line", { betType: "TOTAL", betDetail: "Arkansas State over 145.5", line: 145.5, pickedSide: null, homeTeam: fb.homeTeam, awayTeam: fb.awayTeam, gameTime: fb.commenceTime });
     const r3 = await send([wrongLine], { [NCAAF]: [fb], [NCAAB]: [bb] });
-    check("a basketball total (145.5) stored on a football game: needs_clarification before any listing", [r3.by["asu-line"].status, r3.eventCalls], ["needs_clarification", []]);
-    has("...naming the line and the league", r3.by["asu-line"].reason, ["a total of 145.5 isn't a real NCAAF line"]);
+    // A full-game total outside the bounds now waits for FanDuel's ladder (section 6); this one is stopped earlier
+    // by the slate check (the school plays basketball today), so no market is ever read for it.
+    check("a basketball total (145.5) stored on a football game: needs_clarification, not sent, no market read", [r3.by["asu-line"].status, r3.url, r3.marketCalls], ["needs_clarification", null, []]);
+    check("storedGameProblem names the line and the league", storedGameProblem(wrongLine, NOW)?.includes("a total of 145.5 isn't a real NCAAF line"), true);
+    const sameDayLine = leg("asu-line-today", { betType: "TOTAL", betDetail: "Over 145.5", line: 145.5, pickedSide: null, homeTeam: "Home", awayTeam: "Away" });
+    const r4 = await send([sameDayLine], { [NCAAF]: [ev("asu-line-today", NCAAF, "Away", "Home", TODAY_7PM)] });
+    check("same-day 145.5 football total, not on FanDuel's board: needs_clarification with the line sentence", [r4.by["asu-line-today"].status, r4.url], ["needs_clarification", null]);
+    has("...naming the line and the league", r4.by["asu-line-today"].reason, ["a total of 145.5 isn't a real NCAAF line"]);
     check("a first-half total is not held to the full-game minimum", storedGameProblem(leg("h1", { betType: "TOTAL", period: "FIRST_HALF", line: 13.5 }), NOW), null);
   }
 
@@ -214,6 +237,25 @@ async function main() {
     const liveLine = leg("live", { betType: "TOTAL", line: 145.5, pickedSide: null, gameTime: "2026-11-08T19:00:00Z" });
     const r3 = await send([liveLine], { [NCAAF]: [ev("live", NCAAF, "Away", "Home", "2026-11-08T19:00:00Z")] });
     check("live leg with a basketball total on a football game: needs_clarification", r3.by.live.status, "needs_clarification");
+  }
+
+  console.log("---- 6. Full-game totals outside the bounds: sent only if FanDuel's ladder lists the exact line ----");
+  {
+    const game = ev("nhlt", NHL, "Boston Bruins", "Toronto Maple Leafs", TODAY_7PM);
+    const nhlTotal = (pickId: string, betDetail: string, line: number, odds: number) =>
+      leg(pickId, { sportKey: NHL, leagueName: "NHL", betType: "TOTAL", pickedSide: null, betDetail, line, odds, homeTeam: game.homeTeam, awayTeam: game.awayTeam });
+    const o35 = nhlTotal("o35", "Bruins/Leafs Over 3.5", 3.5, -300);
+    const o15 = nhlTotal("o15", "Bruins/Leafs Over 1.5", 1.5, -110);
+    const u95 = nhlTotal("u95", "Bruins/Leafs Under 9.5", 9.5, -400);
+    const o135 = nhlTotal("o135", "Bruins/Leafs Over 13.5", 13.5, -110);
+    const r = await send([o35, o15, u95, o135], { [NHL]: [game] });
+    check("Over 3.5 full game (on the alt ladder): matched, sent at its own line", [r.by.o35.status, r.by.o35.fanDuelOdds, r.by.o35.sentLine], ["matched", -300, null]);
+    check("Under 9.5 full game (on the alt ladder): matched", r.by.u95.status, "matched");
+    check("Over 1.5 full game (not on the ladder): still needs_clarification, never moved to 2.5", [r.by.o15.status, r.by.o15.sentLine], ["needs_clarification", null]);
+    has("the Over 1.5 question is check 2's line sentence", r.by.o15.reason, ["1.5", "NHL"]);
+    check("Over 13.5 full game (not on the ladder): needs_clarification", r.by.o135.status, "needs_clarification");
+    check("the link carries only the two ladder lines", (r.url?.match(/selectionId/g) ?? []).length, 2);
+    check("one listing, one event's main + alt markets read", [r.eventCalls, r.marketCalls], [[NHL], ["nhlt", "nhlt"]]);
   }
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
