@@ -5,7 +5,9 @@
 export const GATE_DEFAULT = 55;
 export const GATE_MIN = 0;
 export const GATE_MAX = 75;
-export const GATE_STEP = 5;
+export const GATE_STEP = 1;
+// Hybrid mode keeps its own coarser grid (its card and request check).
+export const HYBRID_GATE_STEP = 5;
 
 // The value if it is a whole step from GATE_MIN..GATE_MAX, else the default.
 export function normalizeMinWinPct(x: unknown): number {

@@ -13,7 +13,7 @@ export const MAX_PARLAY_LEGS = 25;
 // generated legs and the slip's own picks: of the picks chosen on one game the
 // best stay and the rest are named as left out (generator.ts). Nothing is
 // removed from the slip itself.
-export const MAX_LEGS_PER_GAME = 5;
+export const MAX_LEGS_PER_GAME = 10;
 
 // The fewest slip picks a parlay keeps at "Max legs per game": per game, as many
 // of the chosen picks as the max allows (an upper bound - a conflicting pick
