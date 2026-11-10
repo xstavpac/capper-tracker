@@ -10,7 +10,7 @@
 //   1. the pick's own line on the main market
 //   2. the pick's own line on FanDuel's alternate-lines market
 //   3. the nearest line for the same bet across both, within
-//      MAX_LINE_MOVE_POINTS / MAX_PROP_LINE_MOVE_RATIO - sent as "adjusted",
+//      MAX_LINE_MOVE_POINTS / MAX_PROP_LINE_MOVE - sent as "adjusted",
 //      with both lines and whether the sent one is harder to win
 // Two candidates, a line too far off, or a market FanDuel doesn't sell for the
 // league leaves the leg out and says why. The other side of a bet, or another
@@ -49,8 +49,18 @@ export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "
 // The pick's line and the FanDuel line sent in its place. `side` is null for a
 // spread, whose lines are signed for the pick's own team. `worse`: the sent
 // line is harder to win than the pick's (Over at a higher number, Under at a
-// lower one, a spread with fewer points).
-export type FanDuelSentLine = { pick: number; fanDuel: number; side: "Over" | "Under" | null; worse: boolean };
+// lower one, a spread with fewer points). `quality` is the same fact in three
+// states ("better" = easier to win than the pick, "same" = no change) and
+// `delta` is the signed distance (fanDuel - pick), so the UI can say
+// "Over 12.5, 5 higher" instead of a bare label.
+export type FanDuelLineQuality = "worse" | "better" | "same";
+export type FanDuelSentLine = { pick: number; fanDuel: number; side: "Over" | "Under" | null; worse: boolean; quality: FanDuelLineQuality; delta: number };
+
+// Is a sent line easier or harder to win than the pick's? `easier` is the direction a line gets easier.
+export function lineQuality(pick: number, sent: number, easier: "lower" | "higher" | undefined): FanDuelLineQuality {
+  if (sent === pick || easier === undefined) return "same";
+  return (easier === "higher") === sent > pick ? "better" : "worse";
+}
 
 export type FanDuelLegResult = {
   pickId: string;
@@ -171,15 +181,16 @@ export type FanDuelLegTarget = {
 
 // How far FanDuel's line may sit from the pick's and still be sent in its place, by sport and market.
 // Beyond it the leg is "Line unavailable" and is not sent.
-//   - basketball / football / other leagues' spreads and totals: 1.5 points
+//   - basketball / football / other leagues' spreads and full-game totals: no cap - the nearest line FanDuel has is
+//     sent, flagged with its distance and whether it is better or worse than the pick's
 //   - NHL and MLB full-game totals, and EVERY period / half / F5 total or team total: 0.5 (a one-goal
 //     move on a hockey period total is a different bet, not a slightly worse line)
 //   - NHL puck line and MLB run line: 0 - the pick's exact line or nothing
-// A yardage or receptions prop may move by this share of the pick's line.
-export const MAX_LINE_MOVE_POINTS = 1.5;
+// A player prop is likewise sent at the nearest line (no cap).
+export const MAX_LINE_MOVE_POINTS = Number.POSITIVE_INFINITY;
 export const MAX_LINE_MOVE_LOW_SCORING = 0.5;
 export const MAX_LINE_MOVE_PUCK_RUN_LINE = 0;
-export const MAX_PROP_LINE_MOVE_RATIO = 0.1;
+export const MAX_PROP_LINE_MOVE = Number.POSITIVE_INFINITY;
 
 // The pick's price against FanDuel's, as implied probabilities (no vig removed):
 //   gap >= MAX_IMPLIED_PROB_GAP        -> "Potentially incorrect market match": not sent. -110 (52%) against -400
@@ -343,7 +354,7 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
       outcome: { name: over ? "Over" : "Under" },
       player: prop.playerName,
       point: lineInfo.line,
-      ...(EXACT_LINE_PROP_KEYS.has(marketKey) ? {} : { maxLineMove: Math.abs(lineInfo.line) * MAX_PROP_LINE_MOVE_RATIO, easier: over ? "lower" : "higher" }),
+      ...(EXACT_LINE_PROP_KEYS.has(marketKey) ? {} : { maxLineMove: MAX_PROP_LINE_MOVE, easier: over ? "lower" : "higher" }),
     },
   };
 }
@@ -495,7 +506,7 @@ export type FanDuelMatchQuery = {
 
 export type FanDuelMatch =
   | { status: "matched"; selection: FanDuelSelection; price: number }
-  | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number; worse: boolean }
+  | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number; worse: boolean; quality: FanDuelLineQuality }
   | { status: "not_found" | "ambiguous" | "market_unavailable" | "line_unavailable"; reason: string };
 
 const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
@@ -588,8 +599,8 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
   const atNearest = Array.from(byLine.get(nearest)!.found.values());
   const tied = lines.length > 1 && move(lines[1]) === move(nearest);
   if (atNearest.length > 1 || (tied && !query.easier)) return { status: "ambiguous", reason: AMBIGUOUS };
-  const worse = query.easier === "lower" ? nearest > pickLine : nearest < pickLine;
-  return { status: "adjusted", ...atNearest[0], fanDuelLine: nearest, worse };
+  const quality = lineQuality(pickLine, nearest, query.easier);
+  return { status: "adjusted", ...atNearest[0], fanDuelLine: nearest, worse: quality === "worse", quality };
 }
 
 // ---------------------------------------------------------------------
@@ -898,7 +909,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     } else if (match.status === "adjusted") {
       selections.set(leg.pickId, match.selection);
       const side = "name" in target.outcome && (target.outcome.name === "Over" || target.outcome.name === "Under") ? target.outcome.name : null;
-      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse }, warning);
+      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse, quality: match.quality, delta: Math.round((match.fanDuelLine - target.point!) * 100) / 100 }, warning);
     } else {
       settle(leg, match.status, match.reason);
     }
