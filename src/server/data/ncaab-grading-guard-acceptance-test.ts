@@ -13,8 +13,9 @@
 // event 401920912, 2026-11-02): Grambling 89, Northern Illinois 87,
 // linescores [43, 46] and [36, 51] - first half 43-36.
 //
-// The guard: NCAAB grades FULL_GAME and FIRST_HALF only. Quarter periods would
-// read the halves as quarters, and SECOND_HALF (final - 1H) would fold in OT.
+// The guard: NCAAB grades FULL_GAME, FIRST_HALF and SECOND_HALF. Quarter periods
+// would read the halves as quarters. SECOND_HALF is final - 1H, so OT is folded
+// in, the same convention as NFL/NCAAF/NBA/WNBA.
 
 import { resolveOutcome, withSportKey } from "./grading";
 import { firstHalfFromLinescore } from "./odds";
@@ -134,8 +135,71 @@ const BC_GRADED = { ...BC_UMASS, firstFiveHomeScore: BC_FH?.home ?? null, firstF
 check("BC 1H ML: WIN once firstFive* = 37-35", resolveOutcome(BC_PICK, BC_GRADED), "WIN");
 check("BC 1H ML: the text alone (no stored pickedSide) also reads Boston College -> WIN", resolveOutcome({ ...BC_PICK, pickedSide: null }, BC_GRADED), "WIN");
 
-// ---- the guard: every other period stays PENDING for NCAAB ----
-check("NCAAB SECOND_HALF total stays PENDING", resolveOutcome(H2_OVER, ncaab), null);
+// ---- SECOND_HALF grades for NCAAB: final minus 1H, OT included ----
+// Grambling 89-87, 1H 43-36 -> 2H 46-51 (total 97).
+check("NCAAB 2H Over 80.5 wins (97)", resolveOutcome(H2_OVER, ncaab), "WIN");
+check("NCAAB 2H Under 80.5 loses (97)", resolveOutcome(pick("SECOND_HALF", "TOTAL", "2H Under 80.5", 80.5), ncaab), "LOSS");
+check("NCAAB 2H moneyline, stored AWAY: Northern Illinois won the 2nd half 51-46 -> WIN", resolveOutcome(pick("SECOND_HALF", "MONEYLINE", "2H Northern Illinois ML", null, "AWAY"), ncaab), "WIN");
+check("NCAAB 2H moneyline, stored HOME -> LOSS", resolveOutcome(pick("SECOND_HALF", "MONEYLINE", "2H Grambling ML", null, "HOME"), ncaab), "LOSS");
+check("NCAAB 2H spread: Northern Illinois -5 won the half by 5 -> PUSH", resolveOutcome(pick("SECOND_HALF", "SPREAD", "2H Northern Illinois -5", -5, "AWAY"), ncaab), "PUSH");
+check("NCAAB 2H pick on a row with no first-half score stays PENDING", resolveOutcome(H2_OVER, { ...ncaab, firstFiveHomeScore: null, firstFiveAwayScore: null }), null);
+
+// Real OT finals (ESPN, see above). The 2H must include the overtime periods.
+// Tarleton State at San Diego, Final/OT 96-90: 1H 32-46, so 2H incl. OT is
+// 64-44 (total 108). Regulation-only 2H would be 50-36 (total 86).
+const SD_OT = {
+  sportKey: NCAAB_SPORT_KEY,
+  homeTeam: "San Diego Toreros",
+  awayTeam: "Tarleton State Texans",
+  homeScore: 96,
+  awayScore: 90,
+  firstFiveHomeScore: 32,
+  firstFiveAwayScore: 46,
+  firstInningHomeScore: null,
+  firstInningAwayScore: null,
+  linescoreJson: ls([32, 50, 14], [46, 36, 8]) as never,
+};
+const sdPick = (betType: string, betDetail: string, line: number | null, side: "HOME" | "AWAY" | null = null) => ({
+  period: "SECOND_HALF",
+  betType,
+  betDetail,
+  line,
+  homeTeam: SD_OT.homeTeam,
+  pickedSide: side,
+});
+check("OT final: 2H Over 90.5 WINS (108 with OT; 86 regulation-only would lose)", resolveOutcome(sdPick("TOTAL", "2H Over 90.5", 90.5), SD_OT), "WIN");
+check("OT final: 2H Under 90.5 LOSES", resolveOutcome(sdPick("TOTAL", "2H Under 90.5", 90.5), SD_OT), "LOSS");
+check("OT final: 2H San Diego -19.5 covers (64-44 = 20 with OT; 14 in regulation)", resolveOutcome(sdPick("SPREAD", "2H San Diego -19.5", -19.5, "HOME"), SD_OT), "WIN");
+check("OT final: 2H Tarleton State +20 pushes (lost the 2H by 20)", resolveOutcome(sdPick("SPREAD", "2H Tarleton State +20", 20, "AWAY"), SD_OT), "PUSH");
+
+// Jacksonville State at South Alabama, Final/2OT 83-80: 1H 23-32 -> 2H incl.
+// both OTs is 60-48 (total 108, margin 12). Regulation-only 2H: 43-34 (77, 9).
+const SA_2OT = {
+  sportKey: NCAAB_SPORT_KEY,
+  homeTeam: "South Alabama Jaguars",
+  awayTeam: "Jacksonville State Gamecocks",
+  homeScore: 83,
+  awayScore: 80,
+  firstFiveHomeScore: 23,
+  firstFiveAwayScore: 32,
+  firstInningHomeScore: null,
+  firstInningAwayScore: null,
+  linescoreJson: SOUTH_ALABAMA_2OT as never,
+};
+const saPick = (betType: string, betDetail: string, line: number | null, side: "HOME" | "AWAY" | null = null) => ({
+  period: "SECOND_HALF",
+  betType,
+  betDetail,
+  line,
+  homeTeam: SA_2OT.homeTeam,
+  pickedSide: side,
+});
+check("2OT final: 2H Over 100.5 WINS (108 with both OTs; 77 regulation-only)", resolveOutcome(saPick("TOTAL", "2H Over 100.5", 100.5), SA_2OT), "WIN");
+check("2OT final: 2H South Alabama -10.5 COVERS (+12 with OT; +9 regulation-only would lose)", resolveOutcome(saPick("SPREAD", "2H South Alabama -10.5", -10.5, "HOME"), SA_2OT), "WIN");
+check("2OT final: 2H Jacksonville State +11.5 loses", resolveOutcome(saPick("SPREAD", "2H Jacksonville State +11.5", 11.5, "AWAY"), SA_2OT), "LOSS");
+check("2OT final: the full game still grades off 83-80 (163 > 162.5)", resolveOutcome({ ...saPick("TOTAL", "Over 162.5", 162.5), period: "FULL_GAME" }, SA_2OT), "WIN");
+
+// ---- the guard: quarter periods stay PENDING for NCAAB ----
 check("NCAAB FIRST_QUARTER total stays PENDING (linescore[0] is a half, not Q1)", resolveOutcome(Q1_OVER, ncaab), null);
 check("NCAAB SECOND_QUARTER stays PENDING", resolveOutcome(pick("SECOND_QUARTER", "TOTAL", "2Q Over 40.5", 40.5), ncaab), null);
 check("NCAAB THIRD_QUARTER stays PENDING (index 2 would be OT)", resolveOutcome(pick("THIRD_QUARTER", "TOTAL", "3Q Over 1.5", 1.5), ncaab), null);
@@ -148,8 +212,8 @@ check("control: same FIRST_QUARTER total grades under NBA (43 + 36 = 79 > 40.5)"
 check("control: a row with no sportKey (older callers) is unguarded", resolveOutcome(Q1_OVER, GAME), "WIN");
 
 // ---- Pending Picks reason mirrors the guard ----
-const NCAAB_ONLY_MSG = "NCAAB grading covers full game and 1st half only - needs manual grading";
-check("reason: NCAAB SECOND_HALF -> full-game-and-1H-only message", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB_SPORT_KEY, "1H"), NCAAB_ONLY_MSG);
+const NCAAB_ONLY_MSG = "NCAAB grading covers full game and halves only - needs manual grading";
+check("reason: NCAAB SECOND_HALF waiting on its score -> the normal 'not posted yet' wording", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB_SPORT_KEY, "1H"), "matched game, but the 2nd half score isn't posted for this game yet");
 check("reason: NCAAB FIRST_QUARTER -> same message", segmentUnmatchedReason("FIRST_QUARTER", "FIRST_QUARTER", NCAAB_SPORT_KEY, "1H"), NCAAB_ONLY_MSG);
 check(
   "reason: NCAAB FIRST_HALF waiting on its score -> the normal 'not posted yet' wording",

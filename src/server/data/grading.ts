@@ -1053,12 +1053,18 @@ export function resolveOutcome(
 
   // NCAAB plays two halves: its stored linescoreJson is [1H, 2H, OT...], and
   // firstFive* holds linescore[0] (firstHalfFromLinescore, odds.ts). Only
-  // FULL_GAME and FIRST_HALF grade. Every other period stays PENDING:
-  // segmentScore's quarter slots would read the halves as quarters (Q1 = 1H,
-  // Q3/Q4 = OT), and SECOND_HALF (final - 1H) would fold in OT, which isn't
-  // settled for NCAAB yet. Mirrored in segmentUnmatchedReason
-  // (lib/pending-pick-reason.ts).
-  if (game.sportKey === NCAAB_SPORT_KEY && pick.period !== "FULL_GAME" && pick.period !== "FIRST_HALF") return null;
+  // FULL_GAME, FIRST_HALF and SECOND_HALF grade. SECOND_HALF is final - 1H, so
+  // OT is folded in exactly as for NFL/NCAAF/NBA/WNBA (and as books settle a
+  // 2nd-half bet). Every other period stays PENDING: segmentScore's quarter
+  // slots would read the halves as quarters (Q1 = 1H, Q3/Q4 = OT). Mirrored in
+  // segmentUnmatchedReason (lib/pending-pick-reason.ts).
+  if (
+    game.sportKey === NCAAB_SPORT_KEY &&
+    pick.period !== "FULL_GAME" &&
+    pick.period !== "FIRST_HALF" &&
+    pick.period !== "SECOND_HALF"
+  )
+    return null;
 
   // NRFI has its own dedicated first-inning score source and ignores period.
   if (pick.betType === "NRFI") {

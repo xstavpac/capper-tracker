@@ -23,7 +23,7 @@ function expect(label: string, actual: unknown, expected: unknown) {
 }
 
 const NCAAB = "basketball_ncaab";
-const NEW_MSG = "NCAAB grading covers full game and 1st half only - needs manual grading";
+const NEW_MSG = "NCAAB grading covers full game and halves only - needs manual grading";
 const prefix = (sport: string) => firstHalfLabelPrefixForChipSet(chipSetForLeague(sport));
 
 // The reported pick: NCAAB, text "Boston College 1H moneyline", stored FIRST_HALF.
@@ -37,7 +37,7 @@ expect(
   segmentUnmatchedReason(bcScope, "FIRST_HALF", NCAAB, prefix("NCAAB")),
   "matched game, but the " + (prefix("NCAAB") === "1H / F5" ? "1st half / F5" : "1st half") + " score isn't posted for this game yet"
 );
-expect("NCAAB SECOND_HALF pick -> full-game-and-1H-only message", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB, prefix("NCAAB")), NEW_MSG);
+expect("NCAAB SECOND_HALF pick -> normal 'not posted yet' wording", segmentUnmatchedReason("SECOND_HALF", "SECOND_HALF", NCAAB, prefix("NCAAB")), "matched game, but the 2nd half score isn't posted for this game yet");
 expect("NCAAB quarter-stored pick -> new message", segmentUnmatchedReason("FIRST_QUARTER", "FIRST_QUARTER", NCAAB, prefix("NCAAB")), NEW_MSG);
 // Legacy row: text says 1H but stored FULL_GAME -> the NCAAB guard is keyed on the
 // STORED period (same as the grader), so this keeps the "predates" wording.
@@ -88,7 +88,7 @@ expect("full-game pick, no sport key -> null", segmentUnmatchedReason("FULL_GAME
 
 // Cross-check against the real grader: an NCAAB 1H pick with a first-half score
 // on the row grades like any other sport's, so it never reaches the reason code;
-// a SECOND_HALF one is still held by the guard (null even with the score).
+// a SECOND_HALF one grades too; a quarter pick is still held by the guard.
 const game = {
   homeTeam: "Boston College",
   awayTeam: "Opponent",
@@ -103,8 +103,13 @@ const game = {
 const pick = { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: bcText, homeTeam: "Boston College", line: null };
 expect("resolveOutcome: NCAAB 1H grades with a first-half score present (WIN)", resolveOutcome(pick, { ...game, sportKey: NCAAB }), "WIN");
 expect(
-  "resolveOutcome: NCAAB 2H still null with the score present (guard)",
+  "resolveOutcome: NCAAB 2H grades with a first-half score present (36-27 -> WIN)",
   resolveOutcome({ ...pick, period: "SECOND_HALF", betDetail: "Boston College 2H moneyline" }, { ...game, sportKey: NCAAB }),
+  "WIN"
+);
+expect(
+  "resolveOutcome: NCAAB quarter pick still null with the score present (guard)",
+  resolveOutcome({ ...pick, period: "FIRST_QUARTER", betDetail: "Boston College 1Q moneyline" }, { ...game, sportKey: NCAAB }),
   null
 );
 expect("resolveOutcome: NCAAF 1H on the same row grades (WIN)", resolveOutcome(pick, { ...game, sportKey: "americanfootball_ncaaf" }), "WIN");
