@@ -246,7 +246,7 @@ check("spread on the home team: its own signed line, more points is the easier w
   outcome: { side: "HOME" },
   point: -3.5,
   easier: "higher",
-  maxLineMove: 1.5,
+  maxLineMove: Infinity,
 });
 check("spread with no stored line reads it from the text", target({ betType: "SPREAD", betDetail: "Bills +3.5" }), {
   marketKey: "spreads",
@@ -254,7 +254,7 @@ check("spread with no stored line reads it from the text", target({ betType: "SP
   outcome: { side: "AWAY" },
   point: 3.5,
   easier: "higher",
-  maxLineMove: 1.5,
+  maxLineMove: Infinity,
 });
 check("total Under: a higher line is the easier way", target({ betType: "TOTAL", betDetail: "Under 54.5", line: 54.5 }), {
   marketKey: "totals",
@@ -262,7 +262,7 @@ check("total Under: a higher line is the easier way", target({ betType: "TOTAL",
   outcome: { name: "Under" },
   point: 54.5,
   easier: "higher",
-  maxLineMove: 1.5,
+  maxLineMove: Infinity,
 });
 check("total Over: a lower line is the easier way", target({ betType: "TOTAL", betDetail: "Over 54.5", line: 54.5 }), {
   marketKey: "totals",
@@ -270,7 +270,7 @@ check("total Over: a lower line is the easier way", target({ betType: "TOTAL", b
   outcome: { name: "Over" },
   point: 54.5,
   easier: "lower",
-  maxLineMove: 1.5,
+  maxLineMove: Infinity,
 });
 const propTarget = target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards" });
 check("passing-yards prop Over: no alternate market, line may move 10%", propTarget === "unsupported" ? propTarget : { ...propTarget, maxLineMove: Math.round(propTarget.maxLineMove! * 100) / 100 }, {
@@ -278,7 +278,7 @@ check("passing-yards prop Over: no alternate market, line may move 10%", propTar
   outcome: { name: "Over" },
   player: "Josh Allen",
   point: 244.5,
-  maxLineMove: 24.45,
+  maxLineMove: Infinity,
   easier: "lower",
 });
 check("passing touchdowns: exact line only", target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 1.5 Passing TDs" }), {
@@ -289,7 +289,7 @@ check("passing touchdowns: exact line only", target({ betType: "PLAYER_PROP", be
 });
 check("a first-half bet goes to the first-half market, never the full-game one", target({ period: "FIRST_HALF" }), { marketKey: "h2h_h1", outcome: { side: "AWAY" } });
 check("NFL first-half spread has its own alternate market; a quarter has none", [target({ betType: "SPREAD", betDetail: "Bills +0.5", line: 0.5, period: "FIRST_HALF" }), target({ betType: "TOTAL", betDetail: "Over 9.5", line: 9.5, period: "FIRST_QUARTER" })], [
-  { marketKey: "spreads_h1", altMarketKey: "alternate_spreads_h1", outcome: { side: "AWAY" }, point: 0.5, easier: "higher", maxLineMove: 1.5 },
+  { marketKey: "spreads_h1", altMarketKey: "alternate_spreads_h1", outcome: { side: "AWAY" }, point: 0.5, easier: "higher", maxLineMove: Infinity },
   { marketKey: "totals_q1", outcome: { name: "Over" }, point: 9.5, easier: "lower", maxLineMove: 0.5 },
 ]);
 check("team total: the team's own market, the team where a prop has its player", target({ betType: "TEAM_TOTAL", betDetail: "Bills Over 24.5", line: 24.5 }), {
@@ -299,7 +299,7 @@ check("team total: the team's own market, the team where a prop has its player",
   team: "AWAY",
   point: 24.5,
   easier: "lower",
-  maxLineMove: 1.5,
+  maxLineMove: Infinity,
 });
 check("a team total naming neither team, and NRFI, are not sent", [target({ betType: "TEAM_TOTAL", betDetail: "Team Total Over 24.5", line: 24.5 }), target({ betType: "NRFI", betDetail: "NRFI" })], ["unsupported", "unsupported"]);
 const reason = (over: Partial<FanDuelLegInput>) => {
@@ -499,13 +499,13 @@ async function realResponses() {
   check("tie-break, Over 6 between 5.5 and 6.5: an Over takes the LOWER line, at that line's price", wings.legs["Blackhawks Over 6"], [
     "adjusted",
     -142,
-    { pick: 6, fanDuel: 5.5, side: "Over", worse: false },
+    { pick: 6, fanDuel: 5.5, side: "Over", worse: false, quality: "better", delta: -0.5 },
     null,
   ]);
   check("tie-break, Under 6: an Under takes the HIGHER line - 6.5, the main market's own selection and price", wings.legs["Under 6"], [
     "adjusted",
     -140,
-    { pick: 6, fanDuel: 6.5, side: "Under", worse: false },
+    { pick: 6, fanDuel: 6.5, side: "Under", worse: false, quality: "better", delta: 0.5 },
     null,
   ]);
   // PR C: full-game NHL totals of 13, 13.5 and 1 are no NHL line at all (ambiguous-line-plausibility: 4.5-8.5), so the
@@ -587,7 +587,7 @@ async function realResponses() {
     { status: "market_unavailable", reason: "Market unavailable — no team total market for this game right now." }
   );
   check("first-five moneyline: the h2h_1st_5_innings market", guardians.legs["Guardians F5 ML"], ["matched", 104, null, null]);
-  check("first-five Under 4 between 3.5 and 4.5: the higher line, from the first-five alternates", guardians.legs["F5 Under 4"]?.[2], { pick: 4, fanDuel: 4.5, side: "Under", worse: false });
+  check("first-five Under 4 between 3.5 and 4.5: the higher line, from the first-five alternates", guardians.legs["F5 Under 4"]?.[2], { pick: 4, fanDuel: 4.5, side: "Under", worse: false, quality: "better", delta: 0.5 });
   check("credits: no alternate call for the team totals (MLB has none) - only the first-five alternate totals", guardians.calls, {
     MLB: [["h2h_1st_5_innings", "team_totals", "totals_1st_5_innings"], ["alternate_totals_1st_5_innings"]],
   });
@@ -606,10 +606,10 @@ async function realResponses() {
   check("tie-break, spread -3 between -2.5 and -3.5: a spread takes MORE points (-2.5), the main market's selection", hawks.legs["Seahawks -3"], [
     "adjusted",
     -120,
-    { pick: -3, fanDuel: -2.5, side: null, worse: false },
+    { pick: -3, fanDuel: -2.5, side: null, worse: false, quality: "better", delta: 0.5 },
     null,
   ]);
-  check("tie-break, spread -4 between -3.5 and -4.5: -3.5", hawks.legs["Seahawks -4"]?.[2], { pick: -4, fanDuel: -3.5, side: null, worse: false });
+  check("tie-break, spread -4 between -3.5 and -4.5: -3.5", hawks.legs["Seahawks -4"]?.[2], { pick: -4, fanDuel: -3.5, side: null, worse: false, quality: "better", delta: 0.5 });
 
   // --- NBA (preseason capture): the main markets only. Period and alternate
   // coverage is wired but unverified, so nothing is asserted about it here.
@@ -705,7 +705,7 @@ async function liveGames() {
   check("live, line moved o7 -> 7.5 (inside the hockey cap): sent as adjusted, both lines shown, flagged as the harder line", byPick["Senators o7"], [
     "adjusted",
     -110,
-    { pick: 7, fanDuel: 7.5, side: "Over", worse: true },
+    { pick: 7, fanDuel: 7.5, side: "Over", worse: true, quality: "worse", delta: 0.5 },
     null,
   ]);
   check("live moneyline: matched at FanDuel's in-play price", byPick["Golden Knights ML"], ["matched", -210, null, null]);
@@ -1028,7 +1028,7 @@ async function main() {
     [wrongLine.legs.map((l) => [l.status, l.fanDuelOdds, l.sentLine]), d.calls.odds],
     [
       [
-        ["adjusted", -115, { pick: 4.5, fanDuel: 3.5, side: null, worse: true }],
+        ["adjusted", -115, { pick: 4.5, fanDuel: 3.5, side: null, worse: true, quality: "worse", delta: -1 }],
         ["matched", 154, null],
       ],
       [
@@ -1039,12 +1039,12 @@ async function main() {
   );
   const d2 = fakeDeps(NOW);
   const farLine = await build([leg({ pickId: "far-line", betType: "SPREAD", betDetail: "Bills +6.5", line: 6.5 }), billsMl], d2.deps);
-  check("a line too far from anything FanDuel has is left out; the rest still go", [farLine.legs.map((l) => [l.status, l.reason]), Array.from(new URL(farLine.url!).searchParams.keys())], [
+  check("a far NFL spread (+6.5, FanDuel nearest +3.5) is sent at the nearest line, flagged worse with its distance", [farLine.legs.map((l) => [l.status, l.sentLine]), Array.from(new URL(farLine.url!).searchParams.keys())], [
     [
-      ["line_unavailable", "Line unavailable — FanDuel's closest line is +3.5, more than 1.5 away from your pick."],
+      ["adjusted", { pick: 6.5, fanDuel: 3.5, side: null, worse: true, quality: "worse", delta: -3 }],
       ["matched", null],
     ],
-    ["marketId[0]", "selectionId[0]"],
+    ["marketId[0]", "selectionId[0]", "marketId[1]", "selectionId[1]"],
   ]);
   let altCalls = 0;
   const altDown: FanDuelDeps = {

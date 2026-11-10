@@ -104,9 +104,9 @@ const collegeLeg = (pickId: string, league: "NCAAB" | "NCAAF", over: Partial<Fan
 async function main() {
   // ---- 1. The price math and the constants ----
   check("implied probability: -110, +100, -6000, +150", [-110, 100, -6000, 150].map((o) => Math.round(impliedProbability(o) * 1000) / 1000), [0.524, 0.5, 0.984, 0.4]);
-  check("the named constants", [MAX_IMPLIED_PROB_GAP, PRICE_MOVED_WARN_GAP, NO_ODDS_MIN_FANDUEL_PRICE, MAX_LINE_MOVE_POINTS, MAX_LINE_MOVE_LOW_SCORING, MAX_LINE_MOVE_PUCK_RUN_LINE], [0.25, 0.15, -1000, 1.5, 0.5, 0]);
+  check("the named constants", [MAX_IMPLIED_PROB_GAP, PRICE_MOVED_WARN_GAP, NO_ODDS_MIN_FANDUEL_PRICE, MAX_LINE_MOVE_POINTS, MAX_LINE_MOVE_LOW_SCORING, MAX_LINE_MOVE_PUCK_RUN_LINE], [0.25, 0.15, -1000, Infinity, 0.5, 0]);
   check(
-    "line-move caps: basketball/football 1.5; NHL/MLB full-game totals and every period total 0.5; puck/run line 0",
+    "line-move caps: basketball/football full-game and spreads uncapped; NHL/MLB full-game totals and every period total 0.5; puck/run line 0",
     [
       lineMoveCap("americanfootball_nfl", "totals", ""),
       lineMoveCap("americanfootball_nfl", "spreads", ""),
@@ -122,7 +122,7 @@ async function main() {
       lineMoveCap("baseball_mlb", "totals", "_1st_5_innings"),
       lineMoveCap("baseball_mlb", "spreads", ""),
     ],
-    [1.5, 1.5, 0.5, 1.5, 0.5, 1.5, 0.5, 0.5, 0.5, 0, 0.5, 0.5, 0]
+    [Infinity, Infinity, 0.5, Infinity, 0.5, Infinity, 0.5, 0.5, 0.5, 0, 0.5, 0.5, 0]
   );
 
   // ---- 2. checkPrice ----
@@ -180,10 +180,10 @@ async function main() {
     nhlLeg("Over 1.5 full game", { betDetail: "Over 1.5", line: 1.5 }),
     nhlLeg("Over 7", { betDetail: "Over 7", line: 7 }),
   ]);
-  check("hockey total 6 -> 6.5 still sends (Under: the easier line)", row(hockey.by["Oilers under 6"]).slice(0, 3), ["adjusted", -140, { pick: 6, fanDuel: 6.5, side: "Under", worse: false }]);
-  check("hockey Over 6 -> 5.5 still sends (the easier line)", row(hockey.by["Over 6"]).slice(0, 3), ["adjusted", -142, { pick: 6, fanDuel: 5.5, side: "Over", worse: false }]);
+  check("hockey total 6 -> 6.5 still sends (Under: the easier line)", row(hockey.by["Oilers under 6"]).slice(0, 3), ["adjusted", -140, { pick: 6, fanDuel: 6.5, side: "Under", worse: false, quality: "better", delta: 0.5 }]);
+  check("hockey Over 6 -> 5.5 still sends (the easier line)", row(hockey.by["Over 6"]).slice(0, 3), ["adjusted", -142, { pick: 6, fanDuel: 5.5, side: "Over", worse: false, quality: "better", delta: -0.5 }]);
   check("a full-game hockey total of 1.5 is never sent (PR C: no such NHL line - Needs clarification)", [hockey.by["Over 1.5 full game"].status, hockey.by["Over 1.5 full game"].sentLine], ["needs_clarification", null]);
-  check("hockey Over 7 -> 6.5 (the ladder's nearest, 0.5, easier) sends", row(hockey.by["Over 7"]).slice(0, 3), ["adjusted", 114, { pick: 7, fanDuel: 6.5, side: "Over", worse: false }]);
+  check("hockey Over 7 -> 6.5 (the ladder's nearest, 0.5, easier) sends", row(hockey.by["Over 7"]).slice(0, 3), ["adjusted", 114, { pick: 7, fanDuel: 6.5, side: "Over", worse: false, quality: "better", delta: -0.5 }]);
 
   // ---- 5. Puck line: exact or nothing ----
   const puck = await run("icehockey_nhl", NHL.home_team, NHL.away_team, nhlMarkets, [
@@ -205,13 +205,15 @@ async function main() {
   const bc = await runCollege("basketball_ncaab", totalsBoard(143.5), [
     collegeLeg("Boston College Under 144.5", "NCAAB", { betDetail: "Boston College Under 144.5", line: 144.5 }),
   ]);
-  check("Boston College Under 144.5 -> 143.5: sent, WORSE (harder to win)", row(bc.by["Boston College Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 143.5, side: "Under", worse: true }]);
+  check("Boston College Under 144.5 -> 143.5: sent, WORSE (harder to win)", row(bc.by["Boston College Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 143.5, side: "Under", worse: true, quality: "worse", delta: -1 }]);
   const dx = await runCollege("basketball_ncaab", totalsBoard(145.5), [collegeLeg("Drexel Under 144.5", "NCAAB", { betDetail: "Drexel Under 144.5", line: 144.5 })]);
-  check("Drexel Under 144.5 -> 145.5: sent, better", row(dx.by["Drexel Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 145.5, side: "Under", worse: false }]);
+  check("Drexel Under 144.5 -> 145.5: sent, better", row(dx.by["Drexel Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 145.5, side: "Under", worse: false, quality: "better", delta: 1 }]);
   const oh = await runCollege("americanfootball_ncaaf", totalsBoard(50.5), [collegeLeg("Ohio Over 51", "NCAAF", { betDetail: "Ohio Over 51", line: 51 })]);
-  check("Ohio Over 51 -> 50.5: sent, better", row(oh.by["Ohio Over 51"]).slice(0, 3), ["adjusted", -110, { pick: 51, fanDuel: 50.5, side: "Over", worse: false }]);
+  check("Ohio Over 51 -> 50.5: sent, better", row(oh.by["Ohio Over 51"]).slice(0, 3), ["adjusted", -110, { pick: 51, fanDuel: 50.5, side: "Over", worse: false, quality: "better", delta: -0.5 }]);
   const far = await runCollege("basketball_ncaab", totalsBoard(146.5), [collegeLeg("Under 144.5", "NCAAB", { betDetail: "Under 144.5", line: 144.5 })]);
-  check("a college total 2 away is past the 1.5 cap: Line unavailable", far.by["Under 144.5"].status, "line_unavailable");
+  check("a college total 2 away is no longer capped: sent at the nearest line, flagged better with its distance", row(far.by["Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 146.5, side: "Under", worse: false, quality: "better", delta: 2 }]);
+  const farWorse = await runCollege("basketball_ncaab", totalsBoard(139.5), [collegeLeg("Under 144.5", "NCAAB", { betDetail: "Under 144.5", line: 144.5 })]);
+  check("a college Under 5 lower: sent at the nearest line, flagged worse with its distance", row(farWorse.by["Under 144.5"]).slice(0, 3), ["adjusted", -110, { pick: 144.5, fanDuel: 139.5, side: "Under", worse: true, quality: "worse", delta: -5 }]);
 
   // ---- 7. Price band on a sent leg, and a blocked leg that would also have been a line move ----
   const warn = await runCollege("basketball_ncaab", totalsBoard(145.5, -250, 200), [collegeLeg("Over 145.5", "NCAAB", { betDetail: "Over 145.5", line: 145.5, odds: -110 })]);

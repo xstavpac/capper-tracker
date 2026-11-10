@@ -23,6 +23,9 @@ const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
 // "Over 6.5" / "Under 3.5"; a spread's line carries its sign ("+7.5").
 const formatLine = (line: number, side: FanDuelSentLine["side"]) => (side ? side + " " + line : (line > 0 ? "+" : "") + line);
 
+// "5.0 higher" / "0.5 lower": how far the sent number is from the pick's, so a moved line can't be mistaken for the pick's own.
+export const formatLineDistance = (delta: number) => Math.abs(delta).toFixed(1) + (delta > 0 ? " higher" : " lower");
+
 const isSent = (leg: FanDuelLegResult) => leg.status === "matched" || leg.status === "adjusted";
 
 function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string }) {
@@ -35,13 +38,22 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
           <p className="text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{betDetail}</p>
           {line && (
             <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
-              {line.worse && (
+              {line.quality === "worse" && (
                 <span className="mr-1.5 whitespace-nowrap rounded-full bg-red-100 px-1.5 py-0.5 font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
                   Worse line
                 </span>
               )}
-              <span className="font-semibold">Sent as {formatLine(line.fanDuel, line.side)}</span> · pick {formatLine(line.pick, line.side)}
-              {line.worse && <span className="text-red-700 dark:text-red-300"> · harder to win than your pick</span>}
+              {line.quality === "better" && (
+                <span className="mr-1.5 whitespace-nowrap rounded-full bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                  Better line
+                </span>
+              )}
+              <span className="font-semibold">
+                Sent as {formatLine(line.fanDuel, line.side)}, {formatLineDistance(line.delta)}
+              </span>{" "}
+              · pick {formatLine(line.pick, line.side)}
+              {line.quality === "worse" && <span className="text-red-700 dark:text-red-300"> · harder to win than your pick</span>}
+              {line.quality === "better" && <span className="text-emerald-700 dark:text-emerald-300"> · easier to win than your pick</span>}
             </p>
           )}
           {leg.warning && <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">{leg.warning}</p>}
@@ -103,7 +115,7 @@ export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { le
   const betDetailById = new Map(legs.map((l) => [l.pickId, l.betDetail]));
   const sent = result?.legs.filter(isSent) ?? [];
   const notSent = result?.legs.filter((l) => !isSent(l)) ?? [];
-  const worseLines = sent.filter((l) => l.sentLine?.worse).length;
+  const worseLines = sent.filter((l) => l.sentLine?.quality === "worse").length;
   const brokenGroups = result ? incompleteSameGameGroups(legs, new Set(sent.map((l) => l.pickId))) : [];
 
   return (

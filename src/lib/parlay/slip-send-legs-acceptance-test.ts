@@ -52,7 +52,7 @@ const billsMl = slipPick({ pickId: "bills-ml", betDetail: "Bills ML", odds: 150 
 const billsPlus4 = slipPick({ pickId: "bills-plus-4", betDetail: "Bills +4", betType: "SPREAD", rawBetDetail: "Bills +4", line: 4, odds: -110 });
 // NRFI has no FanDuel market here: not sent, with why.
 const nrfi = slipPick({ pickId: "nrfi", betDetail: "NRFI", betType: "NRFI", rawBetDetail: "NRFI", odds: -120 });
-// A total FanDuel has no line within reach of.
+// A total FanDuel has no line near: goes at the nearest line it has (no cap on an NFL total).
 const farTotal = slipPick({ pickId: "over-60", betDetail: "Over 60.5", betType: "TOTAL", rawBetDetail: "Over 60.5", line: 60.5, odds: -110 });
 
 // ---------------------------------------------------------------------
@@ -148,21 +148,21 @@ async function send(slip: ExpanderPick[]) {
   check(
     "nearest-line leg: +4 goes at FanDuel's +3.5, marked as the harder line",
     [nearest.legs[0].status, nearest.legs[0].fanDuelOdds, nearest.legs[0].sentLine, Array.from(new URL(nearest.url!).searchParams.values())],
-    ["adjusted", -115, { pick: 4, fanDuel: 3.5, side: null, worse: true }, ["42.612291278", "50203"]]
+    ["adjusted", -115, { pick: 4, fanDuel: 3.5, side: null, worse: true, quality: "worse", delta: -0.5 }, ["42.612291278", "50203"]]
   );
 
   const mixed = await send([billsPlus4, nrfi, billsMl, farTotal]);
   check(
-    "unmappable legs are listed as not sent with why; the rest still go, in slip order",
+    "unmappable legs are listed as not sent with why; the rest still go (a far NFL total at its nearest line), in slip order",
     mixed.legs.map((l) => [l.pickId, l.status]),
     [
       ["bills-plus-4", "adjusted"],
       ["nrfi", "unsupported"],
       ["bills-ml", "matched"],
-      ["over-60", "line_unavailable"],
+      ["over-60", "adjusted"],
     ]
   );
-  check("the link holds only the sent legs", Array.from(new URL(mixed.url!).searchParams.values()), ["42.612291278", "50203", "42.612291277", "50203"]);
+  check("the link holds only the sent legs", Array.from(new URL(mixed.url!).searchParams.values()), ["42.612291278", "50203", "42.612291277", "50203", "42.612291280", "7017916"]);
   check("each not-sent leg carries a reason", mixed.legs.filter((l) => l.status !== "matched" && l.status !== "adjusted").every((l) => !!l.reason), true);
 
   const nothing = await send([nrfi]);
