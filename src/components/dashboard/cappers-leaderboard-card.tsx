@@ -181,7 +181,9 @@ export function CappersLeaderboardCard({
               <tr className="border-b border-border-subtle text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <th className="w-10 max-[480px]:w-6 px-3 py-2 max-[480px]:px-1">#</th>
                 <th className="px-3 py-2 max-[480px]:px-1">Capper</th>
-                <th className="px-3 py-2 max-[480px]:hidden">Last 20</th>
+                <SortHeader params={params} sortKey="last20" className="px-3 py-2 max-[480px]:hidden">
+                  Last 20
+                </SortHeader>
                 <SortHeader params={params} sortKey="record" className="px-3 py-2 max-[480px]:hidden">
                   Record
                 </SortHeader>

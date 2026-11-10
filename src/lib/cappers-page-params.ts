@@ -20,6 +20,7 @@ export const SORT_OPTIONS = [
   { key: "win", label: "Win %" },
   { key: "units", label: "Units" },
   { key: "record", label: "Record" },
+  { key: "last20", label: "Last 20" },
 ] as const;
 export type CappersSortKey = (typeof SORT_OPTIONS)[number]["key"];
 // "desc" is high to low, the default for every column.

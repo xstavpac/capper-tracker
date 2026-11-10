@@ -237,8 +237,10 @@ const SORT_SQL: Record<CappersSortKey, { missing: Prisma.Sql; desc: Prisma.Sql; 
   roi: { missing: Prisma.sql`(decided = 0 OR roi_r = 'NaN'::float8)`, desc: Prisma.sql`roi_r DESC`, asc: Prisma.sql`roi_r ASC` },
   win: { missing: Prisma.sql`(wins + losses = 0)`, desc: Prisma.sql`win_pct DESC`, asc: Prisma.sql`win_pct ASC` },
   units: { missing: Prisma.sql`(decided = 0 OR net_r = 'NaN'::float8)`, desc: Prisma.sql`net_r DESC`, asc: Prisma.sql`net_r ASC` },
-  // Net record, then fewer losses (6-0 above 10-4).
-  record: { missing: Prisma.sql`(decided = 0)`, desc: Prisma.sql`(wins - losses) DESC, losses ASC`, asc: Prisma.sql`(wins - losses) ASC, losses DESC` },
+  // Total wins, then fewer losses (10-4 above 10-5).
+  record: { missing: Prisma.sql`(decided = 0)`, desc: Prisma.sql`wins DESC, losses ASC`, asc: Prisma.sql`wins ASC, losses DESC` },
+  // Net units over the last 20 graded picks (joined into `fil` as l20_net only for this sort).
+  last20: { missing: Prisma.sql`(l20_n IS NULL)`, desc: Prisma.sql`l20_net DESC`, asc: Prisma.sql`l20_net ASC` },
 };
 const sortSql = (sort: CappersSortKey, dir: SortDir = "desc") => Prisma.sql`${SORT_SQL[sort].missing}, ${SORT_SQL[sort][dir]}`;
 const TIE_BREAK = Prisma.sql`(net_r = 'NaN'::float8), net_r DESC, lower(name) COLLATE "C", name COLLATE "C", cid COLLATE "C"`;
@@ -517,11 +519,34 @@ export function buildCappersPageQuery(q: CappersPageQuery): Prisma.Sql {
   const filters: Prisma.Sql[] = [Prisma.sql`decided >= ${q.min}`];
   if (q.fav) filters.push(Prisma.sql`"isFavorite"`);
   if (q.q.trim()) filters.push(Prisma.sql`strpos(lower(name), lower(${q.q.trim()})) > 0`);
+  // Last 20 sort only: each roster capper's net units over their 20 most recent graded picks - the
+  // sparkline's window and delta (all time, whatever the time tab says), rounded like net_r. Not
+  // computed for any other sort.
+  const byLast20 = q.sort === "last20";
+  if (byLast20) {
+    add(
+      "l20",
+      Prisma.sql`
+        SELECT lcid, count(*)::int AS l20_n, ${round2HalfUpSql(Prisma.sql`sum(delta)`)} AS l20_net
+        FROM (
+          SELECT p."capperId" AS lcid,
+            CASE p.status WHEN 'WIN' THEN COALESCE(${WIN_UNITS}, 0) WHEN 'LOSS' THEN -p.units ELSE 0 END::float8 AS delta,
+            row_number() OVER (PARTITION BY p."capperId" ORDER BY ${ORDER_DESC}) AS rn
+          FROM picks p
+          WHERE p."userId" = ${q.userId} AND p."capperId" IN (SELECT id FROM roster) AND p.status IN ('WIN', 'LOSS', 'PUSH')
+        ) r
+        WHERE rn <= ${SPARKLINE_PICKS}
+        GROUP BY lcid
+      `
+    );
+  }
   add(
     "fil",
     Prisma.sql`
-      SELECT e_k.*, row_number() OVER (ORDER BY ${sortSql(q.sort, q.dir)}, ${TIE_BREAK}) AS rn, count(*) OVER () AS total
-      FROM e_k WHERE ${Prisma.join(filters, " AND ")}
+      SELECT e_k.*, ${byLast20 ? Prisma.sql`l20.l20_n, l20.l20_net,` : Prisma.empty}
+        row_number() OVER (ORDER BY ${sortSql(q.sort, q.dir)}, ${TIE_BREAK}) AS rn, count(*) OVER () AS total
+      FROM e_k ${byLast20 ? Prisma.sql`LEFT JOIN l20 ON l20.lcid = e_k.cid` : Prisma.empty}
+      WHERE ${Prisma.join(filters, " AND ")}
     `
   );
   const lastPage = Prisma.sql`GREATEST(1, CEIL(total::float8 / ${PAGE_SIZE}::float8)::int)`;

@@ -169,7 +169,20 @@ const decided = (e: LeaderboardEntry) => e.stats.wins + e.stats.losses + e.stats
 const cmpStr = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 // The leaderboard's order is compareCappers (unit-tested in lib/cappers-table-sort-acceptance-test.ts);
 // the SQL has to produce exactly it.
-const rank = (entries: LeaderboardEntry[], sort: CappersSortKey, dir: SortDir = "desc") => [...entries].sort(compareCappers(sort, dir));
+// Last 20 is not on a LeaderboardEntry, so its reference (net units over the last 20 graded picks, from
+// the raw picks) is passed in and attached for the comparator.
+const rank = (entries: LeaderboardEntry[], sort: CappersSortKey, dir: SortDir = "desc", last20?: Map<string, number>) => {
+  const cmp = compareCappers(sort, dir);
+  return entries
+    .map((e) => ({ e, s: { ...e, last20Net: last20?.get(e.capperId) ?? null } }))
+    .sort((a, b) => cmp(a.s, b.s))
+    .map((x) => x.e);
+};
+const last20Nets = async (userId: string) => {
+  const m = new Map<string, number>();
+  for (const [cid, sp] of await referenceSparklines(userId)) m.set(cid, Math.round(sp.points[sp.points.length - 1] * 100) / 100);
+  return m;
+};
 
 // Independent sparkline reference straight from the raw picks (comparePicksChronological is the JS
 // twin of the SQL order).
@@ -300,7 +313,12 @@ async function main() {
     { min: 0, sort: "units", dir: "asc", fav: false, q: "" },
     { min: 0, sort: "record", dir: "asc", fav: false, q: "" },
     { min: 0, sort: "win", fav: false, q: "" },
+    // Last 20: net units over the last 20 graded picks (all time, whatever the window), both directions.
+    { min: 0, sort: "last20", fav: false, q: "" },
+    { min: 0, sort: "last20", dir: "asc", fav: false, q: "" },
+    { min: 10, sort: "last20", fav: false, q: "" },
   ];
+  const l20Main = await last20Nets(U);
 
   for (const window of SCORECARD_WINDOWS as ScorecardWindow[]) {
     for (const league of leagues) {
@@ -313,7 +331,8 @@ async function main() {
         const expectedAll = rank(
           oldEntries.filter((e) => decided(e) >= c.min && (!c.fav || e.isFavorite) && (!q || e.name.toLowerCase().includes(q))),
           c.sort,
-          c.dir
+          c.dir,
+          l20Main
         );
         const last = Math.max(1, Math.ceil(expectedAll.length / PAGE_SIZE));
         const pages = last === 1 ? [1] : [1, 2, last];
@@ -461,9 +480,9 @@ async function main() {
   const topShown = top3.top.map((e) => e.stats.roi);
   check("odds 0: Standout leaves out non-finite units, rest ordered by net units", top3.top.every((e) => Number.isFinite(e.stats.netUnits) && e.stats.netUnits > 0) && top3.top.every((e, i) => i === 0 || top3.top[i - 1].stats.netUnits >= e.stats.netUnits), JSON.stringify(topShown));
 
-  // ============ Sort: Record is the net record, then fewer losses ============
-  // 9-1 (net 8) leads; 6-0 and 10-4 are both net 6 and the one with fewer losses is higher; a
-  // capper with no graded picks is last in both directions.
+  // ============ Sort: Record is total wins, then fewer losses ============
+  // 10-4 leads on wins even though 9-1 and 6-0 have a better net; a capper with no graded picks is
+  // last in both directions.
   const UR = await makeUser("record");
   const rec: Record<string, string> = {};
   const recPicks: PickSpec[] = [];
@@ -473,9 +492,29 @@ async function main() {
   }
   rec.none = await makeCapper(UR, "none", "Rec none");
   await addPicks(UR, recPicks);
-  for (const [dir, expected] of [["desc", ["9-1", "6-0", "10-4", "2-7", "none"]], ["asc", ["2-7", "10-4", "6-0", "9-1", "none"]]] as const) {
+  for (const [dir, expected] of [["desc", ["10-4", "9-1", "6-0", "2-7", "none"]], ["asc", ["2-7", "6-0", "9-1", "10-4", "none"]]] as const) {
     const got = (await getCappersPageData({ userId: UR, window: "ALL", min: 0, sort: "record", dir, fav: false, q: "", page: 1 })).rows.map((e) => e.name.slice(4));
-    same(`record ${dir}: net record, then fewer losses, no picks last`, got, expected);
+    same(`record ${dir}: total wins, then fewer losses, no picks last`, got, expected);
+  }
+
+  // ============ Sort: Last 20 is net units over the last 20 graded picks ============
+  // "old" won 30 then lost its latest 20 (last 20 = -20u, whatever its overall record); "hot" lost 10
+  // then won its latest 20 (+20u); "mid" has 3 wins at -110; "none" has no graded picks and is last in
+  // both directions. The main fixture above already runs last20 under every time tab against the raw-pick reference.
+  const UL = await makeUser("last20");
+  const l20: Record<string, string> = {};
+  const l20Picks: PickSpec[] = [];
+  l20.old = await makeCapper(UL, "old", "L20 old");
+  l20.hot = await makeCapper(UL, "hot", "L20 hot");
+  l20.mid = await makeCapper(UL, "mid", "L20 mid");
+  l20.none = await makeCapper(UL, "none", "L20 none");
+  for (let i = 0; i < 50; i++) l20Picks.push({ capperId: l20.old, status: i < 30 ? "WIN" : "LOSS", odds: 100, units: 1, gameTime: ago(100000 - i * 10) });
+  for (let i = 0; i < 30; i++) l20Picks.push({ capperId: l20.hot, status: i < 10 ? "LOSS" : "WIN", odds: 100, units: 1, gameTime: ago(100000 - i * 10) });
+  for (let i = 0; i < 3; i++) l20Picks.push({ capperId: l20.mid, status: "WIN", odds: -110, units: 1, gameTime: ago(100000 - i * 10) });
+  await addPicks(UL, l20Picks);
+  for (const [dir, expected] of [["desc", ["hot", "mid", "old", "none"]], ["asc", ["old", "mid", "hot", "none"]]] as const) {
+    const got = (await getCappersPageData({ userId: UL, window: "ALL", min: 0, sort: "last20", dir, fav: false, q: "", page: 1 })).rows.map((e) => e.name.slice(4));
+    same(`last20 ${dir}: last-20 net units, no picks last`, got, expected);
   }
 
   // ============ Winners this week ============

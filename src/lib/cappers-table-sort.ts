@@ -10,19 +10,23 @@ export type SortableCapper = {
   capperId: string;
   name: string;
   stats: { wins: number; losses: number; pushes: number; winPct: number; roi: number; netUnits: number };
+  // Net units over the capper's 20 most recent graded picks (the sparkline's window, whatever the
+  // time tab says); null / absent when they have no graded pick at all.
+  last20Net?: number | null;
 };
 
 // What a column sorts on, most significant number first - or null when the capper has nothing to
 // show in it: no graded picks at all, no win or loss to take a Win % of, or a NaN (an odds-0 win
 // can make ROI and units NaN, which has no place in an order).
-// Record is the net record (wins minus losses); on an equal net, fewer losses ranks higher, so
-// 6-0 is above 10-4.
+// Record is total wins; on equal wins, fewer losses ranks higher, so 10-4 is above 10-5.
+// Last 20 is net units over the 20 most recent graded picks, independent of the time tab.
 export function sortValues(e: SortableCapper, key: CappersSortKey): number[] | null {
   const { wins, losses, pushes, winPct, roi, netUnits } = e.stats;
+  if (key === "last20") return e.last20Net == null || Number.isNaN(e.last20Net) ? null : [e.last20Net];
   if (wins + losses + pushes === 0) return null;
   switch (key) {
     case "record":
-      return [wins - losses, -losses];
+      return [wins, -losses];
     case "win":
       return wins + losses > 0 ? [winPct] : null;
     case "roi":
