@@ -15,7 +15,7 @@ import { IncludePicksChips } from "@/components/parlay/pick-mix-control";
 import { formatGameTime } from "@/components/parlay/generator-result";
 import type { HybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import type { TargetedGame } from "@/lib/parlay/slip-state";
-import { GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote } from "@/lib/parlay/gate";
+import { GATE_MAX, GATE_MIN, HYBRID_GATE_STEP, gateRiskNote } from "@/lib/parlay/gate";
 import { HYBRID_MAX_LEGS, type Hybrid, type HybridBoxLegs, type HybridWidth } from "@/lib/parlay/hybrid";
 import type { HybridLinkResponse } from "@/lib/parlay/hybrid-link";
 import type { HybridGenerateSettings } from "@/lib/parlay/hybrid-request";
@@ -219,7 +219,7 @@ export function HybridControls({
                 value={form.minWinPct}
                 min={GATE_MIN}
                 max={GATE_MAX}
-                step={GATE_STEP}
+                step={HYBRID_GATE_STEP}
                 unit="%"
                 onChange={(n) => patchForm({ minWinPct: Math.max(GATE_MIN, Math.min(GATE_MAX, n)) })}
               />

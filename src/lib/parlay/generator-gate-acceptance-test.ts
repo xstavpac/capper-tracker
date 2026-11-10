@@ -94,18 +94,18 @@ const ladder = makeSnapshot([
 ]);
 
 // ---- the bounds and the normalizer ------------------------------------------
-check("bounds are 0..75 in steps of 5, default 55", [GATE_MIN, GATE_MAX, GATE_STEP, GATE_DEFAULT], [0, 75, 5, 55]);
-check("every whole step in range is kept", [0, 5, 40, 45, 50, 55, 60, 65, 70, 75].map(normalizeMinWinPct), [0, 5, 40, 45, 50, 55, 60, 65, 70, 75]);
+check("bounds are 0..75 in steps of 1, default 55", [GATE_MIN, GATE_MAX, GATE_STEP, GATE_DEFAULT], [0, 75, 1, 55]);
+check("every whole percent in range is kept", [0, 5, 40, 45, 50, 54, 55, 56, 57, 60, 65, 70, 75].map(normalizeMinWinPct), [0, 5, 40, 45, 50, 54, 55, 56, 57, 60, 65, 70, 75]);
 check(
   "anything else is 55 (below, above, off-step, fraction, NaN, Infinity, string, null, undefined, object)",
-  [80, 100, -5, -55, 57, 52.5, 55.5, NaN, Infinity, "60", "0", null, undefined, {}].map(normalizeMinWinPct),
+  [76, 100, -5, -55, 80, 52.5, 55.5, NaN, Infinity, "60", "0", null, undefined, {}].map(normalizeMinWinPct),
   Array(14).fill(55)
 );
 
 // ---- default equals today ----------------------------------------------------
 {
   const today = JSON.stringify(run(ladder));
-  check("default: setting absent, 55, undefined and invalid values are byte-identical", [55, undefined, 57, 12, 80, NaN].map((v) => JSON.stringify(run(ladder, { minWinPct: v as number }))).every((j) => j === today), true);
+  check("default: setting absent, 55, undefined and invalid values are byte-identical", [55, undefined, 76, -3, 80, NaN].map((v) => JSON.stringify(run(ladder, { minWinPct: v as number }))).every((j) => j === today), true);
   check("default gate: 55% exactly passes, 52% does not", ids(run(ladder)), ["p55", "p58", "p65", "p70"]);
 }
 

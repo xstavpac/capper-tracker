@@ -47,8 +47,8 @@ const ids = (legs: { pick: GeneratorPick }[]) => legs.map((l) => l.pick.pickId);
     buildSameGameLegs(a, games, cr, 3);
     check(`${n} legs asked: building same-game legs leaves Parlay A untouched`, JSON.stringify(a) === before, true);
   }
-  check("an unknown setting is read as 1", [0, 6, "2", null, undefined, 2.5].map(toMaxLegsPerGame), [1, 1, 1, 1, 1, 1]);
-  check("1 to 5 are read as themselves", [1, 2, 3, 4, 5].map(toMaxLegsPerGame), [1, 2, 3, 4, 5]);
+  check("an unknown setting is read as 1", [0, 11, "2", null, undefined, 2.5].map(toMaxLegsPerGame), [1, 1, 1, 1, 1, 1]);
+  check("1 to 10 are read as themselves", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(toMaxLegsPerGame), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 }
 
 // ============================================================================

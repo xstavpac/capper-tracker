@@ -41,7 +41,7 @@ const base: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL"
 const NBA_CASES: NbaCase[] = [
   { slate: "NBA", label: "NBA · 2 legs, 1 per game", settings: { ...base, legCount: 2 }, slip: [] },
   { slate: "NBA", label: "NBA · 6 legs, 3 per game", settings: { ...base, maxLegsPerGame: 3 }, slip: [] },
-  { slate: "NBA", label: "NBA · 10 legs, 6 per game, no gate", settings: { ...base, legCount: 10, maxLegsPerGame: 6, minWinPct: 0 }, slip: [] },
+  { slate: "NBA", label: "NBA · 10 legs, 5 per game, no gate", settings: { ...base, legCount: 10, maxLegsPerGame: 5, minWinPct: 0 }, slip: [] },
   { slate: "NBA", label: "NBA · Props only, 6 legs, 4 per game", settings: { ...base, include: ["PROPS"], maxLegsPerGame: 4 }, slip: [] },
   { slate: "NBA", label: "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)", settings: { ...base, legCount: 3, maxLegsPerGame: 3 }, slip: ["c-tatum-pts", "c-tatum-pts-285"] },
   { slate: "NBA", label: "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game", settings: { ...base, legCount: 4, maxLegsPerGame: 3 }, slip: ["c-under", "c-tatum-reb"] },

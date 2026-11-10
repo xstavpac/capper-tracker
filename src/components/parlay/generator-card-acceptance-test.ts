@@ -211,9 +211,9 @@ async function main() {
   await click(el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') ?? undefined);
   check("...clicking it changes nothing", ctx.isLeagueInScope("MLB"));
   const more = () => button("More: Max legs per game") as HTMLButtonElement;
-  for (let i = 0; i < 6; i++) await click(more());
+  for (let i = 0; i < 12; i++) await click(more());
   const shown = () => more().parentElement?.querySelector('[aria-live="polite"]')?.textContent;
-  check("Max legs per game: a −/+ stepper that stops at 5", more().disabled && shown() === "5", `shown=${shown()} disabled=${more().disabled}`);
+  check("Max legs per game: a −/+ stepper that stops at 10", more().disabled && shown() === "10", `shown=${shown()} disabled=${more().disabled}`);
   for (let i = 0; i < 4; i++) await click(button("Fewer: Max legs per game"));
 
   // ---- Generate: one request ----

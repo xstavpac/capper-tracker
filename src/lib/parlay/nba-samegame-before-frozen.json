@@ -1632,7 +1632,7 @@
     ],
     "coreSha": "d7e859bdeecfd358"
    },
-   "NBA · 10 legs, 6 per game, no gate": {
+   "NBA · 10 legs, 5 per game, no gate": {
     "legs": [
      "c-tatum-pts-285",
      "l-ml",
@@ -3552,7 +3552,7 @@
     ],
     "coreSha": "2c69e5d20c8cfa9f"
    },
-   "NBA · 10 legs, 6 per game, no gate": {
+   "NBA · 10 legs, 5 per game, no gate": {
     "legs": [
      "c-tatum-pts-285",
      "c-tatum-reb",

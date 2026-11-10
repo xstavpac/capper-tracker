@@ -213,13 +213,13 @@ const slate = makeSlate(BASE);
 }
 
 // ============================================================================
-// Max legs per game counts slip picks; caps 25 / 5.
+// Max legs per game counts slip picks; caps 25 / 10.
 // ============================================================================
 {
-  const props: Spec[] = Array.from({ length: 8 }, (_, i) => ({ id: `p${i}`, game: 0, bet: "PROP" as const, wl: [30 + i, 20], player: `Player ${"ABCDEFGH"[i]}` }));
+  const props: Spec[] = Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, game: 0, bet: "PROP" as const, wl: [30 + i, 20], player: `Player ${"ABCDEFGHIJKL"[i]}` }));
   const s = makeSlate([...props, { id: "slipProp", game: 0, bet: "PROP", wl: [5, 5], player: "Slip Player" }]);
-  const r = run(snap(s, ["slipProp"], ["G0"]), { legCount: 25, maxLegsPerGame: 9 });
-  check("max legs per game is held at 5, slip pick included", [r.legs.length, r.legs.filter((l) => l.gameId === "G0").length], [5, 5]);
+  const r = run(snap(s, ["slipProp"], ["G0"]), { legCount: 25, maxLegsPerGame: 12 });
+  check("max legs per game is held at 10, slip pick included", [r.legs.length, r.legs.filter((l) => l.gameId === "G0").length], [10, 10]);
   check("leg count is held at 25", run(snap(slate), { legCount: 40, maxLegsPerGame: 5 }).requested, 25);
   const two = makeSlate([...props, { id: "slipP2", game: 0, bet: "PROP", wl: [5, 5], player: "Other Slip" }, { id: "slipP3", game: 0, bet: "PROP", wl: [5, 5], player: "Third Slip" }]);
   const r2 = run(snap(two, ["slipP2", "slipP3"], ["G0"]), { legCount: 4, maxLegsPerGame: 2 });

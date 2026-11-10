@@ -325,7 +325,7 @@ export function buildSwapParlay(
 // never blocks the rest of its game or any other game. Nothing is padded:
 // when no candidate is left the parlay stays short.
 // ---------------------------------------------------------------------------
-export type MaxLegsPerGame = 1 | 2 | 3 | 4 | 5;
+export type MaxLegsPerGame = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 // Never trusted as sent: a whole number from 1 to MAX_LEGS_PER_GAME, else 1.
 export function toMaxLegsPerGame(value: unknown): MaxLegsPerGame {
