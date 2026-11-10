@@ -6,15 +6,13 @@
 // the other one - and there is no minimum sample. Consensus Hybrid's own cases
 // are in consensus-acceptance-test.ts. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/pick-record-best-of-two-acceptance-test.ts
-import { buildGeneratedParlay as engine, WILSON_RULES, GENERATOR_Z, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, GENERATOR_Z, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import { recordText } from "@/components/parlay/generator-result";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
-const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -111,16 +109,16 @@ check("ordering score is z = 1.5", GENERATOR_Z, 1.5);
   check("only an all-time record -> all-time", chosen(snap, "allOnly"), "OVERALL 60-40");
 }
 
-// A capper whose only record is 1-0 qualifies at the 55% gate and orders below a 60-40 capper.
+// A capper whose only record is 1-0 is a candidate at gate 0 (any graded record) and orders below a 60-40 capper.
 {
   const snap = makeSnapshot([
     { id: "onlyOne", game: 0, bet: "HOME", lg: [1, 0], all: [1, 0] },
     { id: "sixty", game: 0, bet: "OVER", lg: [60, 40], all: [60, 40] },
   ]);
   check("only 1-0 total: its record is 1-0", chosen(snap, "onlyOne"), "LEAGUE 1-0");
-  const one = buildGeneratedParlay(makeSnapshot([{ id: "onlyOne", game: 0, bet: "HOME", lg: [1, 0], all: [1, 0] }]), SETTINGS, null, NOW);
-  check("only 1-0 total: qualifies at the 55% gate", one.legs.map((l) => l.pick.pickId), ["onlyOne"]);
-  const both = buildGeneratedParlay(snap, { ...SETTINGS, legCount: 1 }, null, NOW);
+  const one = buildGeneratedParlay(makeSnapshot([{ id: "onlyOne", game: 0, bet: "HOME", lg: [1, 0], all: [1, 0] }]), { ...SETTINGS, minWinPct: 0 }, null, NOW);
+  check("only 1-0 total: qualifies at gate 0", one.legs.map((l) => l.pick.pickId), ["onlyOne"]);
+  const both = buildGeneratedParlay(snap, { ...SETTINGS, legCount: 1, minWinPct: 0 }, null, NOW);
   check("1-0 orders below 60-40 (one leg on their game: 60-40 gets it)", both.legs.map((l) => l.pick.pickId), ["sixty"]);
   check("scores: 1-0 below 60-40", wilsonLowerBound(1, 0, GENERATOR_Z) < wilsonLowerBound(60, 40, GENERATOR_Z), true);
 }
@@ -130,33 +128,33 @@ check("ordering score is z = 1.5", GENERATOR_Z, 1.5);
 // ============================================================================
 {
   const snap = makeSnapshot([
-    { id: "tie", game: 0, bet: "HOME", lg: [6, 4], all: [6, 4] },
-    // 50-40 in MLB (55.6%) scores above 2-0 all time, so 50-40 is the record.
-    { id: "noFallback", game: 1, bet: "HOME", lg: [50, 40], all: [2, 0] },
+    { id: "tie", game: 0, bet: "HOME", lg: [60, 40], all: [60, 40] },
+    // 110-80 in MLB (57.9%) scores above 2-0 all time, so 110-80 is the record.
+    { id: "noFallback", game: 1, bet: "HOME", lg: [110, 80], all: [2, 0] },
     { id: "hedged", game: 2, bet: "HOME", lg: [9, 1], all: [9, 1] },
     { id: "hedgeAlt", game: 2, bet: "OVER", lg: [1, 2], all: [60, 40] },
     { id: "flipped", game: 3, bet: "HOME", lg: [9, 1], all: [9, 1] },
     { id: "flipAlt", game: 3, bet: "AWAY", lg: [1, 0], all: [60, 40] },
   ]);
-  check("a tie goes to the in-league record", chosen(snap, "tie"), "LEAGUE 6-4");
+  check("a tie goes to the in-league record", chosen(snap, "tie"), "LEAGUE 60-40");
   check(
-    "scored at the z it is given: 50-40 in MLB at 1.5, 2-0 all time at 0.1",
+    "scored at the z it is given: 110-80 in MLB at 1.5, 2-0 all time at 0.1",
     [chosen(snap, "noFallback"), recordForGate(pickOf(snap, "noFallback"), snap.leagueRecords, snap.categoryRecords, 0.1)?.source],
-    ["LEAGUE 50-40", "OVERALL"]
+    ["LEAGUE 110-80", "OVERALL"]
   );
-  check("gate on the chosen record: 50-40 in MLB passes 55", buildGeneratedParlay(snap, SETTINGS, null, NOW).legs.some((l) => l.pick.pickId === "noFallback"), true);
+  check("gate on the chosen record: 110-80 in MLB passes 55", buildGeneratedParlay(snap, SETTINGS, null, NOW).legs.some((l) => l.pick.pickId === "noFallback"), true);
   check(
-    "gate on the chosen record only: 50-40 fails 60, and 2-0 all time is never tried",
+    "gate on the chosen record only: 110-80 fails 60, and 2-0 all time is never tried",
     buildGeneratedParlay(snap, { ...SETTINGS, minWinPct: 60 }, null, NOW).legs.some((l) => l.pick.pickId === "noFallback"),
     false
   );
 
   const built = buildGeneratedParlay(snap, SETTINGS, null, NOW);
   const leg = built.legs.find((l) => l.pick.pickId === "tie")!;
-  check("the leg's suffix names the chosen record: MLB", recordText(leg.record, leg.basis, leg.pick), "60% (6–4) · MLB favorite moneyline");
+  check("the leg's suffix names the chosen record: MLB", recordText(leg.record, leg.basis, leg.pick), "60% (60–40) · MLB favorite moneyline");
   const hedge = built.hedge.SUGGESTED.legs.find((l) => l.original.pick.pickId === "hedged")!;
   check("Hedge alternate on its better record (all time 60-40 over 1-2 in MLB)", hedge.swap && { to: hedge.swap.pick.pickId, basis: hedge.swap.basis, record: `${hedge.swap.record.wins}-${hedge.swap.record.losses}` }, { to: "hedgeAlt", basis: "OVERALL", record: "60-40" });
-  check("swap suffix names the chosen record: all leagues", hedge.swap && recordText(hedge.swap.record, hedge.swap.basis ?? "MARKET", hedge.swap.pick), "60% (60–40) · all leagues over");
+  check("swap suffix names the chosen record: all leagues", hedge.swap && recordText(hedge.swap.record, hedge.swap.basis ?? null, hedge.swap.pick), "60% (60–40) · all leagues over");
   const flip = built.contrarian.SUGGESTED.legs.find((l) => l.original.pick.pickId === "flipped")!;
   check("Contrarian alternate on its better record (all time 60-40 over 1-0 in MLB)", flip.swap && { to: flip.swap.pick.pickId, basis: flip.swap.basis }, { to: "flipAlt", basis: "OVERALL" });
 }

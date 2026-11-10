@@ -18,7 +18,7 @@
 //   g. FanDuel lines not available                 (the ladder notes)
 //   h. no usable FanDuel line                      (-600 floor / per-leg range)
 //   i. built but not used                          (the Total legs cap, or ranked lower)
-import { diagnoseConsensusGame, HYBRID_MIN_SUPPORTERS, type ConsensusPosition, type ConsensusRecords, type FamilyDiagnosis, type HybridScorer } from "@/lib/parlay/consensus";
+import { diagnoseConsensusGame, HYBRID_MIN_SUPPORTERS, type ConsensusPosition, type ConsensusRecords, type FamilyDiagnosis } from "@/lib/parlay/consensus";
 import type { GeneratorGame } from "@/lib/parlay/auto-generate";
 import type { HybridBoxReport, HybridResult } from "@/lib/parlay/hybrid";
 import { isWeeklySlateLeague } from "@/lib/live-category-picks";
@@ -110,8 +110,6 @@ export type ExplainInput = {
   report: HybridBoxReport;
   result: HybridResult;
   minSupporters?: number;
-  // The scorer the positions were built with (absent: HYBRID_SCORER), so the gate verdicts match.
-  scorer?: HybridScorer;
 };
 
 const s = (n: number) => (n === 1 ? "" : "s");
@@ -131,7 +129,7 @@ function consensusGate(
   input: ExplainInput,
   minSupporters: number
 ): { reason: HybridSkipReason; text: string } | null {
-  const d = diagnoseConsensusGame(game, input.records, { minWinPct: input.minWinPct, ...(input.scorer ? { scorer: input.scorer } : {}) });
+  const d = diagnoseConsensusGame(game, input.records, { minWinPct: input.minWinPct });
   const scope = input.filtered ? " in your Bet types" : "";
   if (d.side.posts + d.total.posts === 0) {
     const other = d.otherPicks;

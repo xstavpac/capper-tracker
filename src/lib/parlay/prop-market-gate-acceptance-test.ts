@@ -8,7 +8,7 @@
 // The generated leg names its market: "· NBA points", not "· NBA player prop".
 // Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/prop-market-gate-acceptance-test.ts
-import { buildGeneratedParlay as engine, WILSON_RULES, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { recordText } from "@/components/parlay/generator-result";
 import { propMarketRecordKey } from "@/lib/record-keys";
@@ -16,8 +16,6 @@ import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
-// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
-const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -96,9 +94,9 @@ const SPECS: Spec[] = [
   // A prop with no propMarket: no key, the category path as before.
   { id: "noKey", league: "NBA", betType: "PLAYER_PROP", propMarket: null, category: "TD_PROP", card: [[7, 3], [7, 3]] },
   // A game line: the category path as before.
-  { id: "line", league: "NBA", betType: "MONEYLINE", propMarket: null, category: "FAV_ML", card: [[6, 4], [6, 4]] },
+  { id: "line", league: "NBA", betType: "MONEYLINE", propMarket: null, category: "FAV_ML", card: [[60, 40], [60, 40]] },
   // NFL anytime TD: its own market now, not TD_PROP.
-  { id: "nflTd", league: "NFL", betType: "PLAYER_PROP", propMarket: "TD", category: "TD_PROP", card: [[9, 1], [9, 1]], market: { key: "FOOTBALL:TD", lg: [6, 4], all: [6, 4] } },
+  { id: "nflTd", league: "NFL", betType: "PLAYER_PROP", propMarket: "TD", category: "TD_PROP", card: [[9, 1], [9, 1]], market: { key: "FOOTBALL:TD", lg: [60, 40], all: [60, 40] } },
   // Best of two on a market: 1-2 in the NHL vs 60-40 all time -> all time.
   { id: "nhlSog", league: "NHL", betType: "PLAYER_PROP", propMarket: "SHOTS_ON_GOAL", category: "TD_PROP", card: [[0, 9], [0, 9]], market: { key: "HOCKEY:SHOTS_ON_GOAL", lg: [1, 2], all: [60, 40] } },
   // Best of two on a market: 8-0 in-league beats 60-40 all time.
@@ -115,10 +113,10 @@ const gate = (id: string, withProps = true) => {
 check("NBA points prop: its points record, not Player Props", gate("nbaPts"), "LEAGUE 8-2 BASKETBALL:POINTS");
 check("no record on the market: none (no TD_PROP fallback)", gate("noMarketRecord"), null);
 check("a prop with no key: the category path", gate("noKey"), "LEAGUE 7-3");
-check("a game line: the category path", gate("line"), "LEAGUE 6-4");
+check("a game line: the category path", gate("line"), "LEAGUE 60-40");
 check("a game line: the same with and without prop records", gate("line", false), gate("line"));
 check("a prop with no key: the same with and without prop records", gate("noKey", false), gate("noKey"));
-check("NFL TD: its own market, not TD_PROP", gate("nflTd"), "LEAGUE 6-4 FOOTBALL:TD");
+check("NFL TD: its own market, not TD_PROP", gate("nflTd"), "LEAGUE 60-40 FOOTBALL:TD");
 check("best of two on a market: all time", gate("nhlSog"), "OVERALL 60-40 HOCKEY:SHOTS_ON_GOAL");
 check("best of two on a market: in-league", gate("mlbKs"), "LEAGUE 8-0 BASEBALL:STRIKEOUTS");
 check("a keyed prop without the snapshot's prop records: none", gate("nbaPts", false), null);
@@ -136,10 +134,10 @@ const text = (id: string) => {
 };
 check("label: NBA points", text("nbaPts"), "80% (8–2) · NBA points");
 check("label: all leagues shots on goal", text("nhlSog"), "60% (60–40) · all leagues shots on goal");
-check("label: NFL touchdowns", text("nflTd"), "60% (6–4) · NFL touchdowns");
+check("label: NFL touchdowns", text("nflTd"), "60% (60–40) · NFL touchdowns");
 check("label: MLB pitcher strikeouts", text("mlbKs"), "100% (8–0) · MLB pitcher strikeouts");
 check("label: a prop with no key keeps the category noun", text("noKey"), "70% (7–3) · NBA player prop");
-check("label: a game line keeps the category noun", text("line"), "60% (6–4) · NBA favorite moneyline");
+check("label: a game line keeps the category noun", text("line"), "60% (60–40) · NBA favorite moneyline");
 check("only per-market legs carry propMarket", built.legs.filter((l) => l.propMarket).map((l) => l.pick.pickId).sort(), ["mlbKs", "nbaPts", "nflTd", "nhlSog"]);
 check("a swap's label names its market the same way", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "OVERALL", pickOf("nbaPts"), "BASKETBALL:POINTS"), "75% (6–2) · all leagues points");
 

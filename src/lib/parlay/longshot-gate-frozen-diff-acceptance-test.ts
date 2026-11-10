@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES, type GeneratedParlay } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratedParlay } from "@/lib/parlay/generator";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf, type NbaCase } from "@/lib/parlay/nba-samegame-frozen-cases";
 import { EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore } from "@/lib/parlay/scoring";
 import { SWAP_SCOPES } from "@/lib/parlay/swap-scope";
@@ -50,7 +50,7 @@ function capture(capturedFrom: string): Capture {
   for (const c of NBA_SAMEGAME_CASES) {
     for (const gate of LONGSHOT_GATES) {
       const { snap, score } = scorer(c, gate);
-      const p = buildGeneratedParlay(snap, { ...c.settings, minWinPct: gate }, null, nowOf(c), GENERATOR_RULES);
+      const p = buildGeneratedParlay(snap, { ...c.settings, minWinPct: gate }, null, nowOf(c));
       const rows = (s: GeneratedParlay["hedge"]["ALL"]): Row[] => s.legs.map((l) => [l.original.pick.pickId, l.swap?.pick.pickId ?? l.unchangedReason]);
       out.cases[caseKey(c, gate)] = {
         legs: p.legs.map((l) => l.pick.pickId),

@@ -20,7 +20,6 @@ import { EMPTY_PLATFORM_RATES, scorePickBestOfTwo, type PickScore } from "@/lib/
 import { capture, captureKey, type Capture, type CapturedCase } from "@/lib/parlay/hybrid-scoring-frozen-capture";
 import { caseSnapshot, FROZEN_CASES, FROZEN_GATES, type FrozenCase } from "@/lib/parlay/hybrid-scoring-frozen-cases";
 import { hybridScoringVersion } from "@/lib/parlay/run-trace";
-import { GENERATOR_RULES } from "@/lib/parlay/generator";
 
 const BEFORE = join(__dirname, "__fixtures__", "hybrid-scoring-before-frozen.json");
 const DIFF = join(__dirname, "hybrid-scoring-diff.txt");
@@ -33,15 +32,11 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const before = JSON.parse(readFileSync(BEFORE, "utf8")) as Capture;
-const wilson = capture("now, WILSON", "WILSON");
-const scoring = capture("now, SCORING", "SCORING");
+const scoring = capture("now, SCORING");
 
-// ---- The rollback is the before engine ----
+// ---- The before capture is frozen (origin/main 5f64665, when the WILSON rollback still existed) ----
 check("the before capture covers every case at every gate", Object.keys(before.cases).sort(), Object.keys(scoring.cases).sort());
-const wilsonMoved = Object.keys(before.cases).filter((k) => JSON.stringify(before.cases[k]) !== JSON.stringify(wilson.cases[k]));
-check("HYBRID_SCORER = WILSON is byte-identical to origin/main 5f64665 on every case and gate", wilsonMoved, []);
-check("WILSON's run-log version is the one before PR 8", hybridScoringVersion("WILSON", GENERATOR_RULES), "hybrid/LEAGUE_FIRST/z1.5/no-headcount/prop-market-records");
-const version = hybridScoringVersion("SCORING", GENERATOR_RULES);
+const version = hybridScoringVersion();
 check("SCORING's version names scoring.ts's rules and fits the 80-character intake", [version, version.length < 80], ["hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-rawgate-bo2-v2", true]);
 
 // ---- The diff ----
@@ -116,7 +111,7 @@ function postLines(c: FrozenCase, gate: number, games: Set<string>): string[] {
   return out;
 }
 const lines: string[] = [`Consensus Hybrid scoring frozen diff: ${before.capturedFrom} -> SCORING (${version}), gates ${FROZEN_GATES.join(" / ")}.`];
-lines.push(`HYBRID_SCORER = WILSON reproduces the before capture byte for byte on all ${Object.keys(before.cases).length} case/gate runs.`, "");
+lines.push(`The before capture is frozen from origin/main 5f64665, when the WILSON rollback still existed (removed in PR 9); ${Object.keys(before.cases).length} case/gate runs.`, "");
 lines.push("Legend: - position gone, + new, ~ changed. Post lines: + passes now (failed before), - fails now (passed before), blank = same verdict.", "");
 let moved = 0;
 for (const c of FROZEN_CASES) {

@@ -1,17 +1,15 @@
 // The adjustable win-rate gate (gate.ts, settings.minWinPct): 55 stays the
 // default, a lower value admits cappers the default rejects, a higher one
 // rejects cappers it admits, anything that isn't a whole 5-point step from 0
-// to 75 is 55, 0 is allowed (any capper with a graded record), Hedge and Contrarian honour it, LEGACY_RULES ignores it, and the
+// to 75 is 55, 0 is allowed (any capper with a graded record), Hedge and Contrarian honour it, and the
 // result is deterministic. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-gate-acceptance-test.ts
 import { readFileSync } from "node:fs";
-import { buildGeneratedParlay as engine, WILSON_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct } from "@/lib/parlay/gate";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
-const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -81,7 +79,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
 }
 
 const BASE: GeneratorSettings = { legCount: 5, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
-const run = (snap: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, rules = WILSON_RULES) => buildGeneratedParlay(snap, { ...BASE, ...over }, null, NOW, rules);
+const run = (snap: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}) => buildGeneratedParlay(snap, { ...BASE, ...over }, null, NOW);
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId).sort();
 
 // One capper per game: 52%, 55% exactly, 58%, 65%, 70% in the league.
@@ -106,14 +104,13 @@ check(
 {
   const today = JSON.stringify(run(ladder));
   check("default: setting absent, 55, undefined and invalid values are byte-identical", [55, undefined, 76, -3, 80, NaN].map((v) => JSON.stringify(run(ladder, { minWinPct: v as number }))).every((j) => j === today), true);
-  check("default gate: 55% exactly passes, 52% does not", ids(run(ladder)), ["p55", "p58", "p65", "p70"]);
+  check("default gate: the gate reads the shrunk record, so 11-9 (55% raw) no longer clears 55; 58% and up do, 52% does not", ids(run(ladder)), ["p58", "p65", "p70"]);
 }
 
 // ---- lower admits, higher rejects ---------------------------------------------
 check("lower (50) admits the 52% capper the default rejects", ids(run(ladder, { minWinPct: 50 })), ["p52", "p55", "p58", "p65", "p70"]);
-check("higher (60) rejects the 55% and 58% cappers the default admits", ids(run(ladder, { minWinPct: 60 })), ["p65", "p70"]);
+check("higher (60) rejects the cappers the default admits whose shrunk record is under 60", ids(run(ladder, { minWinPct: 60 })), []);
 check("higher (75) leaves nobody", ids(run(ladder, { minWinPct: 75 })), []);
-check("the gate is inclusive: exactly 65% passes at 65", ids(run(ladder, { minWinPct: 65 })), ["p65", "p70"]);
 check("45 admits all five", ids(run(ladder, { minWinPct: 45 })).length, 5);
 check("out of range (80, -5) falls back to 55, not to a stricter or looser gate", [80, -5].map((v) => ids(run(ladder, { minWinPct: v }))), [ids(run(ladder)), ids(run(ladder))]);
 
@@ -152,16 +149,9 @@ check("out of range (80, -5) falls back to 55, not to a stricter or looser gate"
     return l.swap ? l.swap.pick.pickId : l.unchangedReason;
   };
   const at = (g?: number) => run(snap, { legCount: 2, minWinPct: g });
-  check("default: Contrarian takes the 58% alternate, not the 52% one", [alt(at().contrarian.SUGGESTED, "a0"), alt(at().contrarian.SUGGESTED, "a1")], ["NO_ALTERNATE", "b1"]);
+  check("default: Contrarian takes the 58% alternate, not the 52% one", [alt(at().contrarian.SUGGESTED, "a0"), alt(at().contrarian.SUGGESTED, "a1")], ["NO_QUALIFYING_CONTRARIAN", "b1"]);
   check("lower (50): Contrarian takes the 52% alternate too", [alt(at(50).contrarian.SUGGESTED, "a0"), alt(at(50).contrarian.SUGGESTED, "a1")], ["b0", "b1"]);
-  check("higher (60): Contrarian drops the 58% alternate", [alt(at(60).contrarian.SUGGESTED, "a0"), alt(at(60).contrarian.SUGGESTED, "a1")], ["NO_ALTERNATE", "NO_ALTERNATE"]);
-}
-
-// ---- LEGACY_RULES ignores it ---------------------------------------------------------
-{
-  const legacy = JSON.stringify(run(ladder, {}, LEGACY_RULES));
-  check("LEGACY_RULES: 45, 50, 60, 75 and an invalid value are all byte-identical to the setting absent", [45, 50, 60, 75, 12].every((v) => JSON.stringify(run(ladder, { minWinPct: v }, LEGACY_RULES)) === legacy), true);
-  check("LEGACY_RULES still gates at 55", ids(run(ladder, { minWinPct: 45 }, LEGACY_RULES)), ["p55", "p58", "p65", "p70"]);
+  check("higher (60): Contrarian drops the 58% alternate", [alt(at(60).contrarian.SUGGESTED, "a0"), alt(at(60).contrarian.SUGGESTED, "a1")], ["NO_QUALIFYING_CONTRARIAN", "NO_QUALIFYING_CONTRARIAN"]);
 }
 
 // ---- deterministic when a lower gate lets many cappers in ------------------------------

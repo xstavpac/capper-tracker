@@ -15,9 +15,7 @@
 //     team merge into ONE position.
 //   - Total: a game + Over, or a game + Under.
 //
-// Supporters are DISTINCT cappers. Two scorers, picked by `scorer` (HYBRID_SCORER):
-//
-//   SCORING (the default): scoring.ts's best of two (scorePickBestOfTwo). The GATE is the
+// Supporters are DISTINCT cappers. Scoring is scoring.ts's best of two (scorePickBestOfTwo). The GATE is the
 //   capper's actual record: the post counts when the raw win % of EITHER record - this
 //   league alone, or every league - reaches the win-% lever (so an 8-0 in-league capper
 //   with a bad overall record counts, and so does 30-20 overall with 2-8 in-league). No
@@ -26,12 +24,8 @@
 //   better rankScore (an edge at the capper's OWN posted price, which can be negative; a
 //   FanDuel ladder rung never reaches this file) among only the records that cleared the
 //   gate. Ties: the larger decided sample, then id.
-//   WILSON (rollback, deleted in PR 9): pick-record.ts recordForGate - the league and the
-//   all-time category record, each by its Wilson lower bound at z, the higher kept, a tie
-//   to the league one; the raw win-% gate on that record only; the score is that Wilson
-//   lower bound at GENERATOR_Z (#324). Ties: the record's n, then id.
 //
-// Either way the record shown (PositionCapper.record) is recordForGate's. Only gated
+// The record shown (PositionCapper.record) is recordForGate's. Only gated
 // posts count at all: an ungated post is neither a supporter nor an opposer, and never
 // moves the anchor.
 //
@@ -64,17 +58,11 @@ import { GENERATOR_Z, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { hasKickedOff, isGameOver, OFF_BOARD_GAME_PREFIX } from "@/lib/parlay/game-over";
 import { recordForGate } from "@/lib/parlay/pick-record";
-import { qualifies, wilsonLowerBound } from "@/lib/parlay/qualification-core";
 import { describePick } from "@/lib/parlay/relationship-classifier";
 import { EMPTY_PLATFORM_RATES, scorePickBestOfTwo, type BestOfTwoScore, type ScoreModel, type ScoringContext } from "@/lib/parlay/scoring";
 
 // Supporters a position needs: one strong capper is enough.
 export const HYBRID_MIN_SUPPORTERS = 1;
-
-// Which scorer gates and ranks posts (see the header). WILSON is the rollback: flipping
-// this back restores the output and the run-log version from before scoring.ts.
-export type HybridScorer = "SCORING" | "WILSON";
-export const HYBRID_SCORER: HybridScorer = "SCORING";
 
 export type HybridMarket = "SPREAD" | "MONEYLINE" | "TOTAL";
 export type HybridFamily = "SIDE" | "TOTAL";
@@ -94,10 +82,9 @@ export type PositionCapper = {
   record: HybridRecord;
   // The market of the post whose record this is (the capper's best-scoring post on the position).
   recordMarket: HybridMarket;
-  // SCORING: the post's best-of-two rankScore (an edge at the capper's posted price).
-  // WILSON: the Wilson lower bound of `record` at the generator's z.
+  // The post's best-of-two rankScore (an edge at the capper's posted price).
   score: number;
-  // SCORING only: what scored the post - decided picks behind the score (the tie-break),
+  // What scored the post - decided picks behind the score (the tie-break),
   // which record won the best of two, and the model.
   scoring?: { decided: number; from: NonNullable<BestOfTwoScore["chosenFrom"]>; model: ScoreModel };
   // The hardest gated post on the position, as posted: its market and number
@@ -142,11 +129,9 @@ export type ConsensusOptions = {
   minWinPct?: number;
   minSupporters?: number;
   z?: number;
-  // Absent: HYBRID_SCORER.
-  scorer?: HybridScorer;
 };
 
-// What consensus reads from the snapshot. platformRates: SCORING's fallback rates (absent: the defaults).
+// What consensus reads from the snapshot. platformRates: scoring's fallback rates (absent: the defaults).
 export type ConsensusRecords = Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords" | "platformRates">;
 
 type Post = {
@@ -158,31 +143,27 @@ type Post = {
   endorsedLine: number;
   record: HybridRecord;
   score: number;
-  // SCORING only.
   scored?: BestOfTwoScore;
 };
 
-// How a build scores: the scorer, the gate, the z, and SCORING's context.
-type Scoring = { scorer: HybridScorer; gate: number; z: number; ctx: ScoringContext };
+// How a build scores: the gate, the z (the record shown), and scoring's context.
+type Scoring = { gate: number; z: number; ctx: ScoringContext };
 
-function scoringOf(snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "minWinPct" | "z" | "scorer">): Scoring {
+function scoringOf(snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "minWinPct" | "z">): Scoring {
   const gate = normalizeMinWinPct(opts.minWinPct ?? GATE_DEFAULT);
   return {
-    scorer: opts.scorer ?? HYBRID_SCORER,
     gate,
     z: opts.z ?? GENERATOR_Z,
     ctx: { leagueRecords: snapshot.leagueRecords, categoryRecords: snapshot.categoryRecords, propMarketRecords: snapshot.propMarketRecords, platformRates: snapshot.platformRates ?? EMPTY_PLATFORM_RATES, minWinPct: gate },
   };
 }
 
-// The post's gate verdict under its build's scorer.
-function postPasses(read: ReadPost, s: Scoring): boolean {
-  if (!read.record) return false;
-  if (s.scorer === "WILSON") return qualifies(read.record, s.gate);
-  return !!read.scored && read.scored.passes;
+// The post's gate verdict: a record, and scoring's raw-record gate.
+function postPasses(read: ReadPost): boolean {
+  return !!read.record && !!read.scored && read.scored.passes;
 }
 
-// The tie-break sample: SCORING's decided picks, WILSON's record n.
+// The tie-break sample: the decided picks behind the score, else the record n.
 const sampleOf = (decided: number | undefined, record: HybridRecord) => decided ?? record.n;
 const decidedOf = (p: { scored?: BestOfTwoScore }) => (p.scored?.chosen?.status === "SCORED" ? p.scored.chosen.decided : undefined);
 
@@ -228,7 +209,7 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusR
     }
   }
 
-  // The record shown: chosen at the same z WILSON's score uses.
+  // The record shown (recordForGate).
   const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, s.z, snapshot.propMarketRecords);
   const base = {
     pick,
@@ -239,7 +220,6 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusR
     endorsedLine,
     record: record && { wins: record.wins, losses: record.losses, n: record.n, winPct: record.winPct, source: record.source },
   };
-  if (s.scorer === "WILSON") return { ...base, score: record ? wilsonLowerBound(record.wins, record.losses, s.z) : 0 };
   // At the capper's posted price: the pick as posted is all scoring.ts is handed.
   const scored = scorePickBestOfTwo(pick, s.ctx);
   // A post that cleared neither record has no chosen score; it never passes the gate, so this number is never ranked.
@@ -250,7 +230,7 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusR
 // or it does not clear the gate.
 function toPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusRecords, s: Scoring): Post | null {
   const read = readPost(pick, game, snapshot, s);
-  if (!read || !postPasses(read, s)) return null;
+  if (!read || !postPasses(read)) return null;
   return read as Post;
 }
 
@@ -389,7 +369,7 @@ export type FamilyDiagnosis = {
 
 export type GameDiagnosis = { gameId: string; side: FamilyDiagnosis; total: FamilyDiagnosis; otherPicks: number };
 
-export function diagnoseConsensusGame(game: GeneratorGame, snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "minWinPct" | "z" | "scorer"> = {}): GameDiagnosis {
+export function diagnoseConsensusGame(game: GeneratorGame, snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "minWinPct" | "z"> = {}): GameDiagnosis {
   const scoring = scoringOf(snapshot, opts);
   const read: ReadPost[] = [];
   let otherPicks = 0;
@@ -408,7 +388,7 @@ export function diagnoseConsensusGame(game: GeneratorGame, snapshot: ConsensusRe
       }
     }
     // The same verdict toPost reads, so the diagnostic matches selection.
-    const gated = posts.filter((p) => postPasses(p, scoring));
+    const gated = posts.filter((p) => postPasses(p));
     const directionsOf = new Map<string, Set<string>>();
     for (const p of gated) directionsOf.set(p.pick.capperId, (directionsOf.get(p.pick.capperId) ?? new Set<string>()).add(p.direction));
     const gatedByDirection: Record<string, number> = {};

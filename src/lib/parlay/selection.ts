@@ -1,4 +1,4 @@
-// The Parlay Generator's selection layer (GENERATOR_RULES): which of the gated,
+// The Parlay Generator's selection layer: which of the gated,
 // scored candidates become legs. It reads lib/parlay/scoring.ts's edge directly
 // (rankScore, in percentage points) - no -110 equivalent, no tie bands. Pure and
 // client-safe: no React, no server imports, no storage.

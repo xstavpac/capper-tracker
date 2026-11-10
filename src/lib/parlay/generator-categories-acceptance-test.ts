@@ -4,7 +4,7 @@
 // and F5 moneylines, run lines, game and F5 totals, team totals, NRFI and
 // player props. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-categories-acceptance-test.ts
-import { buildGeneratedParlay, WILSON_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { betCategory } from "@/lib/parlay/bet-category";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
@@ -215,8 +215,6 @@ const full = snapOf(FULL);
   check("ML 0 / Spread 50 / Props 50, one prop: no Moneyline leg", off.legs.filter((l) => betCategory(l.pick) === "MONEYLINE").length, 0);
   check("...the shortfall is filled from Spread", off.legs.map((l) => l.pick.pickId).sort(), ["p5", "rl2", "rl3", "rl4"]);
   check("...and it says so", off.mixNotes, ["Only 1 Props leg qualified (mix asked for 2); filled with Spread."]);
-  const offScored = buildGeneratedParlay(offSnap, { ...BASE, legCount: 4, mix: zeroML }, null, NOW, WILSON_RULES);
-  check("...the same on the legacy (Wilson) path", offScored.legs.filter((l) => betCategory(l.pick) === "MONEYLINE").length, 0);
   const offShort = run(snapOf([
     { id: "ml0", game: 0, market: "ML", wl: [90, 10] },
     { id: "rl1", game: 1, market: "RL", wl: [70, 30] },

@@ -1,4 +1,4 @@
-// The selection layer (selection.ts, PR 5) through the engine (generator.ts, GENERATOR_RULES) and the
+// The selection layer (selection.ts, PR 5) through the engine (generator.ts) and the
 // session (generator-session.ts). Pure - no DB. Fixed seeds throughout, except the fresh-seed check.
 //   npx tsx src/lib/parlay/selection-acceptance-test.ts
 //
@@ -17,7 +17,7 @@
 //   6. Hedge: Generate takes the top alternate; Regenerate draws among the gated ones.
 //   7. Fresh seed: two "page loads" give different first Regenerates.
 //   8. The run log: extras.selection survives sanitizeClientTrace.
-import { buildGeneratedParlay, GENERATOR_RULES, type EngineLeg, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type EngineLeg, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import { createGeneratorSession } from "@/lib/parlay/generator-session";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
@@ -119,7 +119,7 @@ const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
 
 function run(snap: GeneratorSnapshot, settings: GeneratorSettings, variation: Variation | null): { p: GeneratedParlay; sel: SelectionTrace; trace: RunTrace } {
   const t = new TraceCollector({ mode: settings.fillFrom === "YOUR_PICKS_ONLY" ? "YOUR_PICKS" : "STANDARD", trigger: variation ? "REGENERATE" : "GENERATE", origin: "CLIENT", scoringVersion: "test", settings: {} }, false);
-  const p = buildGeneratedParlay(snap, settings, variation, NOW, GENERATOR_RULES, t);
+  const p = buildGeneratedParlay(snap, settings, variation, NOW, t);
   const trace = t.finish();
   return { p, sel: trace.extras.selection!, trace };
 }

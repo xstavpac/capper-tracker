@@ -60,7 +60,6 @@ export const REASON_LABELS = {
   IN_SLIP: "Alternate is in your slip",
   NO_OPPOSITE_SIDE: "No pick the classifier pairs with this leg",
   NO_ALTERNATE: "No alternate qualified",
-  NOT_MAJORITY: "Leg's side is not the majority (legacy rules)",
   NO_QUALIFYING_CONTRARIAN: "No pick on the other side of this bet qualified",
   // Consensus Hybrid
   NO_ELIGIBLE_PICKS: "No full-game side or total picks",
@@ -103,7 +102,7 @@ export type DropEntry = [number, StageKey, ReasonCode, string?];
 // Hedge / Contrarian, one entry per leg (Swap = All; the other settings only count).
 export type SwapLegTrace = {
   pick: PickRef;
-  // SWAPPED, or why not: OUT_OF_SCOPE / NO_ALTERNATE / NOT_MAJORITY.
+  // SWAPPED, or why not: OUT_OF_SCOPE / NO_ALTERNATE.
   result: "SWAPPED" | ReasonCode;
   // Alternate's rule when swapped.
   rule?: string;
@@ -186,7 +185,7 @@ export type RunExtras = {
   snapshot?: SnapshotStats;
   swaps?: SwapModeTrace[];
   scoring?: ScoringTrace;
-  // Standard / Your picks under GENERATOR_RULES: what selection.ts did.
+  // Standard / Your picks: what selection.ts did.
   selection?: SelectionTrace;
   ladders?: LadderStatus[];
   unavailableTargets?: number;
@@ -346,22 +345,17 @@ export function reconcileTrace(trace: Pick<RunTrace, "stages" | "reasons">): { s
   return bad;
 }
 
-// A Standard or Your-picks run under SCORING, with its selection layer and Contrarian's model
+// A Standard or Your-picks run, with its selection layer and Contrarian's model
 // (the other side of the same bet, scored like Hedge). Short: the intake keeps 80 characters.
 export const CONTRARIAN_VERSION = "contra-samebet-v1";
-export function standardScoringVersion(_parts: { z: number }): string {
+export function standardScoringVersion(): string {
   return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/${CONTRARIAN_VERSION}`;
 }
 
-// A Consensus Hybrid run. SCORING: the raw-record gate over scoring.ts's best of two, ordered by
-// rankScore at the capper's posted price (consensus.ts); WILSON: the rollback, named as before scoring.ts.
+// A Consensus Hybrid run: the raw-record gate over scoring.ts's best of two, ordered by
+// rankScore at the capper's posted price (consensus.ts).
 // hyb-rawgate-bo2-v2: v1 (hyb-posted-v1) gated on the shrunk, price-aware score and rule C.
 export const HYBRID_VERSION = "hyb-rawgate-bo2-v2";
-export function hybridScoringVersion(scorer: "SCORING" | "WILSON", wilsonParts: { recordScope: string; z: number; contrarianHeadcount: boolean }): string {
-  return scorer === "SCORING" ? `hybrid/${SCORING_VERSION}/${HYBRID_VERSION}` : scoringVersionOf(wilsonParts, true);
-}
-
-// Names the rules a run was scored under, for comparing runs across changes.
-export function scoringVersionOf(parts: { recordScope: string; z: number; contrarianHeadcount: boolean }, hybrid = false): string {
-  return [hybrid ? "hybrid" : "standard", parts.recordScope, "z" + parts.z, parts.contrarianHeadcount ? "headcount" : "no-headcount", "prop-market-records"].join("/");
+export function hybridScoringVersion(): string {
+  return `hybrid/${SCORING_VERSION}/${HYBRID_VERSION}`;
 }

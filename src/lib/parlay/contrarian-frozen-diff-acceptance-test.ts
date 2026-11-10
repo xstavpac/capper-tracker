@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES } from "@/lib/parlay/generator";
+import { buildGeneratedParlay } from "@/lib/parlay/generator";
 import { SWAP_SCOPES, type SwapScope } from "@/lib/parlay/swap-scope";
 import { TraceCollector, type SwapLegTrace } from "@/lib/parlay/run-trace";
 import { CONTRARIAN_MARKETS, contrarianMarketOf, isSoccer, YES_NO_PROP_MARKETS, type ContrarianMarket } from "@/lib/parlay/contrarian-match";
@@ -62,7 +62,7 @@ for (const c of CONTRARIAN_CASES) {
   const snap = snapshotOf(c);
   const betTypeOf = new Map(snap.games.flatMap((g) => g.picks).map((p) => [p.pickId, p.betType]));
   const trace = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: "test", settings: {} }, false);
-  const now = buildGeneratedParlay(snap, c.settings, null, nowOf(c), GENERATOR_RULES, trace);
+  const now = buildGeneratedParlay(snap, c.settings, null, nowOf(c), trace);
   const { contrarian, ...rest } = now;
   check(`${c.label} · Primary unchanged`, now.legs.map((l) => l.pick.pickId), was.legs);
   check(`${c.label} · Primary, Hedge and notes byte-identical`, sha(rest), was.restSha);

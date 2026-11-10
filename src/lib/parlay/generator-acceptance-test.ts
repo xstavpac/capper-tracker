@@ -8,9 +8,8 @@
 // snapshot it already has. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-acceptance-test.ts
 import {
-  buildGeneratedParlay as engine, WILSON_RULES,
+  buildGeneratedParlay,
   snapshotIsStale,
-  GAME_BAND,
   SNAPSHOT_MAX_AGE_MS,
   type GeneratedParlay,
   type GeneratorSettings,
@@ -19,8 +18,6 @@ import {
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
-// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
-const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -234,8 +231,8 @@ const slate = makeSlate(BASE);
   const r = run(snap(s, ["g0h"], ["G5", "G6", "G7", "G99"]), { legCount: 5, maxLegsPerGame: 2 });
   check("targeted: generated legs come only from G5/G6 (G7 has none) plus the slip's G0", Array.from(new Set(r.legs.map((l) => l.gameId))).sort(), ["G0", "G5", "G6"]);
   check("targeted: the stronger untargeted games are never used", r.legs.some((l) => ["G1", "G2", "G3", "G4"].includes(l.gameId)), false);
-  check("targeted: capacity text", r.capacityText, "5 max with 4 games targeted");
-  check("targeted: a target with no qualified picks is named", r.shortfall, ["New York Mets @ Atlanta Braves: no qualified picks — 3 of 4 games used"]);
+  check("targeted: capacity text", r.capacityText, "4 max with 4 games targeted");
+  check("targeted: a target with no qualified picks is named", r.shortfall, ["4 of 5 legs: the targeted games have no more picks that clear your bar and fit.", "New York Mets @ Atlanta Braves: no qualified picks — 3 of 4 games used"]);
   check("targeted: a target not in the pool is reported", r.unavailableTargets, ["G99"]);
 }
 
@@ -263,23 +260,19 @@ const slate = makeSlate(BASE);
   const primary = run(s, { legCount: 4 });
   const history: string[][] = [generatedIds(primary)];
   const seen = new Set([primary.generatedKey]);
-  const weakestPrimaryTop = Math.min(...primary.legs.filter((l) => l.source === "GENERATED").map((l) => l.wilsonLowerBound!));
   let allVaried = true;
   let allQualified = true;
-  let allComparable = true;
   let slipEvery = true;
   for (let i = 1; i <= 5; i++) {
     const r = run(s, { legCount: 4 }, { seed: i * 101, history: [...history].reverse() });
     if (r.variety !== "VARIED" || seen.has(r.generatedKey)) allVaried = false;
     seen.add(r.generatedKey);
     history.push(generatedIds(r));
-    if (!r.legs.every((l) => l.source === "SLIP" || (l.record!.winPct >= 55 && l.wilsonLowerBound! >= weakestPrimaryTop - GAME_BAND - 0.03))) allComparable = false;
     if (!r.legs.every((l) => l.source === "SLIP" || l.record!.winPct >= 55)) allQualified = false;
     if (!ids(r).includes("g7h")) slipEvery = false;
   }
   check("5 Regenerates: each differs from every parlay before it", allVaried, true);
   check("...every generated leg clears 55%", allQualified, true);
-  check("...every generated leg is within the band of the Primary's weakest", allComparable, true);
   check("...the slip pick is in every one", slipEvery, true);
   check("Generate after Regenerates is the Primary again", run(s, { legCount: 4 }).generatedKey, primary.generatedKey);
 

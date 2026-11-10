@@ -14,10 +14,10 @@
 //      rate limited; the session emits traces without changing its results.
 // Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/run-trace-acceptance-test.ts
-import { buildGeneratedParlay, GENERATOR_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import { createGeneratorSession } from "@/lib/parlay/generator-session";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
-import { MAX_DETAIL_ENTRIES, REASON_CODES, reconcileTrace, scoringVersionOf, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
+import { MAX_DETAIL_ENTRIES, REASON_CODES, reconcileTrace, standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 import { allowTrace, RATE_LIMIT_PER_MINUTE, sanitizeClientTrace } from "@/lib/parlay/run-trace-validate";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
@@ -113,10 +113,10 @@ function run(s: Scenario, trace?: TraceCollector): GeneratedParlay {
   const all = [...slip, ...snapshot.games.flatMap((g) => g.picks)];
   const chosen = s.slip ? (s.slipIds ? s.slipIds.map((id) => all.find((p) => p.pickId === id)!) : slip) : [];
   const snap: GeneratorSnapshot = { ...snapshot, slipPicks: chosen, targets: s.targets ?? [] };
-  return buildGeneratedParlay(snap, s.settings, s.variation ?? null, NOW, GENERATOR_RULES, trace);
+  return buildGeneratedParlay(snap, s.settings, s.variation ?? null, NOW, trace);
 }
 const collector = (s: Scenario, detail = true) =>
-  new TraceCollector({ mode: traceModeOf({ slipPickIds: s.slip ? ["x"] : [] }, s.settings), trigger: s.variation ? "REGENERATE" : "GENERATE", origin: "CLIENT", scoringVersion: scoringVersionOf(GENERATOR_RULES), settings: {} }, detail);
+  new TraceCollector({ mode: traceModeOf({ slipPickIds: s.slip ? ["x"] : [] }, s.settings), trigger: s.variation ? "REGENERATE" : "GENERATE", origin: "CLIENT", scoringVersion: standardScoringVersion(), settings: {} }, detail);
 
 // A collector whose every method throws - what a broken sink looks like to the engine.
 const hostile = (): TraceCollector => {

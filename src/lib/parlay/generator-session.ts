@@ -31,7 +31,7 @@
 //
 // Client-safe: no React, no server imports at runtime - the action is passed
 // in, so a test can count what it does.
-import { applyLegSwap, buildGeneratedParlay, GENERATOR_RULES, legAlternatives, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type LegAlternatives, type Variation } from "@/lib/parlay/generator";
+import { applyLegSwap, buildGeneratedParlay, legAlternatives, snapshotIsStale, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type LegAlternatives, type Variation } from "@/lib/parlay/generator";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
@@ -117,7 +117,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         mode: traceModeOf(inputs, settings),
         trigger: variation ? "REGENERATE" : "GENERATE",
         origin: "CLIENT",
-        scoringVersion: standardScoringVersion(GENERATOR_RULES),
+        scoringVersion: standardScoringVersion(),
         settings: traceSettings(inputs, settings),
       },
       !variation
@@ -130,7 +130,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
       }
     };
     try {
-      const parlay = buildGeneratedParlay(snapshot!, settings, variation, now(), GENERATOR_RULES, trace);
+      const parlay = buildGeneratedParlay(snapshot!, settings, variation, now(), trace);
       trace.extras({ snapshotBuiltAt: snapshot!.builtAt });
       emit();
       return parlay;
