@@ -33,11 +33,9 @@ function digest(h: Hybrid | null) {
   };
 }
 
-// `scorer` is passed through to consensus.ts and the diagnostic; before PR 8 neither read it.
-export function captureCase(c: FrozenCase, gate: number, scorer?: "SCORING" | "WILSON"): CapturedCase {
+export function captureCase(c: FrozenCase, gate: number): CapturedCase {
   const snap = caseSnapshot(c);
-  const opt = scorer ? { scorer } : {};
-  const ranked = buildConsensusPositions(snap as never, { now: SLATE_NOW, minWinPct: gate, ...opt } as never);
+  const ranked = buildConsensusPositions(snap as never, { now: SLATE_NOW, minWinPct: gate } as never);
   const candidateEvents = chooseCandidateEvents(ranked, c.maxLegs, c.boxLegs);
   const priced = new Set(candidateEvents);
   const positions = ranked.filter((p) => priced.has(p.eventId));
@@ -54,7 +52,6 @@ export function captureCase(c: FrozenCase, gate: number, scorer?: "SCORING" | "W
     notes: [],
     report,
     result,
-    ...opt,
   } as never);
   return JSON.parse(
     JSON.stringify({
@@ -74,9 +71,9 @@ export function captureCase(c: FrozenCase, gate: number, scorer?: "SCORING" | "W
   );
 }
 
-export function capture(capturedFrom: string, scorer?: "SCORING" | "WILSON"): Capture {
+export function capture(capturedFrom: string): Capture {
   const cases: Record<string, CapturedCase> = {};
-  for (const c of FROZEN_CASES) for (const gate of FROZEN_GATES) cases[captureKey(c, gate)] = captureCase(c, gate, scorer);
+  for (const c of FROZEN_CASES) for (const gate of FROZEN_GATES) cases[captureKey(c, gate)] = captureCase(c, gate);
   return { capturedFrom, cases };
 }
 

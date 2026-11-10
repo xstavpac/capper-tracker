@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES } from "@/lib/parlay/generator";
+import { buildGeneratedParlay } from "@/lib/parlay/generator";
 import { betKeyOf } from "@/lib/parlay/selection";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf } from "@/lib/parlay/nba-samegame-frozen-cases";
 
@@ -30,7 +30,7 @@ const now: Capture = { cases: {}, betKeys: {} };
 for (const c of NBA_SAMEGAME_CASES) {
   const snap = snapshotOf(c);
   for (const pk of snap.games.flatMap((g) => g.picks)) if (pk.betType === "PLAYER_PROP") now.betKeys[`${c.slate}:${pk.pickId}`] = betKeyOf(pk);
-  const p = buildGeneratedParlay(snap, c.settings, null, nowOf(c), GENERATOR_RULES);
+  const p = buildGeneratedParlay(snap, c.settings, null, nowOf(c));
   const { historyBetKeys, ...core } = p;
   const row = (s: typeof p.hedge.ALL): Row[] => s.legs.map((l) => [l.original.pick.pickId, l.swap?.pick.pickId ?? l.unchangedReason]);
   now.cases[c.label] = { legs: p.legs.map((l) => l.pick.pickId), dropped: p.dropped.map((d) => [d.pickId, d.reason]), hedge: row(p.hedge.ALL), contrarian: row(p.contrarian.ALL), historyBetKeys: historyBetKeys ?? null, coreSha: sha(core) };

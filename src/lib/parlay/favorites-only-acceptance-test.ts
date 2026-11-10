@@ -11,10 +11,10 @@
 //   4. The run log counts what the star removed (FILTER_FAVORITES), and still reconciles.
 //   5. The request parser's normalizer: only a literal true is on. The copy and the memory.
 import { readFileSync } from "node:fs";
-import { buildGeneratedParlay, GENERATOR_RULES, keepsFavorite, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, keepsFavorite, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import { FAVORITES_EMPTY, normalizeFavoritesOnly, readStoredFavoritesOnly, writeStoredFavoritesOnly } from "@/lib/parlay/favorites-only";
 import { legsNote } from "@/lib/parlay/subset-ui";
-import { reconcileTrace, scoringVersionOf, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
+import { reconcileTrace, standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 import { traceSettings } from "@/lib/parlay/generator-trace";
 import { sanitizeClientTrace } from "@/lib/parlay/run-trace-validate";
 import type { SelectionMode } from "@/lib/parlay/selection";
@@ -97,7 +97,7 @@ function makeSnapshot(opts: { slipIds?: string[]; favorite?: (g: number, k: Kind
 const SLATE = makeSnapshot();
 const base = (legCount: number, maxLegsPerGame = 2): GeneratorSettings => ({ legCount, maxLegsPerGame, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" });
 const on = (s: GeneratorSettings): GeneratorSettings => ({ ...s, favoritesOnly: true });
-const build = (snap: GeneratorSnapshot, s: GeneratorSettings, v: Variation | null = null, trace?: TraceCollector) => buildGeneratedParlay(snap, s, v, NOW, GENERATOR_RULES, trace);
+const build = (snap: GeneratorSnapshot, s: GeneratorSettings, v: Variation | null = null, trace?: TraceCollector) => buildGeneratedParlay(snap, s, v, NOW, trace);
 const variations = (gen: GeneratedParlay): Variation[] =>
   (["DIVERSIFIED", "EXPLORE"] as SelectionMode[]).flatMap((mode) => Array.from({ length: 200 }, (_, i) => ({ seed: i + 1, history: [gen.historyIds], mode })));
 
@@ -191,7 +191,7 @@ const unflagged = (p: GeneratedParlay) => JSON.stringify(p, (k, v) => (k === "ca
 // 4. The run log
 // ============================================================================
 function traced(s: GeneratorSettings): RunTrace {
-  const t = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: scoringVersionOf(GENERATOR_RULES), settings: traceSettings({ leagues: ["MLB"], slipPickIds: [], targets: [] }, s) }, true);
+  const t = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: standardScoringVersion(), settings: traceSettings({ leagues: ["MLB"], slipPickIds: [], targets: [] }, s) }, true);
   build(SLATE, s, null, t);
   return t.finish();
 }

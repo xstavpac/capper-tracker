@@ -1,8 +1,7 @@
 // The Parlay Generator's one scoring module: a pick goes in, a score and its
 // breakdown come out. Standard, Your picks only, Hedge and slip ranking read it
 // (generator.ts), and so do Contrarian and Consensus Hybrid (consensus.ts, through
-// the opt-in best of two below); their WILSON rollbacks still read best-of-two and
-// Wilson (pick-record.ts, qualification-core.ts). Pure and client-safe: the engine runs in the browser, so
+// the opt-in best of two below). Pure and client-safe: the engine runs in the browser, so
 // everything here reads what the snapshot already holds and nothing reads the
 // database.
 //
@@ -565,13 +564,6 @@ export function scorePickBestOfTwo(pick: ScoringPick, ctx: ScoringContext): Best
   const takeAll = allOk && (!inOk || (allLeagues.status === "SCORED" && inLeague.status === "SCORED" && allLeagues.rankScore > inLeague.rankScore));
   const chosenFrom = takeAll ? "ALL_LEAGUES" : inOk ? "IN_LEAGUE" : null;
   return { inLeague, allLeagues, raw, passes: inOk || allOk, chosen: chosenFrom === "ALL_LEAGUES" ? allLeagues : chosenFrom === "IN_LEAGUE" ? inLeague : null, chosenFrom };
-}
-
-// The -110 equivalent: the win rate with this edge at -110, the number the gate
-// compares L to. Positive and on Wilson's scale, so the selection layer's bands and
-// draw weights read it where they read Wilson. A pick's order is compareScores'.
-export function selectionScore(score: ScoredPick): number {
-  return Math.max(0, score.rankScore + DEFAULT_BREAK_EVEN);
 }
 
 // The one ordering: rankScore descending, then more decided picks, then pick id,

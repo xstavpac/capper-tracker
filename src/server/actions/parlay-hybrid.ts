@@ -27,8 +27,6 @@ import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { oddsApiRequestKeys } from "@/lib/sport-seasons";
 import { recordGeneratorRun } from "@/server/data/generator-runs";
 import { TraceCollector, hybridScoringVersion } from "@/lib/parlay/run-trace";
-import { GENERATOR_RULES } from "@/lib/parlay/generator";
-import { HYBRID_SCORER } from "@/lib/parlay/consensus";
 
 const LIVE_LABELS = new Set(LIVE_SPORTS.map((s) => s.label));
 
@@ -45,7 +43,7 @@ export async function hybridGenerateAction(request: HybridGenerateRequest): Prom
       mode: "HYBRID",
       trigger: "FETCH",
       origin: "SERVER",
-      scoringVersion: hybridScoringVersion(HYBRID_SCORER, GENERATOR_RULES),
+      scoringVersion: hybridScoringVersion(),
       settings: { leagues: req.leagues, targets: req.targets.length, include: req.include, ...settings },
     },
     true
@@ -54,8 +52,7 @@ export async function hybridGenerateAction(request: HybridGenerateRequest): Prom
   try {
     response = await runHybridGenerate(req, {
       now,
-      // SCORING reads pricing and the platform rates (the WILSON rollback: the bundle as before).
-      loadSnapshot: (scope) => loadGeneratorSnapshot(user.id, scope, now, trace, { scoring: HYBRID_SCORER === "SCORING" }),
+      loadSnapshot: (scope) => loadGeneratorSnapshot(user.id, scope, now, trace),
       getLadders: (requests) => getAltLaddersAwaitingClaims(requests),
       getSwings: (args) => getRecentSwings(args),
       leagueKey: (label) => LIVE_SPORTS.find((s) => s.label === label)?.key,

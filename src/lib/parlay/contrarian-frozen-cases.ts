@@ -1,5 +1,5 @@
 // The slates and settings the Contrarian frozen diff (contrarian-frozen-diff-acceptance-test.ts) runs: the
-// scoring switch's slate on SELECTION_CASES, the Standard frozen slate (standard-generator-frozen-acceptance-
+// scoring switch's slate on SELECTION_CASES, the Standard frozen slate (the former standard-generator-frozen-acceptance-
 // test.ts's NFL snapshot, copied here as it was), and a mixed-markets slate with every market Contrarian
 // matches on (NRFI, team totals, props, a soccer game, 1H lines). contrarian-before-frozen.json is the engine
 // at de0719e (before PR 7) on exactly these cases. Pure - no DB.

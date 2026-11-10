@@ -14,7 +14,7 @@
 // Five moneylines and totals so a single-category filter still has in-filter alternates (R5) to draw.
 // Also pinned: what Your picks only does with slip picks outside the selection (they are used), and the
 // Props-only leg count on this, the largest props slate in the generator tests (60 props on 10 games).
-import { buildGeneratedParlay, GENERATOR_RULES, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import { betCategory, type BetCategory } from "@/lib/parlay/bet-category";
 import type { IncludeSelection } from "@/lib/parlay/include-picks";
 import type { SelectionMode } from "@/lib/parlay/selection";
@@ -129,7 +129,7 @@ function violations(p: GeneratedParlay, allowed: readonly BetCategory[], where: 
 // Generate, then 200 Regenerate seeds per mode, against the Generate parlay as history.
 type Tally = { legsGenerate: number; legsMin: number; legsMax: number; builds: number; hedges: number; contrarians: number; violations: string[] };
 function sweep(snap: GeneratorSnapshot, settings: GeneratorSettings, allowed: readonly BetCategory[], slipToo = false): Tally {
-  const gen = buildGeneratedParlay(snap, settings, null, NOW, GENERATOR_RULES);
+  const gen = buildGeneratedParlay(snap, settings, null, NOW);
   const t: Tally = { legsGenerate: gen.legs.length, legsMin: gen.legs.length, legsMax: gen.legs.length, builds: 1, hedges: 0, contrarians: 0, violations: violations(gen, allowed, { slipToo }) };
   const count = (p: GeneratedParlay) => {
     t.hedges += p.hedge.ALL.swapCount;
@@ -139,7 +139,7 @@ function sweep(snap: GeneratorSnapshot, settings: GeneratorSettings, allowed: re
   for (const mode of ["DIVERSIFIED", "EXPLORE"] as SelectionMode[]) {
     for (let seed = 1; seed <= 200; seed++) {
       const v: Variation = { seed, history: [gen.historyIds], mode };
-      const p = buildGeneratedParlay(snap, settings, v, NOW, GENERATOR_RULES);
+      const p = buildGeneratedParlay(snap, settings, v, NOW);
       t.builds++;
       t.legsMin = Math.min(t.legsMin, p.legs.length);
       t.legsMax = Math.max(t.legsMax, p.legs.length);
@@ -174,7 +174,7 @@ check("Moneyline + Totals: Hedge found alternates (R4 side vs total, R5)", resul
 check("Props only: no Hedge alternate at all (the classifier doesn't relate props: INACTIVE)", results["Props only"].hedges, 0);
 {
   // The control: under All Picks a moneyline's Hedge does reach a total (R4) - the filter is what stops it above.
-  const all = buildGeneratedParlay(SLATE, settingsOf("ALL", 10, 2), null, NOW, GENERATOR_RULES);
+  const all = buildGeneratedParlay(SLATE, settingsOf("ALL", 10, 2), null, NOW);
   const crosses = all.hedge.ALL.legs.some((l) => l.swap && betCategory(l.original.pick) === "MONEYLINE" && betCategory(l.swap.pick) === "TOTALS");
   check("control, All Picks: some moneyline's Hedge alternate is a total", crosses, true);
 }
@@ -188,7 +188,7 @@ check("Props only: no Hedge alternate at all (the classifier doesn't relate prop
   const t = sweep(snap, settingsOf(["PROPS"], 10, 2), ["PROPS"], false);
   report("Props only + a slip ML and Over", t, 10);
   check("Props only with slip ML + Over: generated legs and every alternate are props", t.violations.slice(0, 5), []);
-  const g = buildGeneratedParlay(snap, settingsOf(["PROPS"], 10, 2), null, NOW, GENERATOR_RULES);
+  const g = buildGeneratedParlay(snap, settingsOf(["PROPS"], 10, 2), null, NOW);
   check("...the slip ML and Over are still legs (slip picks are never filtered)", ["g0-HML", "g1-O85"].every((id) => g.legs.some((l) => l.pick.pickId === id && l.source === "SLIP")), true);
 }
 
@@ -200,12 +200,12 @@ check("Props only: no Hedge alternate at all (the classifier doesn't relate prop
   const slip = ["g0-HML", "g0-PH1", "g1-HRL", "g1-PH2", "g2-O85", "g2-PH3", "g3-AML", "g3-PTB", "g4-ARL", "g4-PK", "g5-U85", "g5-PH4"];
   const snap = makeSnapshot(slip);
   const s = settingsOf(["PROPS"], 4, 2, "YOUR_PICKS_ONLY");
-  const gen = buildGeneratedParlay(snap, s, null, NOW, GENERATOR_RULES);
+  const gen = buildGeneratedParlay(snap, s, null, NOW);
   const seen = new Set<string>();
   let nonPropLegs = 0;
   let builds = 0;
   for (let seed = 1; seed <= 200; seed++) {
-    const p = buildGeneratedParlay(snap, s, { seed, history: [gen.historyIds], mode: "EXPLORE" }, NOW, GENERATOR_RULES);
+    const p = buildGeneratedParlay(snap, s, { seed, history: [gen.historyIds], mode: "EXPLORE" }, NOW);
     builds++;
     for (const l of p.legs) {
       seen.add(l.pick.pickId);
@@ -220,7 +220,7 @@ check("Props only: no Hedge alternate at all (the classifier doesn't relate prop
   check("Your picks only: Bet Types never filter the slip - game-line slip picks are drawn under Props only", nonPropUsed.length > 0, true);
   check("Your picks only: every leg is a slip pick, and Generate's 4 are the strongest regardless of type", [gen.legs.length, gen.legs.every((l) => l.source === "SLIP"), gen.generated], [4, true, 0]);
   const fewer = makeSnapshot(["g0-HML", "g1-O85", "g2-PH1"]);
-  const r = buildGeneratedParlay(fewer, settingsOf(["PROPS"], 3, 2, "YOUR_PICKS_ONLY"), null, NOW, GENERATOR_RULES);
+  const r = buildGeneratedParlay(fewer, settingsOf(["PROPS"], 3, 2, "YOUR_PICKS_ONLY"), null, NOW);
   check("Your picks only, slip = Total legs, Props selected: every slip pick is in, the ML and Over too", r.legs.map((l) => l.pick.pickId).sort(), ["g0-HML", "g1-O85", "g2-PH1"]);
 }
 
@@ -232,7 +232,7 @@ check("Props only: no Hedge alternate at all (the classifier doesn't relate prop
   const counts: Record<string, number> = {};
   for (const maxPerGame of [1, 2, 3, 5]) {
     for (const legCount of [3, 6, 10, 15, 20]) {
-      const p = buildGeneratedParlay(SLATE, settingsOf(["PROPS"], legCount, maxPerGame), null, NOW, GENERATOR_RULES);
+      const p = buildGeneratedParlay(SLATE, settingsOf(["PROPS"], legCount, maxPerGame), null, NOW);
       counts[`${legCount}@${maxPerGame}`] = p.legs.length;
       rows.push(`${legCount}@${maxPerGame}→${p.legs.length}${p.legs.length < legCount ? ` (capacity ${p.capacity})` : ""}`);
     }

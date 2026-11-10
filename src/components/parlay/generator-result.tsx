@@ -54,7 +54,7 @@ export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], 
   const base = `${Math.round(record.winPct)}% (${record.wins}–${record.losses})`;
   const market = propMarket ? PROP_MARKET_LABELS[propMarket] : pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market";
   if (basis === "LEAGUE") return `${base} · ${pick.leagueName} ${market}`;
-  if (basis === "OVERALL" || basis === "MARKET") return `${base} · all leagues ${market}`;
+  if (basis === "OVERALL") return `${base} · all leagues ${market}`;
   if (basis === "LAST20") return `${base} · last 20 picks`;
   return base;
 }
@@ -175,9 +175,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
         ? original.source === "SLIP" || original.handSwapped
           ? (original.source === "SLIP" ? "your pick" : "your swapped-in pick") + " - Swap is set to Suggested"
           : "suggested leg - Swap is set to Your picks"
-        : leg.unchangedReason === "NOT_MAJORITY"
-          ? "your pick's side isn't the majority of your cappers"
-          : SWAP_COPY[mode].noAlternate;
+        : SWAP_COPY[mode].noAlternate;
     return (
       <LegRow n={n} pick={original.pick} record={{ text: recordText(original.record, original.basis, original.pick, original.propMarket), winPct: original.record?.winPct ?? null }} mine={original.source === "SLIP"} sgp={original.sameGame}>
         <p className={NOTE}>
@@ -188,7 +186,7 @@ function SwapLegRow({ n, leg, mode }: { n: number; leg: EngineSwapLeg; mode: Eng
   }
   const { swap } = leg;
   return (
-    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? "MARKET", swap.pick, swap.propMarket), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
+    <LegRow n={n} pick={swap.pick} record={{ text: recordText(swap.record, swap.basis ?? null, swap.pick, swap.propMarket), winPct: swap.record.winPct }} mine={false} sgp={original.sameGame} swappedBy={SWAP_COPY[mode].title}>
       <p className={NOTE}>
         Replaces {original.source === "SLIP" && "your pick "}
         <span className="line-through">{original.pick.betDetail}</span> · {original.pick.capperName}

@@ -11,11 +11,9 @@
 // candidate prop's per-market record, in a single query). Nothing about a pick or a game is taken from the client: the request
 // names picks and games by id.
 //
-// With `scoring` (Standard, and Consensus Hybrid under HYBRID_SCORER = SCORING - lib/parlay/scoring.ts): the bundle
-// also carries pricing and drops the all-leagues category pairs (a card already holds that record), slip picks get
-// per-market prop records too, and the snapshot carries the platform rates (getPlatformCategoryRates: one small shared
-// table behind the Data Cache). Without it (Hybrid's WILSON rollback) the bundle's statement is exactly what it was and
-// the rates are never read.
+// For lib/parlay/scoring.ts the bundle also carries pricing and no all-leagues category pairs (a card already holds
+// that record), slip picks get per-market prop records too, and the snapshot carries the platform rates
+// (getPlatformCategoryRates: one small shared table behind the Data Cache).
 import { getCapperRecordBundle, type PropMarketEntry } from "@/server/data/picks";
 import { getPlatformCategoryRates } from "@/server/data/platform-category-rates";
 import { buildPlatformRates, trimPlatformRates } from "@/lib/parlay/scoring";
@@ -69,7 +67,7 @@ export function propMarketEntriesOf(picks: GeneratorPick[]): PropMarketEntry[] {
 
 // `trace` (diagnostics only, run-trace.ts) is told what the loader read and where the picks went; nothing it
 // does reaches the snapshot.
-export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date, trace?: TraceCollector, opts: { scoring?: boolean } = {}): Promise<LoadedSnapshot | ParlayRejection> {
+export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope, now: Date, trace?: TraceCollector): Promise<LoadedSnapshot | ParlayRejection> {
   const rows = await getOwnedSlipPickRows(userId, scope.slipPickIds);
   if (rows.length !== scope.slipPickIds.length || rows.some((r) => r.status !== "PENDING")) return { error: SLIP_CHANGED };
 
@@ -138,8 +136,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   // ONE record bundle: every slip pick's and candidate's card. A slip pick's
   // is what its row shows and how two conflicting slip picks are ranked; a
   // candidate's in-league record (all-time when it has none) is the 55% gate,
-  // the Wilson ranking, Hedge and Contrarian (recordForGate). The all-leagues
-  // market records cover a pick with no card, and LEGACY_RULES. A candidate
+  // the score's records, Hedge and Contrarian (recordForGate). A candidate
   // player prop with a market key (prop-market-key.ts) also gets its per-market
   // record - only the slate's own (capper, league, market) entries - which is
   // what recordForGate gates and ranks it on; counted from games before `now`.
@@ -150,16 +147,12 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   }
   const { leagueRecords, categoryRecords, propMarketRecords } = await getCapperRecordBundle(userId, {
     leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),
-    categoryPairs: opts.scoring
-      ? []
-      : candidates
-          .filter((p): p is GeneratorPick & { category: PickCategoryKey } => p.category !== null)
-          .map((p) => ({ capperId: p.capperId, category: p.category })),
-    propMarketEntries: propMarketEntriesOf(opts.scoring ? [...slipPicks, ...candidates] : candidates),
+    categoryPairs: [],
+    propMarketEntries: propMarketEntriesOf([...slipPicks, ...candidates]),
     asOf: now,
-    ...(opts.scoring ? { includePricing: true } : {}),
+    includePricing: true,
   });
-  const rateRows = opts.scoring ? await getPlatformCategoryRates() : null;
+  const rateRows = await getPlatformCategoryRates();
 
   return {
     snapshot: {
@@ -170,7 +163,8 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       leagueRecords,
       categoryRecords,
       propMarketRecords,
-      ...(rateRows ? { platformRates: trimPlatformRates(buildPlatformRates(rateRows), [...slipPicks, ...candidates]), platformRateRows: rateRows.length } : {}),
+      platformRates: trimPlatformRates(buildPlatformRates(rateRows), [...slipPicks, ...candidates]),
+      platformRateRows: rateRows.length,
     },
     eventSportKeys,
     skippedGames,

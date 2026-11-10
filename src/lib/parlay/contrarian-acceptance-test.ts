@@ -1,6 +1,6 @@
 // Contrarian through the engine (PR 7): the other side of the same bet, gated by scoring.ts at its own price,
 // chosen by selection.ts. Every Regenerate seed here is pinned (1..200 per mode). Pure - no DB.
-import { buildGeneratedParlay, GENERATOR_RULES, WILSON_RULES, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type EngineSwap, type GeneratedParlay, type GeneratorSettings, type Variation } from "@/lib/parlay/generator";
 import { buildSnapshot, NOW, pickOf, type FixtureGame, type Spec } from "@/lib/parlay/scoring-switch-fixture";
 import { EMPTY_PLATFORM_RATES, passesGate, scorePick, type ScoringContext } from "@/lib/parlay/scoring";
 import { SELECTION_MODES } from "@/lib/parlay/selection";
@@ -49,7 +49,6 @@ const pacers = s({ id: "pacers-ml", game: 0, category: "DOG_ML", betType: "MONEY
   check("Bulls ML (60% fav-ML capper) -> Pacers ML (58% dog-ML capper)", alt(p), "pacers-ml");
   check("...as the other side of the same bet: SAME_BET, ML, no line", [p.contrarian.ALL.legs[0].swap?.rule, p.contrarian.ALL.legs[0].swap?.contrarian], ["SAME_BET", { market: "ML", lineGap: null }]);
   check("...the alternate shows its own record (29-21)", p.contrarian.ALL.legs[0].swap?.record.wins + "-" + p.contrarian.ALL.legs[0].swap?.record.losses, "29-21");
-  check("WILSON_RULES (rollback) still runs the classifier path", buildGeneratedParlay(sn, one, null, NOW, WILSON_RULES).contrarian.ALL.legs[0].swap?.rule, "R2");
 }
 
 // ---- A higher-scoring original still swaps -------------------------------------------------
@@ -174,7 +173,7 @@ const crowd: Spec[] = [
   check("the conflict slate: 5 legs, 3 on the NFL game", [gen.legs.length, gen.legs.filter((l) => l.gameId === "g3").length], [5, 3]);
   check("...and Contrarian swaps on it", gen.contrarian.ALL.swapCount > 0, true);
   const guard = new TraceCollector({ mode: "STANDARD", trigger: "GENERATE", origin: "CLIENT", scoringVersion: "v", settings: {} }, false);
-  buildGeneratedParlay(sn, settings, null, NOW, GENERATOR_RULES, guard);
+  buildGeneratedParlay(sn, settings, null, NOW, guard);
   const blocked = (guard.finish().extras.swaps ?? []).find((m) => m.mode === "CONTRARIAN" && m.scope === "ALL")?.legs.reduce((n, l) => n + l.excluded.SAME_GAME_CONFLICT, 0) ?? 0;
   check("...where the sibling check really bites (candidates blocked by a same-game rule)", blocked > 0, true);
   const conflicts = (e: EngineSwap) => {
@@ -205,8 +204,8 @@ const crowd: Spec[] = [
 // ---- Run log -----------------------------------------------------------------------------
 {
   const sn = snap([...crowd, s({ id: "pacers-far", game: 0, category: "SPREAD_PLUS", betType: "SPREAD", detail: "Pacers +9", line: 9, odds: -110, lg: [30, 15] })], ["bulls-ml"]);
-  const trace = new TraceCollector({ mode: "YOUR_PICKS", trigger: "REGENERATE", origin: "CLIENT", scoringVersion: standardScoringVersion(GENERATOR_RULES), settings: {} }, true);
-  const p = buildGeneratedParlay(sn, one, { seed: 11, history: [], mode: "DIVERSIFIED" }, NOW, GENERATOR_RULES, trace);
+  const trace = new TraceCollector({ mode: "YOUR_PICKS", trigger: "REGENERATE", origin: "CLIENT", scoringVersion: standardScoringVersion(), settings: {} }, true);
+  const p = buildGeneratedParlay(sn, one, { seed: 11, history: [], mode: "DIVERSIFIED" }, NOW, trace);
   const out = trace.finish();
   const leg = out.extras.swaps?.find((m) => m.mode === "CONTRARIAN" && m.scope === "ALL")?.legs[0];
   check("the leg's trace: opposite 3, qualifying 3, the one chosen", [leg?.result, leg?.contrarian?.opposite, leg?.contrarian?.qualifying, leg?.contrarian?.chosen], ["SWAPPED", 3, 3, p.contrarian.ALL.legs[0].swap?.pick.pickId]);
@@ -216,10 +215,10 @@ const crowd: Spec[] = [
   check("the intake keeps the contrarian block", clean?.extras.swaps?.find((m) => m.mode === "CONTRARIAN" && m.scope === "ALL")?.legs[0].contrarian, leg?.contrarian);
   check("the intake keeps the selection trace's contrarian picks", clean?.extras.selection?.contrarian?.length, 1);
   const missTrace = new TraceCollector({ mode: "YOUR_PICKS", trigger: "GENERATE", origin: "CLIENT", scoringVersion: "v", settings: {} }, true);
-  buildGeneratedParlay(snap([bulls, { ...pacers, lg: [10, 30] }], ["bulls-ml"]), one, null, NOW, GENERATOR_RULES, missTrace);
+  buildGeneratedParlay(snap([bulls, { ...pacers, lg: [10, 30] }], ["bulls-ml"]), one, null, NOW, missTrace);
   const miss = missTrace.finish().extras.swaps?.find((m) => m.mode === "CONTRARIAN" && m.scope === "ALL")?.legs[0];
   check("a miss is logged NO_QUALIFYING_CONTRARIAN with why (opposite 1, below gate 1)", [miss?.result, miss?.contrarian?.opposite, miss?.contrarian?.belowGate], ["NO_QUALIFYING_CONTRARIAN", 1, 1]);
-  const version = standardScoringVersion(GENERATOR_RULES);
+  const version = standardScoringVersion();
   check("scoringVersion names the contrarian model and fits 80", [version.endsWith("/sel-v1/contra-samebet-v1"), version.length <= 80], [true, true]);
 }
 

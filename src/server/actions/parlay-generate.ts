@@ -31,7 +31,6 @@ import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import {
   buildGeneratedParlay,
-  GENERATOR_RULES,
   type FillFrom,
   type GeneratedParlay,
   type GeneratorSettings,
@@ -107,12 +106,12 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   // The run log (run-trace.ts): diagnostics only, written after the parlay is built. A failure is recorded
   // on the trace and rethrown - never swallowed - and nothing the trace does reaches the parlay.
   const trace = new TraceCollector(
-    { mode: traceModeOf(req, req.settings), trigger: "FETCH", origin: "SERVER", scoringVersion: standardScoringVersion(GENERATOR_RULES), settings: traceSettings(req, req.settings) },
+    { mode: traceModeOf(req, req.settings), trigger: "FETCH", origin: "SERVER", scoringVersion: standardScoringVersion(), settings: traceSettings(req, req.settings) },
     true
   );
   let loaded: Awaited<ReturnType<typeof loadGeneratorSnapshot>>;
   try {
-    loaded = await loadGeneratorSnapshot(user.id, req, now, trace, { scoring: true });
+    loaded = await loadGeneratorSnapshot(user.id, req, now, trace);
   } catch (err) {
     trace.error("SNAPSHOT_ERROR", err);
     await recordGeneratorRun(user.id, trace.finish());
@@ -122,7 +121,7 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   const { snapshot } = loaded;
   let parlay: GeneratedParlay;
   try {
-    parlay = buildGeneratedParlay(snapshot, req.settings, null, now, GENERATOR_RULES, trace);
+    parlay = buildGeneratedParlay(snapshot, req.settings, null, now, trace);
   } catch (err) {
     trace.error("ENGINE_ERROR", err);
     await recordGeneratorRun(user.id, trace.finish());

@@ -4,17 +4,14 @@
 // in THIS league and their all-time record in the market - no minimum volume,
 // never last 20 (pick-record-best-of-two-acceptance-test.ts has the rule's own
 // cases). Contrarian takes any capper on the other side who clears the gate,
-// whatever the headcount. LEGACY_RULES is the engine as it was (all-leagues
-// market record, headcount). Pure - no DB. Run with:
+// whatever the headcount. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-record-scope-acceptance-test.ts
-import { buildGeneratedParlay as engine, WILSON_RULES, LEGACY_RULES, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { recordText } from "@/components/parlay/generator-result";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
-// Pins the engine before scoring.ts (WILSON_RULES), unless a call names its rules.
-const buildGeneratedParlay: typeof engine = (s, settings, variation, now, rules = WILSON_RULES, trace) => engine(s, settings, variation, now, rules, trace);
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -133,46 +130,42 @@ const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   // G3: Last 20 is never a gate: no market record, a strong last 20.
   const snap = makeSnapshot(
     [
-      { id: "lgGood", game: 0, bet: "HOME", lg: [4, 1], all: [4, 6] },
+      { id: "lgGood", game: 0, bet: "HOME", lg: [40, 10], all: [40, 60] },
       { id: "lgBad", game: 0, bet: "OVER", lg: [1, 3], all: [11, 9] },
       { id: "rank", game: 1, bet: "HOME", lg: [9, 1], all: [50, 50] },
       { id: "rank2", game: 1, bet: "OVER", lg: [6, 4], all: [60, 40] },
-      { id: "fallback", game: 2, bet: "HOME", lg: null, all: [6, 4] },
+      { id: "fallback", game: 2, bet: "HOME", lg: null, all: [60, 40] },
       { id: "last20", game: 3, bet: "HOME", lg: null, all: null },
     ],
     { "cap-last20": col(18, 2) }
   );
   const now = buildGeneratedParlay(snap, SETTINGS, null, NOW);
-  const old = buildGeneratedParlay(snap, SETTINGS, null, NOW, LEGACY_RULES);
   const gated = (id: string) => {
     const r = recordForGate(snap.games.flatMap((g) => g.picks).find((p) => p.pickId === id)!, snap.leagueRecords, snap.categoryRecords);
     return r && `${r.source} ${r.wins}-${r.losses}`;
   };
-  check("in-league 1-3 no longer hides all-time 11-9", [gated("lgGood"), gated("lgBad")], ["LEAGUE 4-1", "OVERALL 11-9"]);
-  check("4-1 in MLB (40% all time) qualifies and outranks 11-9 all time on its game", ids(now).includes("lgGood") && !ids(now).includes("lgBad"), true);
-  check("legacy: the opposite", ids(old).includes("lgBad") && !ids(old).includes("lgGood"), true);
+  check("in-league 1-3 no longer hides all-time 11-9", [gated("lgGood"), gated("lgBad")], ["LEAGUE 40-10", "OVERALL 11-9"]);
+  check("40-10 in MLB (40% all time) qualifies and outranks 11-9 all time on its game", ids(now).includes("lgGood") && !ids(now).includes("lgBad"), true);
   check("each on its better record: 9-1 in MLB beats 60-40 all time", [gated("rank"), gated("rank2"), ids(now).includes("rank") && !ids(now).includes("rank2")], ["LEAGUE 9-1", "OVERALL 60-40", true]);
-  check("legacy: 9-1 in MLB is 50% all time and fails the gate", ids(old).includes("rank2") && !ids(old).includes("rank"), true);
   check("no MLB record: all time qualifies it", ids(now).includes("fallback"), true);
   check("Last 20 never qualifies a pick", ids(now).includes("last20"), false);
   const leg = (id: string) => now.legs.find((l) => l.pick.pickId === id)!;
   check("each leg says which record it is", [leg("lgGood").basis, leg("rank").basis, leg("fallback").basis], ["LEAGUE", "LEAGUE", "OVERALL"]);
-  check("the leg's record is the one it was gated on", [leg("lgGood").record, leg("fallback").record], [{ wins: 4, losses: 1, n: 5, winPct: 80 }, { wins: 6, losses: 4, n: 10, winPct: 60 }]);
-  check("legacy legs say MARKET", old.legs.map((l) => l.basis), ["MARKET", "MARKET", "MARKET"]);
-  check("shown: MLB market / all leagues market", [recordText(leg("lgGood").record, "LEAGUE", leg("lgGood").pick), recordText(leg("fallback").record, "OVERALL", leg("fallback").pick)], ["80% (4–1) · MLB favorite moneyline", "60% (6–4) · all leagues favorite moneyline"]);
+  check("the leg's record is the one it was gated on", [leg("lgGood").record, leg("fallback").record], [{ wins: 40, losses: 10, n: 50, winPct: 80 }, { wins: 60, losses: 40, n: 100, winPct: 60 }]);
+  check("shown: MLB market / all leagues market", [recordText(leg("lgGood").record, "LEAGUE", leg("lgGood").pick), recordText(leg("fallback").record, "OVERALL", leg("fallback").pick)], ["80% (40–10) · MLB favorite moneyline", "60% (60–40) · all leagues favorite moneyline"]);
 }
 
 // ============================================================================
 // Hedge and Contrarian use the same record; Contrarian has no headcount
 // ============================================================================
 {
-  // G0: Hedge's alternate (Over) is 6-2 in MLB, 40% all time.
+  // G0: Hedge's alternate (Over) is 60-20 in MLB, 60% all time.
   // G1: Contrarian 1 vs 1 - the other side is 6-3 in MLB.
   // G2: the other side is 2-3 in MLB but 30-10 all time: all time is its record.
   // G3: two on the other side (2 vs 1): the better Wilson wins (20-8 over 3-0).
   const snap = makeSnapshot([
-    { id: "h", game: 0, bet: "HOME", lg: [8, 2], all: [8, 2] },
-    { id: "hAlt", game: 0, bet: "OVER", lg: [6, 2], all: [40, 60] },
+    { id: "h", game: 0, bet: "HOME", lg: [80, 10], all: [80, 10] },
+    { id: "hAlt", game: 0, bet: "OVER", lg: [60, 20], all: [120, 80] },
     { id: "c", game: 1, bet: "HOME", lg: [9, 1], all: [9, 1] },
     { id: "cAlt", game: 1, bet: "AWAY", lg: [6, 3], all: [6, 3] },
     { id: "x", game: 2, bet: "HOME", lg: [9, 1], all: [9, 1] },
@@ -182,16 +175,11 @@ const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
     { id: "oBig", game: 3, bet: "AWAY", lg: [20, 8], all: [20, 8] },
   ]);
   const now = buildGeneratedParlay(snap, SETTINGS, null, NOW);
-  const old = buildGeneratedParlay(snap, SETTINGS, null, NOW, LEGACY_RULES);
   check("primaries", ids(now).sort(), ["c", "h", "o", "x"]);
-  check("Hedge: alternate qualifies on its MLB record", swapOf(now.hedge.SUGGESTED, "h"), { to: "hAlt", basis: "LEAGUE", record: "6-2" });
-  check("legacy Hedge: 40% all time, no alternate", swapOf(old.hedge.SUGGESTED, "h"), "NO_ALTERNATE");
+  check("Hedge: alternate qualifies on its MLB record", swapOf(now.hedge.SUGGESTED, "h"), { to: "hAlt", basis: "LEAGUE", record: "60-20" });
   check("Contrarian 1 vs 1: the other side's capper clears the gate - a swap", swapOf(now.contrarian.SUGGESTED, "c"), { to: "cAlt", basis: "LEAGUE", record: "6-3" });
-  check("legacy Contrarian 1 vs 1: not the majority", swapOf(old.contrarian.SUGGESTED, "c"), "NOT_MAJORITY");
   check("Contrarian: 2-3 in MLB no longer hides 30-10 all time", swapOf(now.contrarian.SUGGESTED, "x"), { to: "xAlt", basis: "OVERALL", record: "30-10" });
   check("Contrarian with the other side bigger: same Wilson order as everything else", swapOf(now.contrarian.SUGGESTED, "o"), { to: "oBig", basis: "LEAGUE", record: "20-8" });
-  check("legacy: 1 vs 2 is not the majority", swapOf(old.contrarian.SUGGESTED, "o"), "NOT_MAJORITY");
-  check("NOT_MAJORITY never comes from the new rules", [...now.contrarian.SUGGESTED.legs].some((l) => l.unchangedReason === "NOT_MAJORITY"), false);
   check("swap shown with its record", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "LEAGUE", snap.games[0].picks[1]), "75% (6–2) · MLB over");
 }
 
@@ -200,8 +188,8 @@ const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
 // ============================================================================
 {
   const snap = makeSnapshot([
-    { id: "a", game: 0, bet: "HOME", lg: [5, 2], all: [10, 9] },
-    { id: "b", game: 0, bet: "OVER", lg: [5, 2], all: [10, 10] },
+    { id: "a", game: 0, bet: "HOME", lg: [25, 10], all: [50, 50] },
+    { id: "b", game: 0, bet: "OVER", lg: [25, 10], all: [50, 50] },
     { id: "c", game: 1, bet: "HOME", lg: [3, 1], all: [3, 1] },
   ]);
   const runs = [0, 1, 2].map(() => JSON.stringify(buildGeneratedParlay(snap, SETTINGS, null, NOW)));

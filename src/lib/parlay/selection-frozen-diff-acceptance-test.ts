@@ -9,7 +9,7 @@
 //   (re-freeze the table, only for an intended change: add --write)
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildGeneratedParlay, GENERATOR_RULES, type EngineSwap } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, type EngineSwap } from "@/lib/parlay/generator";
 import { buildSnapshot, NOW } from "@/lib/parlay/scoring-switch-fixture";
 import { SELECTION_CASES } from "@/lib/parlay/selection-frozen-cases";
 import { EMPTY_PLATFORM_RATES, scorePick } from "@/lib/parlay/scoring";
@@ -31,7 +31,7 @@ const lines: string[] = [`Before: ${before.capturedFrom}. Old score = the -110 e
 for (const c of SELECTION_CASES) {
   const snap = buildSnapshot(undefined, c.slip);
   const was = before.cases[c.label];
-  const now = buildGeneratedParlay(snap, c.settings, null, NOW, GENERATOR_RULES);
+  const now = buildGeneratedParlay(snap, c.settings, null, NOW);
   const ctx = { leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, propMarketRecords: snap.propMarketRecords, platformRates: snap.platformRates ?? EMPTY_PLATFORM_RATES, minWinPct: c.settings.minWinPct ?? 55 };
   const pts = (id: string) => {
     const pick = snap.games.flatMap((g) => g.picks).find((p) => p.pickId === id) ?? snap.slipPicks.find((p) => p.pickId === id);

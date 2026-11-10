@@ -1,5 +1,5 @@
 Consensus Hybrid scoring frozen diff: origin/main 5f64665 (before PR 8) -> SCORING (hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-rawgate-bo2-v2), gates 0 / 45 / 55 / 60.
-HYBRID_SCORER = WILSON reproduces the before capture byte for byte on all 24 case/gate runs.
+The before capture is frozen from origin/main 5f64665, when the WILSON rollback still existed (removed in PR 9); 24 case/gate runs.
 
 Legend: - position gone, + new, ~ changed. Post lines: + passes now (failed before), - fails now (passed before), blank = same verdict.
 
