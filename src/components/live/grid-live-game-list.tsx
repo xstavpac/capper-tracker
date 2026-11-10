@@ -10,6 +10,7 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { CalendarIcon } from "@/components/dashboard/cappers-icons";
 import { unplayedLabel } from "@/lib/feed-game-status";
 import { SeeMoreGamesButton } from "@/components/live/live-list-scope";
+import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
@@ -31,6 +32,7 @@ export function GridLiveGameList({
   hiddenCount,
   matchedPicksByGame,
   activeSport,
+  sportLabel,
   selectedGameId,
   onSelectGame,
   onOpenGame,
@@ -40,6 +42,8 @@ export function GridLiveGameList({
   hiddenCount: number;
   matchedPicksByGame: ExpanderPick[][];
   activeSport: string;
+  // The league's name ("NFL"), for the slip's "Target game".
+  sportLabel: string;
   selectedGameId: string | null;
   onSelectGame: (gameId: string) => void;
   // Double-click only - opens Feed Live's full game-card page (head-to-head
@@ -81,17 +85,20 @@ export function GridLiveGameList({
         const progress = isLive ? getLiveGameProgress(activeSport, score) : null;
 
         return (
-          <button
+          <div
             key={game.id}
-            type="button"
-            onClick={() => onSelectGame(game.id)}
-            onDoubleClick={() => onOpenGame(game.id)}
             className={
-              "block w-full rounded-xl border bg-white px-3 py-2.5 text-left transition-colors dark:bg-card " +
+              "rounded-xl border bg-white transition-colors dark:bg-card " +
               (isSelected
                 ? "border-brand-600 ring-1 ring-brand-600 dark:border-brand-400 dark:ring-brand-400"
                 : "border-[#E1E7FA] hover:border-brand-300 dark:border-border dark:hover:border-brand-500/60")
             }
+          >
+          <button
+            type="button"
+            onClick={() => onSelectGame(game.id)}
+            onDoubleClick={() => onOpenGame(game.id)}
+            className="block w-full px-3 py-2.5 text-left"
           >
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-[#5B6275] dark:text-muted-foreground">
               <span>
@@ -150,6 +157,18 @@ export function GridLiveGameList({
               </div>
             )}
           </button>
+          {/* Slip mode only: target this game without opening it (a sibling of the select button, never inside it). */}
+          <TargetGameCheckbox
+            className="mx-3 mb-1.5 mt-[-4px]"
+            game={{
+              gameId: game.id,
+              gameLabel: matchedPicksByGame[gameIndex]?.[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
+              gameTime: game.commenceTime,
+              gameStatus: score?.status ?? null,
+              leagueName: sportLabel,
+            }}
+          />
+          </div>
         );
       })}
       <SeeMoreGamesButton hiddenCount={hiddenCount} />
