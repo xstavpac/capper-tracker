@@ -2321,6 +2321,15 @@ export function matchScoreToGame(
 // team-name-match.ts). Exported (not module-private) so nfl-prop-odds.ts's
 // resolvePropOdds can match a pick to the same cached OddsGame findMarketPrice
 // would, rather than re-implementing this resolution step.
+//
+// sportKey goes to teamNamesMatch so the league's alias rows and (NCAAB) the
+// "state" -> "st" fold apply. Without it, every game with a team the two feeds
+// spell differently ("LA Clippers" / "Los Angeles Clippers", "Michigan State
+// Spartans" / "Michigan St Spartans") resolved to null here, and every
+// ML/spread/total pick on it was stored at the -110 default (2026-11-10).
+// Home and away still have to agree: a feed that lists a neutral-site game the
+// other way round does not match, because reading side "home" off it would
+// price the other team.
 export async function resolveOddsGame(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
@@ -2328,7 +2337,7 @@ export async function resolveOddsGame(
 ): Promise<OddsGame | null> {
   const oddsGames = await getOdds(sportKey);
   const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
+    (g) => teamNamesMatch(g.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(g.awayTeam, game.awayTeam, sportKey)
   );
   if (candidates.length === 0) return null;
 
