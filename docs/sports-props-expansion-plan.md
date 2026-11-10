@@ -287,8 +287,8 @@ KBO's initial scope unless the score source provides linescores.
 **NCAAB** — Basketball-shaped, closest to NBA. ESPN carries it
 (`.../basketball/mens-college-basketball`). Large team set (~360 D1), so the
 catalog-parser work is the NCAAF-scale effort. `SPORT_SEASON_CONFIG` (Nov–April).
-First-half grading would reuse the `getNbaFirstHalfScore` linescores approach
-against the college summary endpoint.
+First-half grading reuses the linescores approach against the college summary
+endpoint (shipped, #415).
 
 **ATP / WTA (tennis)** — Structurally unlike every other league:
 
@@ -347,17 +347,20 @@ it).
 
 ### Confirmed gaps (decided facts)
 
-- **No grading path exists today for CFL, KBO, ATP, WTA, or NCAAB.** (NHL now
+- **No grading path exists today for CFL, KBO, ATP, or WTA.** (NHL now
   grades - full game + P1-P3 - via `getNhlLiveScores` / `getEspnGameSegments`;
   inert until the NHL season window opens.)
-  - CFL, NCAAB: ESPN almost certainly covers them; the `getEspnScores` path
-    shape needs confirming per sport.
+  - NCAAB: **FULL_GAME and FIRST_HALF now grade automatically** (first half is
+    `linescore[0]` from the ESPN college summary; PR #415). SECOND_HALF and
+    overtime markets are still pending a decision.
+  - CFL: ESPN almost certainly covers it; the `getEspnScores` path shape needs
+    confirming.
   - KBO: MLB Stats API does **not** cover it. A Korean baseball score source
     (KBO official, or a third party) needs research. Until then KBO can only be
     "odds display only."
   - ATP / WTA: match-result score source unconfirmed. Tennis result data is
     available (ESPN, others) but its fit for automated grading is unverified.
-  - **These leagues cannot be more than "odds display only" until a real score
+  - **The remaining leagues cannot be more than "odds display only" until a real score
     source is identified and verified for each.**
 
 - **UFC has no player/fight prop data on `the-odds-api.com`.** Verified via
@@ -459,7 +462,8 @@ window scoping cut the game-line portion ~70%; adding MLB props then added
 | "Build disabled, enable later" approach (§4) | **Decided** |
 | Per-league launch gate / Definition of Done (§4) | **Decided** |
 | UFC props excluded (no data) | **Decided** (provider limitation) |
-| Score sources for CFL/KBO/ATP/WTA/NCAAB | **Open** — research required |
+| Score sources for CFL/KBO/ATP/WTA | **Open** — research required |
+| NCAAB grading | **Done** for FULL_GAME + FIRST_HALF (#415); SECOND_HALF/OT **Open** |
 | NHL full grading | **Done** — full game + P1-P3 periods |
 | Build order across leagues | **Open** — deliberately not sequenced here |
 | Hourly-window polling schedule | **Open** — implementation task |
