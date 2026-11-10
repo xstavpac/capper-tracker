@@ -9,16 +9,17 @@
 //   a. started / outside the slate window          (generator-snapshot.ts)
 //   b. no full-game side or total picks            (consensus.ts readPost)
 //   c. no side picks / no total picks
-//   d. the best capper on the side / total is below the win-rate gate
+//   d. the best capper on the side / total is below the win-rate gate (the raw record;
+//      consensus.ts's own verdict, which under SCORING is either the in-league or the
+//      all-leagues record reaching the lever)
 //   e. no capper left on one side only: every gated capper took both sides (hedged) -
 //      or, with a minimum above HYBRID_MIN_SUPPORTERS (1), too few agree
 //   f. past the per-generation pricing limit       (ladderGameCount, hybrid.ts)
 //   g. FanDuel lines not available                 (the ladder notes)
 //   h. no usable FanDuel line                      (-600 floor / per-leg range)
 //   i. built but not used                          (the Total legs cap, or ranked lower)
-import { diagnoseConsensusGame, HYBRID_MIN_SUPPORTERS, type ConsensusPosition, type FamilyDiagnosis } from "@/lib/parlay/consensus";
+import { diagnoseConsensusGame, HYBRID_MIN_SUPPORTERS, type ConsensusPosition, type ConsensusRecords, type FamilyDiagnosis, type HybridScorer } from "@/lib/parlay/consensus";
 import type { GeneratorGame } from "@/lib/parlay/auto-generate";
-import type { GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { HybridBoxReport, HybridResult } from "@/lib/parlay/hybrid";
 import { isWeeklySlateLeague } from "@/lib/live-category-picks";
 import type { HybridEventNote } from "@/server/data/hybrid-generate";
@@ -98,7 +99,8 @@ export type ExplainInput = {
   // Pending picks per game before Include Picks: what the row says the game had.
   pickCounts: Record<string, number>;
   snapshotSkipped: SnapshotSkippedGame[];
-  records: Pick<GeneratorSnapshot, "leagueRecords" | "categoryRecords" | "propMarketRecords">;
+  // What consensus.ts scored the positions from (platformRates: SCORING's fallback rates).
+  records: ConsensusRecords;
   minWinPct: number;
   // True when Include Picks leaves something out ("in your Bet types").
   filtered: boolean;
@@ -108,6 +110,8 @@ export type ExplainInput = {
   report: HybridBoxReport;
   result: HybridResult;
   minSupporters?: number;
+  // The scorer the positions were built with (absent: HYBRID_SCORER), so the gate verdicts match.
+  scorer?: HybridScorer;
 };
 
 const s = (n: number) => (n === 1 ? "" : "s");
@@ -127,7 +131,7 @@ function consensusGate(
   input: ExplainInput,
   minSupporters: number
 ): { reason: HybridSkipReason; text: string } | null {
-  const d = diagnoseConsensusGame(game, input.records, { minWinPct: input.minWinPct });
+  const d = diagnoseConsensusGame(game, input.records, { minWinPct: input.minWinPct, ...(input.scorer ? { scorer: input.scorer } : {}) });
   const scope = input.filtered ? " in your Bet types" : "";
   if (d.side.posts + d.total.posts === 0) {
     const other = d.otherPicks;

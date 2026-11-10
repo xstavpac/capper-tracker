@@ -11,10 +11,11 @@
 // candidate prop's per-market record, in a single query). Nothing about a pick or a game is taken from the client: the request
 // names picks and games by id.
 //
-// With `scoring` (Standard only - lib/parlay/scoring.ts): the bundle also carries pricing and drops the all-leagues
-// category pairs (a card already holds that record), slip picks get per-market prop records too, and the snapshot
-// carries the platform rates (getPlatformCategoryRates: one small shared table behind the Data Cache). Without it
-// (Consensus Hybrid) the bundle's statement is exactly what it was and the rates are never read.
+// With `scoring` (Standard, and Consensus Hybrid under HYBRID_SCORER = SCORING - lib/parlay/scoring.ts): the bundle
+// also carries pricing and drops the all-leagues category pairs (a card already holds that record), slip picks get
+// per-market prop records too, and the snapshot carries the platform rates (getPlatformCategoryRates: one small shared
+// table behind the Data Cache). Without it (Hybrid's WILSON rollback) the bundle's statement is exactly what it was and
+// the rates are never read.
 import { getCapperRecordBundle, type PropMarketEntry } from "@/server/data/picks";
 import { getPlatformCategoryRates } from "@/server/data/platform-category-rates";
 import { buildPlatformRates, trimPlatformRates } from "@/lib/parlay/scoring";

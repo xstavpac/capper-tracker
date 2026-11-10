@@ -1,0 +1,555 @@
+Consensus Hybrid scoring frozen diff: origin/main 5f64665 (before PR 8) -> SCORING (hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-rawgate-bo2-v2), gates 0 / 45 / 55 / 60.
+HYBRID_SCORER = WILSON reproduces the before capture byte for byte on all 24 case/gate runs.
+
+Legend: - position gone, + new, ~ changed. Post lines: + passes now (failed before), - fails now (passed before), blank = same verdict.
+
+slate-10-27 @ 0%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2,BEEZOWINS] -> [Porter PICKS,B2,B1,BEEZOWINS]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Bruins @ Hurricanes side: direction New Jersey Devils (YDC2 47-52 (all-leagues)) -> Detroit Red Wings (H1 10-12 (all-leagues))
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes, Kings @ Spurs
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Kings @ Spurs, Bruins @ Hurricanes
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Kings @ Spurs
+  parlay: same shape (multi-box, 7 boxes, 14/15 legs), different legs or order
+  why Kings @ Spurs: Not priced: each generation prices the top 9 qualifying games -> (used)
+  why Bruins @ Hurricanes: Total legs cap reached -> Not priced: each generation prices the top 9 qualifying games
+  why Sabres @ Sharks: (used) -> Total legs cap reached
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6% ✓; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% passes · SCORING passes (in-league 31-35 47.0% ✓; all-leagues 37-39 48.7% ✓; ranks by all-leagues edge -3.0)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% passes · SCORING passes (in-league 1-6 14.3% ✓; all-leagues 12-19 38.7% ✓; ranks by all-leagues edge -8.5)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% passes · SCORING passes (in-league 2-3 40.0% ✓; all-leagues 2-5 28.6% ✓; ranks by all-leagues edge -6.5)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% passes · SCORING passes (in-league 2-3 40.0% ✓; all-leagues 10-17 37.0% ✓; ranks by all-leagues edge -9.0)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% passes · SCORING passes (in-league 2-2 50.0% ✓; all-leagues 42-40 51.2% ✓; ranks by all-leagues edge -1.0)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% passes · SCORING passes (in-league none; all-leagues 9-12 42.9% ✓; ranks by all-leagues edge -5.1)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7% ✓; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Bruins @ Hurricanes: YDC2 New Jersey Devils ML -110 · WILSON 47-52 all 47.5%, Wilson 40.1% passes · SCORING passes (in-league none; all-leagues 47-52 47.5% ✓; ranks by all-leagues edge -4.1)
+      Bruins @ Hurricanes: H1 Detroit Red Wings ML -110 · WILSON 10-12 all 45.5%, Wilson 30.7% passes · SCORING passes (in-league none; all-leagues 10-12 45.5% ✓; ranks by all-leagues edge -3.8)
+      Bruins @ Hurricanes: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+      Bruins @ Hurricanes: U4 Under 6.5 -110 · WILSON 5-7 all 41.7%, Wilson 23.3% passes · SCORING passes (in-league none; all-leagues 5-7 41.7% ✓; ranks by all-leagues edge -4.3)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 22-20 52.4% ✓; ranks by all-leagues edge -0.1)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Kings @ Spurs: SK1 Golden State Warriors +2.5 -110 · WILSON 12-8 all 60.0%, Wilson 43.4% passes · SCORING passes (in-league none; all-leagues 12-8 60.0% ✓; ranks by all-leagues edge 3.6)
+      Kings @ Spurs: NICKYCASHIN Over 234.5 -110 · WILSON 8-11 all 42.1%, Wilson 26.9% passes · SCORING passes (in-league none; all-leagues 8-11 42.1% ✓; ranks by all-leagues edge -5.2)
+
+slate-10-27 @ 45%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2,BEEZOWINS] -> [Porter PICKS,B2,B1,BEEZOWINS]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Bruins @ Hurricanes side: direction New Jersey Devils (YDC2 47-52 (all-leagues)) -> Detroit Red Wings (H1 10-12 (all-leagues))
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Bruins @ Hurricanes
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Bruins @ Hurricanes
+  parlay: same shape (multi-box, 7 boxes, 14/15 legs), different legs or order
+  why Wild @ Mammoth: Total legs cap reached -> (used)
+  why Sabres @ Sharks: (used) -> Total legs cap reached
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6% ✓; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% passes · SCORING passes (in-league 31-35 47.0% ✓; all-leagues 37-39 48.7% ✓; ranks by all-leagues edge -3.0)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% fails · SCORING fails (in-league 1-6 14.3%; all-leagues 12-19 38.7%; ranks by nothing unranked)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% passes · SCORING passes (in-league 2-2 50.0% ✓; all-leagues 42-40 51.2% ✓; ranks by all-leagues edge -1.0)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% fails · SCORING fails (in-league none; all-leagues 9-12 42.9%; ranks by nothing unranked)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7%; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Bruins @ Hurricanes: YDC2 New Jersey Devils ML -110 · WILSON 47-52 all 47.5%, Wilson 40.1% passes · SCORING passes (in-league none; all-leagues 47-52 47.5% ✓; ranks by all-leagues edge -4.1)
+      Bruins @ Hurricanes: H1 Detroit Red Wings ML -110 · WILSON 10-12 all 45.5%, Wilson 30.7% passes · SCORING passes (in-league none; all-leagues 10-12 45.5% ✓; ranks by all-leagues edge -3.8)
+      Bruins @ Hurricanes: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+      Bruins @ Hurricanes: U4 Under 6.5 -110 · WILSON 5-7 all 41.7%, Wilson 23.3% fails · SCORING fails (in-league none; all-leagues 5-7 41.7%; ranks by nothing unranked)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 22-20 52.4% ✓; ranks by all-leagues edge -0.1)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Wild @ Mammoth: Porter PICKS New Jersey Devils ML -110 · WILSON 23-14 all 62.2%, Wilson 49.8% passes · SCORING passes (in-league 5-3 62.5% ✓; all-leagues 23-14 62.2% ✓; ranks by in-league edge 6.9)
+      Wild @ Mammoth: M10 Detroit Red Wings ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Wild @ Mammoth: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+
+slate-10-27 @ 55%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2] -> [Porter PICKS,B2,B1]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars
+  parlay: same shape (multi-box, 5 boxes, 10/15 legs), different legs or order
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6%; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% fails · SCORING fails (in-league 31-35 47.0%; all-leagues 37-39 48.7%; ranks by nothing unranked)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% fails · SCORING fails (in-league 1-6 14.3%; all-leagues 12-19 38.7%; ranks by nothing unranked)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% fails · SCORING fails (in-league 2-2 50.0%; all-leagues 42-40 51.2%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% fails · SCORING fails (in-league none; all-leagues 9-12 42.9%; ranks by nothing unranked)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7%; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% fails · SCORING fails (in-league none; all-leagues 22-20 52.4%; ranks by nothing unranked)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+
+slate-10-27 @ 60%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS] -> [KIMSPICKS,SHARP]
+  ~ Pistons @ Knicks side Golden State Warriors: supporters [DPATT] -> [DPATT,Duck]
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Devils @ Stars
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Devils @ Stars
+  parlay: same shape (multi-box, 4 boxes, 8/15 legs), different legs or order
+  posts on the games that changed:
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% fails · SCORING fails (in-league none; all-leagues 10-8 55.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+    + Pistons @ Knicks: Duck Golden State Warriors +4.5 -110 · WILSON 18-14 all 56.3%, Wilson 43.1% fails · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 18-14 56.3%; ranks by in-league edge 3.8)
+      Pistons @ Knicks: DPATT Golden State Warriors +5.5 -110 · WILSON 15-8 all 65.2%, Wilson 49.6% passes · SCORING passes (in-league none; all-leagues 15-8 65.2% ✓; ranks by all-leagues edge 6.7)
+      Pistons @ Knicks: K1 Denver Nuggets -5.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% fails · SCORING fails (in-league none; all-leagues 20-15 57.1%; ranks by nothing unranked)
+      Pistons @ Knicks: MRBIGBETS Over 234.5 -110 · WILSON 27-27 all 50.0%, Wilson 40.0% fails · SCORING fails (in-league none; all-leagues 27-27 50.0%; ranks by nothing unranked)
+
+slate-10-27 (3 legs, cap 6) @ 0%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2,BEEZOWINS] -> [Porter PICKS,B2,B1,BEEZOWINS]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Bruins @ Hurricanes side: direction New Jersey Devils (YDC2 47-52 (all-leagues)) -> Detroit Red Wings (H1 10-12 (all-leagues))
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes, Kings @ Spurs
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Kings @ Spurs, Bruins @ Hurricanes
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth
+  parlay: same shape (multi-box, 2 boxes, 6/6 legs), different legs or order
+  why Wild @ Mammoth: Not priced: each generation prices the top 6 qualifying games -> Total legs cap reached
+  why Pistons @ Knicks: Total legs cap reached -> Not priced: each generation prices the top 6 qualifying games
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6% ✓; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% passes · SCORING passes (in-league 31-35 47.0% ✓; all-leagues 37-39 48.7% ✓; ranks by all-leagues edge -3.0)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% passes · SCORING passes (in-league 1-6 14.3% ✓; all-leagues 12-19 38.7% ✓; ranks by all-leagues edge -8.5)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% passes · SCORING passes (in-league 2-3 40.0% ✓; all-leagues 2-5 28.6% ✓; ranks by all-leagues edge -6.5)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% passes · SCORING passes (in-league 2-3 40.0% ✓; all-leagues 10-17 37.0% ✓; ranks by all-leagues edge -9.0)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% passes · SCORING passes (in-league 2-2 50.0% ✓; all-leagues 42-40 51.2% ✓; ranks by all-leagues edge -1.0)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% passes · SCORING passes (in-league none; all-leagues 9-12 42.9% ✓; ranks by all-leagues edge -5.1)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7% ✓; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Bruins @ Hurricanes: YDC2 New Jersey Devils ML -110 · WILSON 47-52 all 47.5%, Wilson 40.1% passes · SCORING passes (in-league none; all-leagues 47-52 47.5% ✓; ranks by all-leagues edge -4.1)
+      Bruins @ Hurricanes: H1 Detroit Red Wings ML -110 · WILSON 10-12 all 45.5%, Wilson 30.7% passes · SCORING passes (in-league none; all-leagues 10-12 45.5% ✓; ranks by all-leagues edge -3.8)
+      Bruins @ Hurricanes: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+      Bruins @ Hurricanes: U4 Under 6.5 -110 · WILSON 5-7 all 41.7%, Wilson 23.3% passes · SCORING passes (in-league none; all-leagues 5-7 41.7% ✓; ranks by all-leagues edge -4.3)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 22-20 52.4% ✓; ranks by all-leagues edge -0.1)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Pistons @ Knicks: Duck Golden State Warriors +4.5 -110 · WILSON 18-14 all 56.3%, Wilson 43.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 18-14 56.3% ✓; ranks by in-league edge 3.8)
+      Pistons @ Knicks: DPATT Golden State Warriors +5.5 -110 · WILSON 15-8 all 65.2%, Wilson 49.6% passes · SCORING passes (in-league none; all-leagues 15-8 65.2% ✓; ranks by all-leagues edge 6.7)
+      Pistons @ Knicks: K1 Denver Nuggets -5.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Pistons @ Knicks: MRBIGBETS Over 234.5 -110 · WILSON 27-27 all 50.0%, Wilson 40.0% passes · SCORING passes (in-league none; all-leagues 27-27 50.0% ✓; ranks by all-leagues edge -1.8)
+      Wild @ Mammoth: Porter PICKS New Jersey Devils ML -110 · WILSON 23-14 all 62.2%, Wilson 49.8% passes · SCORING passes (in-league 5-3 62.5% ✓; all-leagues 23-14 62.2% ✓; ranks by in-league edge 6.9)
+      Wild @ Mammoth: M10 Detroit Red Wings ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Wild @ Mammoth: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+
+slate-10-27 (3 legs, cap 6) @ 45%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2,BEEZOWINS] -> [Porter PICKS,B2,B1,BEEZOWINS]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Bruins @ Hurricanes side: direction New Jersey Devils (YDC2 47-52 (all-leagues)) -> Detroit Red Wings (H1 10-12 (all-leagues))
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks, Sabres @ Sharks, Wild @ Mammoth, Bruins @ Hurricanes
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth, Pistons @ Knicks, Sabres @ Sharks, Bruins @ Hurricanes
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights, Pistons @ Knicks
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars, Wild @ Mammoth
+  parlay: same shape (multi-box, 2 boxes, 6/6 legs), different legs or order
+  why Wild @ Mammoth: Not priced: each generation prices the top 6 qualifying games -> Total legs cap reached
+  why Pistons @ Knicks: Total legs cap reached -> Not priced: each generation prices the top 6 qualifying games
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6% ✓; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% passes · SCORING passes (in-league 31-35 47.0% ✓; all-leagues 37-39 48.7% ✓; ranks by all-leagues edge -3.0)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% fails · SCORING fails (in-league 1-6 14.3%; all-leagues 12-19 38.7%; ranks by nothing unranked)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% passes · SCORING passes (in-league 2-2 50.0% ✓; all-leagues 42-40 51.2% ✓; ranks by all-leagues edge -1.0)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% fails · SCORING fails (in-league none; all-leagues 9-12 42.9%; ranks by nothing unranked)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7%; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Bruins @ Hurricanes: YDC2 New Jersey Devils ML -110 · WILSON 47-52 all 47.5%, Wilson 40.1% passes · SCORING passes (in-league none; all-leagues 47-52 47.5% ✓; ranks by all-leagues edge -4.1)
+      Bruins @ Hurricanes: H1 Detroit Red Wings ML -110 · WILSON 10-12 all 45.5%, Wilson 30.7% passes · SCORING passes (in-league none; all-leagues 10-12 45.5% ✓; ranks by all-leagues edge -3.8)
+      Bruins @ Hurricanes: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+      Bruins @ Hurricanes: U4 Under 6.5 -110 · WILSON 5-7 all 41.7%, Wilson 23.3% fails · SCORING fails (in-league none; all-leagues 5-7 41.7%; ranks by nothing unranked)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 22-20 52.4% ✓; ranks by all-leagues edge -0.1)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Pistons @ Knicks: Duck Golden State Warriors +4.5 -110 · WILSON 18-14 all 56.3%, Wilson 43.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 18-14 56.3% ✓; ranks by in-league edge 3.8)
+      Pistons @ Knicks: DPATT Golden State Warriors +5.5 -110 · WILSON 15-8 all 65.2%, Wilson 49.6% passes · SCORING passes (in-league none; all-leagues 15-8 65.2% ✓; ranks by all-leagues edge 6.7)
+      Pistons @ Knicks: K1 Denver Nuggets -5.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Pistons @ Knicks: MRBIGBETS Over 234.5 -110 · WILSON 27-27 all 50.0%, Wilson 40.0% passes · SCORING passes (in-league none; all-leagues 27-27 50.0% ✓; ranks by all-leagues edge -1.8)
+      Wild @ Mammoth: Porter PICKS New Jersey Devils ML -110 · WILSON 23-14 all 62.2%, Wilson 49.8% passes · SCORING passes (in-league 5-3 62.5% ✓; all-leagues 23-14 62.2% ✓; ranks by in-league edge 6.9)
+      Wild @ Mammoth: M10 Detroit Red Wings ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Wild @ Mammoth: PATSPICKS Over 6.5 -110 · WILSON 8-8 all 50.0%, Wilson 32.4% passes · SCORING passes (in-league none; all-leagues 8-8 50.0% ✓; ranks by all-leagues edge -1.3)
+
+slate-10-27 (3 legs, cap 6) @ 55%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS,Analytics capper] -> [KIMSPICKS,SHARP,Analytics capper]
+  ~ Trail Blazers @ Lakers side Golden State Warriors: supporters [Porter PICKS,B1,B2] -> [Porter PICKS,B2,B1]
+  ~ Brewers @ Rays side Tampa Bay Rays: supporters [Sharp Sheet,LOCKS by Tommy,R3,R4,R2,R5] -> [Sharp Sheet,R3,LOCKS by Tommy,R4,R2,R5]
+  ~ Sabres @ Sharks total OVER: top supporter O8a 20-15 (all-leagues) -> O8b 14-10 (all-leagues)
+  ~ Sabres @ Sharks total OVER: supporters [O8a,O8b] -> [O8b,O8a]
+  ~ Devils @ Stars total: direction UNDER (Porter PICKS 4-2 (in-league)) -> OVER (O2 5-4 (all-leagues))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars, Senators @ Golden Knights
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Senators @ Golden Knights, Devils @ Stars
+  parlay: same shape (multi-box, 2 boxes, 6/6 legs), different legs or order
+  posts on the games that changed:
+      Brewers @ Rays: Sharp Sheet Tampa Bay Rays ML -110 · WILSON 13-6 lg 68.4%, Wilson 51.2% passes · SCORING passes (in-league 13-6 68.4% ✓; all-leagues 20-14 58.8% ✓; ranks by in-league edge 6.4)
+      Brewers @ Rays: LOCKS by Tommy Tampa Bay Rays ML -110 · WILSON 30-22 all 57.7%, Wilson 47.3% passes · SCORING passes (in-league none; all-leagues 30-22 57.7% ✓; ranks by all-leagues edge 3.7)
+      Brewers @ Rays: R2 Tampa Bay Rays ML -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R3 Tampa Bay Rays ML -110 · WILSON 18-12 all 60.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 18-12 60.0% ✓; ranks by all-leagues edge 4.4)
+      Brewers @ Rays: R4 Tampa Bay Rays ML -110 · WILSON 25-19 all 56.8%, Wilson 45.6% passes · SCORING passes (in-league none; all-leagues 25-19 56.8% ✓; ranks by all-leagues edge 2.9)
+      Brewers @ Rays: R5 Tampa Bay Rays ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: BEEZOWINS Cleveland Guardians ML -110 · WILSON 28-18 lg 60.9%, Wilson 49.8% passes · SCORING passes (in-league 28-18 60.9% ✓; all-leagues 32-23 58.2% ✓; ranks by in-league edge 5.1)
+      Brewers @ Rays: Proven winner Cleveland Guardians ML -110 · WILSON 9-7 lg 56.3%, Wilson 38.0% passes · SCORING passes (in-league 9-7 56.3% ✓; all-leagues 10-9 52.6%; ranks by in-league edge 0.2)
+      Brewers @ Rays: MRBIGBETS Cleveland Guardians ML -110 · WILSON 37-39 all 48.7%, Wilson 40.2% fails · SCORING fails (in-league 31-35 47.0%; all-leagues 37-39 48.7%; ranks by nothing unranked)
+      Brewers @ Rays: BEEZOWINS Over 7.5 -110 · WILSON 11-3 lg 78.6%, Wilson 58.8% passes · SCORING passes (in-league 11-3 78.6% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 12.7)
+      Brewers @ Rays: Shark Over 7.5 -110 · WILSON 20-14 all 58.8%, Wilson 46.0% passes · SCORING passes (in-league none; all-leagues 20-14 58.8% ✓; ranks by all-leagues edge 3.9)
+      Brewers @ Rays: Smart Money Sports Under 7.5 -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Brewers @ Rays: Porter PICKS Under 7.5 -110 · WILSON 12-19 all 38.7%, Wilson 26.8% fails · SCORING fails (in-league 1-6 14.3%; all-leagues 12-19 38.7%; ranks by nothing unranked)
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% passes · SCORING passes (in-league none; all-leagues 10-8 55.6% ✓; ranks by all-leagues edge 1.3)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: Porter PICKS Golden State Warriors +3 -110 · WILSON 47-23 all 67.1%, Wilson 58.3% passes · SCORING passes (in-league 4-1 80.0% ✓; all-leagues 47-23 67.1% ✓; ranks by in-league edge 13.9)
+      Trail Blazers @ Lakers: BEEZOWINS Golden State Warriors +2.5 -110 · WILSON 42-40 all 51.2%, Wilson 43.0% fails · SCORING fails (in-league 2-2 50.0%; all-leagues 42-40 51.2%; ranks by nothing unranked)
+      Trail Blazers @ Lakers: B1 Golden State Warriors +3 -110 · WILSON 30-24 all 55.6%, Wilson 45.4% passes · SCORING passes (in-league none; all-leagues 30-24 55.6% ✓; ranks by all-leagues edge 2.2)
+      Trail Blazers @ Lakers: B2 Golden State Warriors +3.5 -110 · WILSON 22-17 all 56.4%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 22-17 56.4% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: L1 Denver Nuggets -3 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+      Trail Blazers @ Lakers: L2 Denver Nuggets -2.5 -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Trail Blazers @ Lakers: BET LABS Under 234.5 -110 · WILSON 7-3 all 70.0%, Wilson 46.3% passes · SCORING passes (in-league none; all-leagues 7-3 70.0% ✓; ranks by all-leagues edge 5.6)
+      Trail Blazers @ Lakers: O1 Over 234.5 -110 · WILSON 9-12 all 42.9%, Wilson 28.1% fails · SCORING fails (in-league none; all-leagues 9-12 42.9%; ranks by nothing unranked)
+      Devils @ Stars: YDC New Jersey Devils ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 20-16 55.6% ✓; ranks by in-league edge 7.4)
+      Devils @ Stars: D2 New Jersey Devils ML -110 · WILSON 15-11 all 57.7%, Wilson 43.1% passes · SCORING passes (in-league none; all-leagues 15-11 57.7% ✓; ranks by all-leagues edge 2.8)
+      Devils @ Stars: D3 New Jersey Devils ML -110 · WILSON 12-9 all 57.1%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 12-9 57.1% ✓; ranks by all-leagues edge 2.3)
+      Devils @ Stars: S1 Detroit Red Wings ML -110 · WILSON 11-8 all 57.9%, Wilson 41.0% passes · SCORING passes (in-league none; all-leagues 11-8 57.9% ✓; ranks by all-leagues edge 2.5)
+      Devils @ Stars: Porter PICKS Under 6.5 -110 · WILSON 4-2 lg 66.7%, Wilson 37.1% passes · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 12-19 38.7%; ranks by in-league edge -5.5)
+      Devils @ Stars: O2 Over 6.5 -110 · WILSON 5-4 all 55.6%, Wilson 32.2% passes · SCORING passes (in-league none; all-leagues 5-4 55.6% ✓; ranks by all-leagues edge 0.7)
+      Sabres @ Sharks: B Bank New Jersey Devils ML -110 · WILSON 22-20 all 52.4%, Wilson 41.0% fails · SCORING fails (in-league none; all-leagues 22-20 52.4%; ranks by nothing unranked)
+      Sabres @ Sharks: O8a Over 6.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% passes · SCORING passes (in-league none; all-leagues 20-15 57.1% ✓; ranks by all-leagues edge 2.9)
+      Sabres @ Sharks: O8b Over 6.5 -110 · WILSON 14-10 all 58.3%, Wilson 43.2% passes · SCORING passes (in-league none; all-leagues 14-10 58.3% ✓; ranks by all-leagues edge 3.1)
+
+slate-10-27 (3 legs, cap 6) @ 60%
+  ~ Kings @ Blackhawks side Detroit Red Wings: top supporter SHARP 5-0 (in-league) -> KIMSPICKS 7-1 (in-league)
+  ~ Kings @ Blackhawks side Detroit Red Wings: supporters [SHARP,KIMSPICKS] -> [KIMSPICKS,SHARP]
+  ~ Pistons @ Knicks side Golden State Warriors: supporters [DPATT] -> [DPATT,Duck]
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars
+             -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Devils @ Stars
+  priced: Kings @ Blackhawks, Brewers @ Rays, Trail Blazers @ Lakers, Devils @ Stars
+       -> Kings @ Blackhawks, Trail Blazers @ Lakers, Brewers @ Rays, Devils @ Stars
+  parlay: same shape (multi-box, 2 boxes, 6/6 legs), different legs or order
+  posts on the games that changed:
+      Kings @ Blackhawks: KLEOS New Jersey Devils ML -110 · WILSON 2-3 lg 40.0%, Wilson 15.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 2-5 28.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: SHARP Detroit Red Wings ML -110 · WILSON 5-0 lg 100.0%, Wilson 69.0% passes · SCORING passes (in-league 5-0 100.0% ✓; all-leagues 15-8 65.2% ✓; ranks by in-league edge 10.6)
+      Kings @ Blackhawks: KIMSPICKS Detroit Red Wings ML -110 · WILSON 7-1 lg 87.5%, Wilson 61.7% passes · SCORING passes (in-league 7-1 87.5% ✓; all-leagues 19-9 67.9% ✓; ranks by in-league edge 12.6)
+      Kings @ Blackhawks: Analytics capper Detroit Red Wings ML -110 · WILSON 10-8 all 55.6%, Wilson 38.4% fails · SCORING fails (in-league none; all-leagues 10-8 55.6%; ranks by nothing unranked)
+      Kings @ Blackhawks: BEEZOWINS Over 6.5 -110 · WILSON 29-16 all 64.4%, Wilson 53.3% passes · SCORING passes (in-league 6-3 66.7% ✓; all-leagues 29-16 64.4% ✓; ranks by in-league edge 9.4)
+      Kings @ Blackhawks: PARLAY SAFARI Over 6.5 -110 · WILSON 10-17 all 37.0%, Wilson 24.6% fails · SCORING fails (in-league 2-3 40.0%; all-leagues 10-17 37.0%; ranks by nothing unranked)
+    + Pistons @ Knicks: Duck Golden State Warriors +4.5 -110 · WILSON 18-14 all 56.3%, Wilson 43.1% fails · SCORING passes (in-league 4-2 66.7% ✓; all-leagues 18-14 56.3%; ranks by in-league edge 3.8)
+      Pistons @ Knicks: DPATT Golden State Warriors +5.5 -110 · WILSON 15-8 all 65.2%, Wilson 49.6% passes · SCORING passes (in-league none; all-leagues 15-8 65.2% ✓; ranks by all-leagues edge 6.7)
+      Pistons @ Knicks: K1 Denver Nuggets -5.5 -110 · WILSON 20-15 all 57.1%, Wilson 44.5% fails · SCORING fails (in-league none; all-leagues 20-15 57.1%; ranks by nothing unranked)
+      Pistons @ Knicks: MRBIGBETS Over 234.5 -110 · WILSON 27-27 all 50.0%, Wilson 40.0% fails · SCORING fails (in-league none; all-leagues 27-27 50.0%; ranks by nothing unranked)
+
+all-leagues vs in-league @ 0%
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: in-league capper, all-leagues capper, tiny sample
+             -> all-leagues capper, tiny sample, in-league capper
+  priced: in-league capper, all-leagues capper, tiny sample
+       -> all-leagues capper, tiny sample, in-league capper
+  parlay: same shape (multi-box, 2 boxes, 4/4 legs), different legs or order
+  why tiny sample: Total legs cap reached -> (used)
+  why in-league capper: (used) -> Total legs cap reached
+  posts on the games that changed:
+      in-league capper: Local Denver Broncos -2.5 -110 · WILSON 8-0 lg 100.0%, Wilson 78.0% passes · SCORING passes (in-league 8-0 100.0% ✓; all-leagues 20-30 40.0% ✓; ranks by in-league edge 2.0)
+      in-league capper: Tot2 Under 44.5 -110 · WILSON 12-8 all 60.0%, Wilson 43.4% passes · SCORING passes (in-league none; all-leagues 12-8 60.0% ✓; ranks by all-leagues edge 3.6)
+      tiny sample: Tiny Denver Broncos -1.5 -110 · WILSON 2-0 lg 100.0%, Wilson 47.1% passes · SCORING passes (in-league 2-0 100.0% ✓; all-leagues 2-0 100.0% ✓; ranks by in-league edge 4.0)
+      tiny sample: Mid Seattle Seahawks +1.5 -110 · WILSON 11-8 lg 57.9%, Wilson 41.0% passes · SCORING passes (in-league 11-8 57.9% ✓; all-leagues 11-8 57.9% ✓; ranks by in-league edge 2.5)
+      tiny sample: Tot3 Over 44.5 -110 · WILSON 9-5 all 64.3%, Wilson 44.4% passes · SCORING passes (in-league none; all-leagues 9-5 64.3% ✓; ranks by all-leagues edge 4.7)
+
+all-leagues vs in-league @ 45%
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: in-league capper, all-leagues capper, tiny sample
+             -> all-leagues capper, tiny sample, in-league capper
+  priced: in-league capper, all-leagues capper, tiny sample
+       -> all-leagues capper, tiny sample, in-league capper
+  parlay: same shape (multi-box, 2 boxes, 4/4 legs), different legs or order
+  why tiny sample: Total legs cap reached -> (used)
+  why in-league capper: (used) -> Total legs cap reached
+  posts on the games that changed:
+      in-league capper: Local Denver Broncos -2.5 -110 · WILSON 8-0 lg 100.0%, Wilson 78.0% passes · SCORING passes (in-league 8-0 100.0% ✓; all-leagues 20-30 40.0%; ranks by in-league edge 2.0)
+      in-league capper: Tot2 Under 44.5 -110 · WILSON 12-8 all 60.0%, Wilson 43.4% passes · SCORING passes (in-league none; all-leagues 12-8 60.0% ✓; ranks by all-leagues edge 3.6)
+      tiny sample: Tiny Denver Broncos -1.5 -110 · WILSON 2-0 lg 100.0%, Wilson 47.1% passes · SCORING passes (in-league 2-0 100.0% ✓; all-leagues 2-0 100.0% ✓; ranks by in-league edge 4.0)
+      tiny sample: Mid Seattle Seahawks +1.5 -110 · WILSON 11-8 lg 57.9%, Wilson 41.0% passes · SCORING passes (in-league 11-8 57.9% ✓; all-leagues 11-8 57.9% ✓; ranks by in-league edge 2.5)
+      tiny sample: Tot3 Over 44.5 -110 · WILSON 9-5 all 64.3%, Wilson 44.4% passes · SCORING passes (in-league none; all-leagues 9-5 64.3% ✓; ranks by all-leagues edge 4.7)
+
+all-leagues vs in-league @ 55%
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: in-league capper, all-leagues capper, tiny sample
+             -> all-leagues capper, tiny sample, in-league capper
+  priced: in-league capper, all-leagues capper, tiny sample
+       -> all-leagues capper, tiny sample, in-league capper
+  parlay: same shape (multi-box, 2 boxes, 4/4 legs), different legs or order
+  why tiny sample: Total legs cap reached -> (used)
+  why in-league capper: (used) -> Total legs cap reached
+  posts on the games that changed:
+      in-league capper: Local Denver Broncos -2.5 -110 · WILSON 8-0 lg 100.0%, Wilson 78.0% passes · SCORING passes (in-league 8-0 100.0% ✓; all-leagues 20-30 40.0%; ranks by in-league edge 2.0)
+      in-league capper: Tot2 Under 44.5 -110 · WILSON 12-8 all 60.0%, Wilson 43.4% passes · SCORING passes (in-league none; all-leagues 12-8 60.0% ✓; ranks by all-leagues edge 3.6)
+      tiny sample: Tiny Denver Broncos -1.5 -110 · WILSON 2-0 lg 100.0%, Wilson 47.1% passes · SCORING passes (in-league 2-0 100.0% ✓; all-leagues 2-0 100.0% ✓; ranks by in-league edge 4.0)
+      tiny sample: Mid Seattle Seahawks +1.5 -110 · WILSON 11-8 lg 57.9%, Wilson 41.0% passes · SCORING passes (in-league 11-8 57.9% ✓; all-leagues 11-8 57.9% ✓; ranks by in-league edge 2.5)
+      tiny sample: Tot3 Over 44.5 -110 · WILSON 9-5 all 64.3%, Wilson 44.4% passes · SCORING passes (in-league none; all-leagues 9-5 64.3% ✓; ranks by all-leagues edge 4.7)
+
+all-leagues vs in-league @ 60%
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: in-league capper, all-leagues capper, tiny sample
+             -> all-leagues capper, tiny sample, in-league capper
+  priced: in-league capper, all-leagues capper, tiny sample
+       -> all-leagues capper, tiny sample, in-league capper
+  parlay: same shape (multi-box, 2 boxes, 4/4 legs), different legs or order
+  why tiny sample: Total legs cap reached -> (used)
+  why in-league capper: (used) -> Total legs cap reached
+  posts on the games that changed:
+      in-league capper: Local Denver Broncos -2.5 -110 · WILSON 8-0 lg 100.0%, Wilson 78.0% passes · SCORING passes (in-league 8-0 100.0% ✓; all-leagues 20-30 40.0%; ranks by in-league edge 2.0)
+      in-league capper: Tot2 Under 44.5 -110 · WILSON 12-8 all 60.0%, Wilson 43.4% passes · SCORING passes (in-league none; all-leagues 12-8 60.0% ✓; ranks by all-leagues edge 3.6)
+      tiny sample: Tiny Denver Broncos -1.5 -110 · WILSON 2-0 lg 100.0%, Wilson 47.1% passes · SCORING passes (in-league 2-0 100.0% ✓; all-leagues 2-0 100.0% ✓; ranks by in-league edge 4.0)
+      tiny sample: Mid Seattle Seahawks +1.5 -110 · WILSON 11-8 lg 57.9%, Wilson 41.0% fails · SCORING fails (in-league 11-8 57.9%; all-leagues 11-8 57.9%; ranks by nothing unranked)
+      tiny sample: Tot3 Over 44.5 -110 · WILSON 9-5 all 64.3%, Wilson 44.4% passes · SCORING passes (in-league none; all-leagues 9-5 64.3% ✓; ranks by all-leagues edge 4.7)
+
+long dogs @ 0%
+  ~ 6-14 at +250 side: direction New Jersey Devils (Fav1 10-9 (in-league)) -> Detroit Red Wings (SixFourteen 6-14 (in-league))
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: 6-14 at +250, 14-16 at +400, 1-4 at +200, 0-3 at +300
+             -> 14-16 at +400, 1-4 at +200, 6-14 at +250, 0-3 at +300
+  priced: 6-14 at +250, 14-16 at +400, 1-4 at +200, 0-3 at +300
+       -> 14-16 at +400, 1-4 at +200, 6-14 at +250, 0-3 at +300
+  parlay: same shape (multi-box, 3 boxes, 6/6 legs), different legs or order
+  posts on the games that changed:
+      6-14 at +250: SixFourteen Detroit Red Wings ML +250 · WILSON 6-14 lg 30.0%, Wilson 17.3% passes · SCORING passes (in-league 6-14 30.0% ✓; all-leagues 6-14 30.0% ✓; ranks by in-league edge -2.0)
+      6-14 at +250: Fav1 New Jersey Devils ML -150 · WILSON 10-9 lg 52.6%, Wilson 36.1% passes · SCORING passes (in-league 10-9 52.6% ✓; all-leagues 10-9 52.6% ✓; ranks by in-league edge -4.1)
+      6-14 at +250: Un1 Under 6.5 -110 · WILSON 13-9 lg 59.1%, Wilson 43.2% passes · SCORING passes (in-league 13-9 59.1% ✓; all-leagues 13-9 59.1% ✓; ranks by in-league edge 2.6)
+      14-16 at +400: Fourteen Detroit Red Wings ML +400 · WILSON 14-16 lg 46.7%, Wilson 33.7% passes · SCORING passes (in-league 14-16 46.7% ✓; all-leagues 14-16 46.7% ✓; ranks by in-league edge 7.2)
+      14-16 at +400: Ov2 Over 6.5 -110 · WILSON 11-7 lg 61.1%, Wilson 43.6% passes · SCORING passes (in-league 11-7 61.1% ✓; all-leagues 11-7 61.1% ✓; ranks by in-league edge 2.9)
+
+long dogs @ 45%
+  ~ rank order of the positions on both sides changed (edge at the posted price, not Wilson)
+  box-eligible: 6-14 at +250, 14-16 at +400
+             -> 14-16 at +400, 6-14 at +250
+  priced: 6-14 at +250, 14-16 at +400
+       -> 14-16 at +400, 6-14 at +250
+  parlay: same shape (multi-box, 2 boxes, 4/6 legs), different legs or order
+  posts on the games that changed:
+      14-16 at +400: Fourteen Detroit Red Wings ML +400 · WILSON 14-16 lg 46.7%, Wilson 33.7% passes · SCORING passes (in-league 14-16 46.7% ✓; all-leagues 14-16 46.7% ✓; ranks by in-league edge 7.2)
+      14-16 at +400: Ov2 Over 6.5 -110 · WILSON 11-7 lg 61.1%, Wilson 43.6% passes · SCORING passes (in-league 11-7 61.1% ✓; all-leagues 11-7 61.1% ✓; ranks by in-league edge 2.9)
+
+consensus shapes @ 0%
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: top supporter A 50-40 (in-league) -> B 7-3 (in-league)
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: supporters [A,B] -> [B,A]
+  ~ 52% record side: direction Denver Broncos (C 13-12 (in-league)) -> Seattle Seahawks (D 6-4 (in-league))
+  ~ 52% record side Seattle Seahawks: anchor -3 -> 3
+  posts on the games that changed:
+      50-40 in-league, 2-0 all: A Denver Broncos -3 -110 · WILSON 50-40 lg 55.6%, Wilson 47.7% passes · SCORING passes (in-league 50-40 55.6% ✓; all-leagues 50-40 55.6% ✓; ranks by in-league edge 2.5)
+      50-40 in-league, 2-0 all: B Denver Broncos -3 -110 · WILSON 7-3 lg 70.0%, Wilson 46.3% passes · SCORING passes (in-league 7-3 70.0% ✓; all-leagues 7-3 70.0% ✓; ranks by in-league edge 5.6)
+      52% record: C Denver Broncos -3 -110 · WILSON 13-12 lg 52.0%, Wilson 37.5% passes · SCORING passes (in-league 13-12 52.0% ✓; all-leagues 13-12 52.0% ✓; ranks by in-league edge -0.4)
+      52% record: D Seattle Seahawks +3 -110 · WILSON 6-4 lg 60.0%, Wilson 37.1% passes · SCORING passes (in-league 6-4 60.0% ✓; all-leagues 6-4 60.0% ✓; ranks by in-league edge 2.3)
+
+consensus shapes @ 45%
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: top supporter A 50-40 (in-league) -> B 7-3 (in-league)
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: supporters [A,B] -> [B,A]
+  ~ 52% record side: direction Denver Broncos (C 13-12 (in-league)) -> Seattle Seahawks (D 6-4 (in-league))
+  ~ 52% record side Seattle Seahawks: anchor -3 -> 3
+  posts on the games that changed:
+      50-40 in-league, 2-0 all: A Denver Broncos -3 -110 · WILSON 50-40 lg 55.6%, Wilson 47.7% passes · SCORING passes (in-league 50-40 55.6% ✓; all-leagues 50-40 55.6% ✓; ranks by in-league edge 2.5)
+      50-40 in-league, 2-0 all: B Denver Broncos -3 -110 · WILSON 7-3 lg 70.0%, Wilson 46.3% passes · SCORING passes (in-league 7-3 70.0% ✓; all-leagues 7-3 70.0% ✓; ranks by in-league edge 5.6)
+      52% record: C Denver Broncos -3 -110 · WILSON 13-12 lg 52.0%, Wilson 37.5% passes · SCORING passes (in-league 13-12 52.0% ✓; all-leagues 13-12 52.0% ✓; ranks by in-league edge -0.4)
+      52% record: D Seattle Seahawks +3 -110 · WILSON 6-4 lg 60.0%, Wilson 37.1% passes · SCORING passes (in-league 6-4 60.0% ✓; all-leagues 6-4 60.0% ✓; ranks by in-league edge 2.3)
+
+consensus shapes @ 55%
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: top supporter A 50-40 (in-league) -> B 7-3 (in-league)
+  ~ 50-40 in-league, 2-0 all side Denver Broncos: supporters [A,B] -> [B,A]
+  posts on the games that changed:
+      50-40 in-league, 2-0 all: A Denver Broncos -3 -110 · WILSON 50-40 lg 55.6%, Wilson 47.7% passes · SCORING passes (in-league 50-40 55.6% ✓; all-leagues 50-40 55.6% ✓; ranks by in-league edge 2.5)
+      50-40 in-league, 2-0 all: B Denver Broncos -3 -110 · WILSON 7-3 lg 70.0%, Wilson 46.3% passes · SCORING passes (in-league 7-3 70.0% ✓; all-leagues 7-3 70.0% ✓; ranks by in-league edge 5.6)
+
+Case/gate runs that changed: 17 of 24. Every other run is byte-identical to before.
+
+=== Box-eligible games, boxes and legs, before -> after (case @ gate) ===
+slate-10-27 @ 0%                       10 box-eligible, 7 boxes, 14/15 legs, 25 positions  ->  10 box-eligible, 7 boxes, 14/15 legs, 25 positions
+slate-10-27 @ 45%                      9 box-eligible, 7 boxes, 14/15 legs, 24 positions  ->  9 box-eligible, 7 boxes, 14/15 legs, 24 positions
+slate-10-27 @ 55%                      5 box-eligible, 5 boxes, 10/15 legs, 19 positions  ->  5 box-eligible, 5 boxes, 10/15 legs, 19 positions
+slate-10-27 @ 60%                      4 box-eligible, 4 boxes, 8/15 legs, 15 positions  ->  4 box-eligible, 4 boxes, 8/15 legs, 15 positions
+slate-10-27 (3 legs, cap 6) @ 0%       10 box-eligible, 2 boxes, 6/6 legs, 25 positions  ->  10 box-eligible, 2 boxes, 6/6 legs, 25 positions
+slate-10-27 (3 legs, cap 6) @ 45%      9 box-eligible, 2 boxes, 6/6 legs, 24 positions  ->  9 box-eligible, 2 boxes, 6/6 legs, 24 positions
+slate-10-27 (3 legs, cap 6) @ 55%      5 box-eligible, 2 boxes, 6/6 legs, 19 positions  ->  5 box-eligible, 2 boxes, 6/6 legs, 19 positions
+slate-10-27 (3 legs, cap 6) @ 60%      4 box-eligible, 2 boxes, 6/6 legs, 15 positions  ->  4 box-eligible, 2 boxes, 6/6 legs, 15 positions
+all-leagues vs in-league @ 0%          3 box-eligible, 2 boxes, 4/4 legs, 6 positions  ->  3 box-eligible, 2 boxes, 4/4 legs, 6 positions
+all-leagues vs in-league @ 45%         3 box-eligible, 2 boxes, 4/4 legs, 6 positions  ->  3 box-eligible, 2 boxes, 4/4 legs, 6 positions
+all-leagues vs in-league @ 55%         3 box-eligible, 2 boxes, 4/4 legs, 6 positions  ->  3 box-eligible, 2 boxes, 4/4 legs, 6 positions
+all-leagues vs in-league @ 60%         3 box-eligible, 2 boxes, 4/4 legs, 6 positions  ->  3 box-eligible, 2 boxes, 4/4 legs, 6 positions
+long dogs @ 0%                         4 box-eligible, 3 boxes, 6/6 legs, 8 positions  ->  4 box-eligible, 3 boxes, 6/6 legs, 8 positions
+long dogs @ 45%                        2 box-eligible, 2 boxes, 4/6 legs, 6 positions  ->  2 box-eligible, 2 boxes, 4/6 legs, 6 positions
+long dogs @ 55%                        0 box-eligible, 0 boxes, 2/6 legs, 4 positions  ->  0 box-eligible, 0 boxes, 2/6 legs, 4 positions
+long dogs @ 60%                        0 box-eligible, 0 boxes, 2/6 legs, 3 positions  ->  0 box-eligible, 0 boxes, 2/6 legs, 3 positions
+priced capper @ 0%                     1 box-eligible, 1 boxes, 2/4 legs, 2 positions  ->  1 box-eligible, 1 boxes, 2/4 legs, 2 positions
+priced capper @ 45%                    1 box-eligible, 1 boxes, 2/4 legs, 2 positions  ->  1 box-eligible, 1 boxes, 2/4 legs, 2 positions
+priced capper @ 55%                    1 box-eligible, 1 boxes, 2/4 legs, 2 positions  ->  1 box-eligible, 1 boxes, 2/4 legs, 2 positions
+priced capper @ 60%                    1 box-eligible, 1 boxes, 2/4 legs, 2 positions  ->  1 box-eligible, 1 boxes, 2/4 legs, 2 positions
+consensus shapes @ 0%                  0 box-eligible, 0 boxes, 0/4 legs, 5 positions  ->  0 box-eligible, 0 boxes, 0/4 legs, 5 positions
+consensus shapes @ 45%                 0 box-eligible, 0 boxes, 0/4 legs, 4 positions  ->  0 box-eligible, 0 boxes, 0/4 legs, 4 positions
+consensus shapes @ 55%                 0 box-eligible, 0 boxes, 0/4 legs, 4 positions  ->  0 box-eligible, 0 boxes, 0/4 legs, 4 positions
+consensus shapes @ 60%                 0 box-eligible, 0 boxes, 0/4 legs, 4 positions  ->  0 box-eligible, 0 boxes, 0/4 legs, 4 positions
