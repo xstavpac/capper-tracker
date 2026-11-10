@@ -19,11 +19,11 @@ export function segmentUnmatchedReason(
     return "matched game, but this bet is scoped to a game segment the grader can't resolve (e.g. a single inning outside MLB) - needs manual grading";
   }
   // Same condition as resolveOutcome's NCAAB period guard (grading.ts): NCAAB
-  // grades FULL_GAME and FIRST_HALF only, so for any other stored period
-  // "score isn't posted yet" would be wrong forever. A FIRST_HALF pick falls
+  // grades FULL_GAME, FIRST_HALF and SECOND_HALF only, so for any other stored
+  // period "score isn't posted yet" would be wrong forever. A half pick falls
   // through to the normal wording below.
-  if (sportKey === NCAAB_SPORT_KEY && period !== "FULL_GAME" && period !== "FIRST_HALF") {
-    return "NCAAB grading covers full game and 1st half only - needs manual grading";
+  if (sportKey === NCAAB_SPORT_KEY && period !== "FULL_GAME" && period !== "FIRST_HALF" && period !== "SECOND_HALF") {
+    return "NCAAB grading covers full game and halves only - needs manual grading";
   }
   if (scope !== "FULL_GAME" && scope !== period) {
     return "matched game, but this " + periodLabel(scope, firstHalfPrefix) + " pick predates segment grading - needs manual grading or re-import";
