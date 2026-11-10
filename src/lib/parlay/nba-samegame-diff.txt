@@ -31,7 +31,7 @@ NBA · 6 legs, 3 per game
       -> c-tatum-pts-285->NO_ALTERNATE, c-tatum-reb->NO_ALTERNATE, c-tatum-pra->NO_ALTERNATE, l-lebron-ast->NO_ALTERNATE, l-ml->NO_ALTERNATE, l-over->NO_ALTERNATE
   contrarian: c-tatum-pts-285->c-tatum-pts-under, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
            -> c-tatum-pts-285->c-tatum-pts-under, c-tatum-reb->NO_QUALIFYING_CONTRARIAN, c-tatum-pra->NO_QUALIFYING_CONTRARIAN, l-lebron-ast->NO_QUALIFYING_CONTRARIAN, l-ml->NO_QUALIFYING_CONTRARIAN, l-over->NO_QUALIFYING_CONTRARIAN
-NBA · 10 legs, 6 per game, no gate
+NBA · 10 legs, 5 per game, no gate
   legs: c-tatum-pts-285, l-ml, l-over
      -> c-tatum-pts-285, c-tatum-reb, c-tatum-pra, c-brunson-pts, c-spread, l-lebron-ast, l-ml, l-over, l-curry-3s, l-davis-blk
      out: (none); in: c-tatum-reb, c-tatum-pra, c-brunson-pts, c-spread, l-lebron-ast, l-curry-3s, l-davis-blk
@@ -93,7 +93,7 @@ Parlays whose only change is the NBA prop's key in historyBetKeys (what the next
   SWITCH · Totals + Props only, 6 legs, 3 per game
   NBA · 2 legs, 1 per game
   NBA · 6 legs, 3 per game
-  NBA · 10 legs, 6 per game, no gate
+  NBA · 10 legs, 5 per game, no gate
   NBA · Props only, 6 legs, 4 per game
   NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)
   NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game
