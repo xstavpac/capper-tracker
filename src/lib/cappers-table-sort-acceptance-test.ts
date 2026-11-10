@@ -5,8 +5,8 @@
 //  - Each of Record / Win % / ROI / Units orders on the numbers behind the row, high to low and
 //    low to high - including the cases a formatted-string sort gets wrong ("9%" vs "10%",
 //    "+12.5%" vs "−3%", "9-1" vs "10-5").
-//  - Record: the net record (wins minus losses), then fewer losses on an equal net (6-0 above
-//    10-4), reversed as a whole when the direction flips; pushes never enter it.
+//  - Record: total wins, then fewer losses on equal wins (10-4 above 10-5), reversed as a whole
+//    when the direction flips; pushes never enter it. Last 20: net units over the last 20 graded picks.
 //  - A capper with nothing to show in the column (no graded picks, pushes only for Win %, a NaN
 //    ROI / units) is last in BOTH directions, while Infinity / -Infinity stay ordinary values.
 //  - Ties fall to net units, then name, then id, the same way in both directions.
@@ -58,19 +58,32 @@ function main() {
     check("units: low to high", order(rows, "units", "asc"), ["c", "a", "b", "d"]);
   }
 
-  // ---- Record: net record (wins minus losses), then fewer losses ----
+  // ---- Record: total wins, then fewer losses ----
   {
     const rows = [capper("10-4", 10, 4), capper("3-0", 3, 0), capper("9-1", 9, 1), capper("12-9", 12, 9), capper("6-0", 6, 0), capper("10-5", 10, 5), capper("2-7", 2, 7)];
-    check("record: net first ('9-1' above '10-4'), fewer losses breaks an equal net ('6-0' above '10-4')", order(rows, "record"), ["9-1", "6-0", "10-4", "10-5", "3-0", "12-9", "2-7"]);
-    check("record: low to high reverses the net AND the losses tie-break", order(rows, "record", "asc"), ["2-7", "12-9", "3-0", "10-5", "10-4", "6-0", "9-1"]);
-    check("record: sort values are [wins - losses, -losses]", sortValues(capper("x", 10, 4), "record"), [6, -4]);
-    check("record: more wins alone does not rank higher (the old wins-first order)", order([capper("10-8", 10, 8), capper("6-0", 6, 0)], "record"), ["6-0", "10-8"]);
+    check("record: wins first ('12-9' above '10-4'), fewer losses breaks equal wins ('10-4' above '10-5')", order(rows, "record"), ["12-9", "10-4", "10-5", "9-1", "6-0", "3-0", "2-7"]);
+    check("record: low to high reverses the wins AND the losses tie-break", order(rows, "record", "asc"), ["2-7", "3-0", "6-0", "9-1", "10-5", "10-4", "12-9"]);
+    check("record: sort values are [wins, -losses]", sortValues(capper("x", 10, 4), "record"), [10, -4]);
+    check("record: more wins ranks higher even with a worse net ('10-8' above '6-0')", order([capper("10-8", 10, 8), capper("6-0", 6, 0)], "record"), ["10-8", "6-0"]);
   }
   {
     // Same wins and losses: pushes do not decide it, the tie-break (net units, then name) does.
     const rows = [capper("many pushes", 5, 5, { pushes: 9, netUnits: 1 }), capper("no pushes", 5, 5, { netUnits: 2 }), capper("also", 5, 5, { netUnits: 2 })];
     check("record: equal W-L ignores pushes and falls to net units, then name", order(rows, "record"), ["also", "no pushes", "many pushes"]);
     check("record: that tie-break is the same low to high", order(rows, "record", "asc"), ["also", "no pushes", "many pushes"]);
+  }
+
+  // ---- Last 20: net units over the 20 most recent graded picks, independent of the window's record ----
+  {
+    const l = (name: string, last20Net: number | null | undefined, netUnits = 0): SortableCapper => ({ ...capper(name, 5, 5, { netUnits }), last20Net });
+    const rows = [l("a", 3.5), l("b", 7.25, -9), l("c", -2), l("d", 0), l("none", null, 50), l("unset", undefined, 60), l("nan", NaN), l("e", 3.5, 4)];
+    check("last20 desc: units high to low, ties by net units then name, missing last (by net units)", order(rows, "last20"), ["b", "e", "a", "d", "c", "unset", "none", "nan"]);
+    check("last20 asc: low to high, ties unchanged, missing still last", order(rows, "last20", "asc"), ["c", "d", "e", "a", "b", "unset", "none", "nan"]);
+    check("last20: sort values are [net]", sortValues(l("x", 4.5), "last20"), [4.5]);
+    check("last20: no graded pick (null / unset / NaN) is missing", [null, undefined, NaN].map((v) => sortValues(l("x", v), "last20")), [null, null, null]);
+    check("last20: a capper with no picks in the window can still have a value", sortValues({ ...capper("w", 0, 0), last20Net: 2 }, "last20"), [2]);
+    const runs = orderFromAnyStart(rows, "last20", "desc");
+    check("last20 desc: the same order from any starting order", runs.every((r) => JSON.stringify(r) === JSON.stringify(runs[0])), true);
   }
 
   // ---- Missing values sink, in either direction ----
