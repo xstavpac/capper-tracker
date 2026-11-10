@@ -32,10 +32,11 @@ function check(label: string, actual: unknown, expected: unknown) {
 // candidates, then closest by commenceTime to the resolved game's own start.
 function resolveOddsGameCore(
   oddsGames: OddsGame[],
-  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  sportKey = "baseball_mlb"
 ): OddsGame | null {
   const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
+    (g) => teamNamesMatch(g.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(g.awayTeam, game.awayTeam, sportKey)
   );
   if (candidates.length === 0) return null;
   const gameStart = new Date(game.commenceTime).getTime();
