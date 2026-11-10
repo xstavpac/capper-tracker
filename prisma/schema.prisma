@@ -195,6 +195,7 @@ model User {
   parlayBets              ParlayBet[]
   subscription            Subscription?
   dismissedDuplicatePairs DismissedDuplicatePair[]
+  capperNameDecisions CapperNameDecision[]
   customMetrics           CustomMetric[]
   featureFlagOverrides    FeatureFlagUserOverride[]
   importSkippedLines      ImportSkippedLine[]
@@ -335,6 +336,22 @@ model DismissedDuplicatePair {
   @@unique([capperAId, capperBId])
   @@index([userId])
   @@map("dismissed_duplicate_pairs")
+}
+
+// A person's answer to one capper "did you mean" prompt, keyed by the name pair
+// (normalized name as typed, normalized saved name it was compared to). Lets the
+// same pair skip the prompt on later imports. Never written without an answer.
+model CapperNameDecision {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rawKey       String
+  suggestedKey String
+  decision     String // SAME | DIFFERENT
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, rawKey, suggestedKey])
+  @@map("capper_name_decisions")
 }
 
 model Pick {

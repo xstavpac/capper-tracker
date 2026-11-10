@@ -184,7 +184,7 @@ async function main() {
     (form.match(/checkDuplicatesFor\(validEntries\.filter\(\(e\) => e\.p\.capperName === name\), nextChoices\)/g) ?? []).length === 2
   );
   check("form: no re-check reads the stale state", !/checkDuplicatesFor\(validEntries\.filter\(\(e\) => e\.p\.capperName === name\)\);/.test(form));
-  check("form: the check is sent under the choices it was given", form.includes("capperName: resolveCapperName(fuzzyChoices, e.p.capperName, CONFIRMED_NEW)"));
+  check("form: the check is sent under the choices it was given", form.includes("capperName: resolveWithRemembered(fuzzyChoices, e.p.capperName)"));
   check("form: Import is disabled by the gate", /const canImport =[\s\S]{0,200}!duplicateCheckBlocksImport\(dupCheckStatus\);/.test(form) && form.includes("disabled={importing || !canImport}"));
   check("form: handleImport refuses while the gate is closed", /async function handleImport\(\) \{\n[^\n]*\n\s*if \(duplicateCheckBlocksImport\(dupCheckStatus\)\) return;/.test(form));
   check('form: shows "Checking for duplicates…"', form.includes('dupCheckStatus === "checking"') && form.includes("Checking for duplicates…"));

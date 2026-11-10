@@ -17,7 +17,8 @@ import {
   type ParsedPick,
 } from "@/lib/parse-catalog";
 import { runAmbiguousHierarchy, type AutoResolveResult } from "@/lib/ambiguous-hierarchy";
-import { findClosestFuzzyMatch } from "@/lib/fuzzy-match";
+import { resolveCapperNameSuggestion } from "@/lib/fuzzy-match";
+import { getCapperNameDecisions } from "@/server/data/capper-name-decisions";
 import { splitByCapper } from "@/lib/bulk-import-summary";
 import {
   importPicksForUser,
@@ -129,10 +130,11 @@ export async function runCatalogImportForUser(
     hookSkippedLog.push(...pre.skipped);
   }
 
-  const [rosterFullNames, feedTeams, roster] = await Promise.all([
+  const [rosterFullNames, feedTeams, roster, nameDecisions] = await Promise.all([
     getCachedNflRosterFullNames().catch(() => undefined),
     getImportFeedTeams().catch(() => undefined),
     getCapperRoster(userId),
+    getCapperNameDecisions(userId),
   ]);
   const existingCapperNames = roster.map((c) => c.name);
 
@@ -180,10 +182,11 @@ export async function runCatalogImportForUser(
     hookSkippedLog.push(...prep.skipped);
   }
   const resolved = await autoResolveAmbiguousPicksForServer(toResolve, {}, userId);
-  const existingLower = new Set(existingCapperNames.map((n) => n.toLowerCase()));
+  // A pair the user already answered is not asked again (SAME files it under the saved capper, DIFFERENT keeps
+  // the typed name as its own capper); a pair never answered is always a question, never resolved here.
   const fuzzySuggestion = (name: string): string | undefined => {
-    if (existingLower.has(name.toLowerCase())) return undefined;
-    return findClosestFuzzyMatch(name, existingCapperNames, (n) => n)?.item;
+    const r = resolveCapperNameSuggestion(name, existingCapperNames, nameDecisions);
+    return r.suggestion && !r.remembered ? r.suggestion : undefined;
   };
 
   const questions: CatalogQuestion[] = [];
@@ -216,7 +219,9 @@ export async function runCatalogImportForUser(
   // Capper near-miss: the form asks "did you mean X?" for any name that is not an exact (case-insensitive)
   // match of a saved capper but is close to one. Held here, never auto-resolved either way.
   const afterFuzzy: ParsedPick[] = [];
-  for (const p of candidates) {
+  for (let p of candidates) {
+    const remembered = resolveCapperNameSuggestion(p.capperName, existingCapperNames, nameDecisions);
+    if (remembered.suggestion && remembered.remembered === "SAME") p = { ...p, capperName: remembered.suggestion };
     const suggestion = fuzzySuggestion(p.capperName);
     if (suggestion) {
       questions.push({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion, pick: p });

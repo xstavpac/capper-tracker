@@ -18,6 +18,7 @@ import { insertPicksDeduped } from "@/server/data/pick-dedup";
 import { fanOutImportedPicks } from "@/server/data/pick-recipients";
 import { revalidateCapperRoster } from "@/server/data/capper-roster";
 import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
+import { recordCapperNameDecision } from "@/server/data/capper-name-decisions";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
 
 export type ReviewItemDraft = {
@@ -112,7 +113,7 @@ export type ReviewResult =
 // the same duplicate-checked, limit-checked insert the importer uses, then marks the item RESOLVED. The item is
 // claimed first (PENDING -> RESOLVED, one conditional update), so a double tap inserts once.
 export async function resolveReviewItem(userId: string, itemId: string, choiceId: string): Promise<ReviewResult> {
-  const item = await prisma.ingestReviewItem.findFirst({ where: { id: itemId, userId }, select: { id: true, status: true, options: true } });
+  const item = await prisma.ingestReviewItem.findFirst({ where: { id: itemId, userId }, select: { id: true, status: true, options: true, questionType: true } });
   if (!item) return { ok: false, error: "not_found", message: "No such review item." };
   if (item.status !== "PENDING") return { ok: false, error: "not_pending", message: "This item was already answered." };
   if (!isReviewOptions(item.options)) return { ok: false, error: "failed", message: "The stored options are unreadable." };
@@ -146,6 +147,12 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
     return { ok: false, error: "duplicate", message: "This pick is already logged." };
   }
   const pickId = result.created[0].id;
+  // A capper name-pair answer is remembered so the same pair is not asked again. Best effort: the pick is already saved.
+  if (item.questionType === "CAPPER_FUZZY") {
+    const existing = item.options.choices.find((c) => c.id === "use-suggestion")?.capperName;
+    const typed = item.options.choices.find((c) => c.id === "new-capper")?.capperName;
+    if (existing && typed) await recordCapperNameDecision(userId, typed, existing, choice.id === "use-suggestion" ? "SAME" : "DIFFERENT").catch(() => undefined);
+  }
   // An approved review item is an imported pick: it goes to the active recipients like the rest of the batch did.
   await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
