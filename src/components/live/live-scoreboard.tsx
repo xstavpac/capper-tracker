@@ -148,6 +148,10 @@ export function LiveScoreboard({
           // board only ever renders live, not-yet-started or postponed/cancelled games here.
           const isLive = score?.status === "live";
           const unplayed = unplayedLabel(score?.status);
+          // Odds are the last pregame pull (the feed drops events at commence
+          // time), so on a live game they are frozen - mute them so they read as
+          // stale rather than tracked. Style only; the numbers stay visible.
+          const staleOdds = isLive ? " opacity-50" : "";
 
           return (
             <div key={game.id} id={liveGameCardId(game.id)} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
@@ -195,7 +199,7 @@ export function LiveScoreboard({
                       {teamScore(score, game.awayTeam, activeSport) ?? ""}
                     </span>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
+                  <div className={"text-right text-xs text-muted-foreground" + staleOdds}>
                     {awayH2h && "ML " + formatOdds(awayH2h.price)}
                     {awaySpread && " - " + (awaySpread.point! > 0 ? "+" : "") + awaySpread.point}
                   </div>
@@ -209,14 +213,14 @@ export function LiveScoreboard({
                       {teamScore(score, game.homeTeam, activeSport) ?? ""}
                     </span>
                   </div>
-                  <div className="text-right text-xs text-muted-foreground">
+                  <div className={"text-right text-xs text-muted-foreground" + staleOdds}>
                     {homeH2h && "ML " + formatOdds(homeH2h.price)}
                     {homeSpread && " - " + (homeSpread.point! > 0 ? "+" : "") + homeSpread.point}
                   </div>
                 </div>
 
                 {over && (
-                  <div className="mt-2 text-xs text-muted-foreground">
+                  <div className={"mt-2 text-xs text-muted-foreground" + staleOdds}>
                     Total: O/U {over.point} ({formatOdds(over.price)})
                   </div>
                 )}
