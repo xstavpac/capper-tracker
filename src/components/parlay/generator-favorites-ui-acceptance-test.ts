@@ -1,7 +1,7 @@
 // The Parlay Generator's "Favorites only" star on the page (PR 2 of 3): ParlayWorkspace on jsdom with
 // the real slip provider and the real engine; only the server calls are stubbed (as in
 // generator-card-acceptance-test.ts). Pinned:
-//   - the 48px round star in the Pick Filters header: label, title, aria-pressed, off / on styles;
+//   - the labelled "Favorite Cappers Only" star pill in the Pick Filters rows: label, title, aria-pressed, off / on styles;
 //   - on: the Pick Filters subtitle and the Total legs helper change, nothing else in the panel;
 //   - Generate with the star on sends favoritesOnly: true; with it off, no favoritesOnly at all;
 //   - a toggle rebuilds the parlay with no request, from favorites only (slip picks stay);
@@ -158,10 +158,10 @@ async function main() {
 
   // ---- The button, off ----
   const s0 = star();
-  check("star: in the Pick Filters header row", Boolean(s0) && Boolean(filtersHeader()?.contains(s0!)));
+  check("star: a labelled pill in the Pick Filters rows, not the header corner", Boolean(s0) && s0!.textContent?.includes("Favorite Cappers Only") === true && !filtersHeader()?.contains(s0!));
   check("star: label and title", s0?.getAttribute("aria-label") === STAR && s0?.getAttribute("title") === STAR);
   check("star: off by default, aria-pressed=false", s0?.getAttribute("aria-pressed") === "false");
-  check("star: 48px round", /\bh-12\b/.test(s0!.className) && /\bw-12\b/.test(s0!.className) && /\brounded-full\b/.test(s0!.className));
+  check("star: round pill", s0!.className.includes("rounded-full"));
   check("star off: white background, light gray border, outline star", /\bbg-white\b/.test(s0!.className) && s0!.className.includes("border-[#DADDE5]") && s0!.querySelector("svg")?.getAttribute("fill") === "none");
   check("star off: the usual subtitle and helper", text().includes("Choose which games to build around, or use the full slate.") && /from your cappers\./.test(text()));
   const panelOff = filters()!.textContent!;
@@ -176,7 +176,7 @@ async function main() {
   await click(star());
   const s1 = star()!;
   check("star on: aria-pressed=true", s1.getAttribute("aria-pressed") === "true");
-  check("star on: amber background, amber border, filled amber star", s1.className.includes("bg-[#fff7e0]") && s1.className.includes("border-[#f5c451]") && s1.className.includes("text-[#f59e0b]") && s1.querySelector("svg")?.getAttribute("fill") === "currentColor");
+  check("star on: amber background, amber border, filled amber star", s1.className.includes("bg-[#fff7e0]") && s1.className.includes("border-[#f5c451]") && s1.className.includes("text-[#b45309]") && s1.querySelector("svg")?.getAttribute("fill") === "currentColor");
   check("star on: subtitle 'Only picks from your favorite cappers.'", text().includes("Only picks from your favorite cappers.") && !text().includes("Choose which games to build around"));
   check("star on: helper '… from your favorite cappers.'", /from your favorite cappers\./.test(text()));
   const norm = (s: string) => s.replace("Only picks from your favorite cappers.", "Choose which games to build around, or use the full slate.").replace("from your favorite cappers.", "from your cappers.");

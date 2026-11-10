@@ -475,23 +475,6 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               </>
             )
           }
-          actions={
-            <button
-              type="button"
-              onClick={toggleFavoritesOnly}
-              aria-pressed={favoritesOnly}
-              aria-label={FAVORITES_STAR_LABEL}
-              title={FAVORITES_STAR_LABEL}
-              className={
-                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full border transition " +
-                (favoritesOnly
-                  ? "border-[#f5c451] bg-[#fff7e0] text-[#f59e0b] dark:bg-amber-500/15"
-                  : "border-[#DADDE5] bg-white text-[#9AA0AE] hover:text-[#f59e0b] dark:border-border dark:bg-card")
-              }
-            >
-              <StarIcon filled={favoritesOnly} className="h-5 w-5" />
-            </button>
-          }
         >
           <div className="space-y-3">
             <FilterRow label="Leagues">
@@ -517,6 +500,24 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 {categories.length > 1 && <PickMixControl categories={categories} mix={mix} legCount={legCount} onChange={setMix} />}
               </div>
               {yourPicksOnly && <span className="text-xs font-medium text-muted-foreground">Applies to Best available</span>}
+            </FilterRow>
+            <FilterRow label="Favorites">
+              <button
+                type="button"
+                onClick={toggleFavoritesOnly}
+                aria-pressed={favoritesOnly}
+                aria-label={FAVORITES_STAR_LABEL}
+                title={FAVORITES_STAR_LABEL}
+                className={
+                  "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition " +
+                  (favoritesOnly
+                    ? "border-[#f5c451] bg-[#fff7e0] text-[#b45309] dark:bg-amber-500/15 dark:text-amber-400"
+                    : "border-[#DADDE5] bg-white text-muted-foreground hover:text-[#f59e0b] dark:border-border dark:bg-card")
+                }
+              >
+                <StarIcon filled={favoritesOnly} className="h-4 w-4" />
+                Favorite Cappers Only
+              </button>
             </FilterRow>
             <SettingsBlock>
               <SettingRow

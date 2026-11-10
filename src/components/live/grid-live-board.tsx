@@ -229,6 +229,7 @@ export function GridLiveBoard({
         hiddenCount={hiddenCount}
         matchedPicksByGame={matchedPicksByGame}
         activeSport={activeSport}
+        sportLabel={sportLabel}
         selectedGameId={selection.gameId}
         onSelectGame={handleSelectGame}
         onOpenGame={handleOpenGame}
