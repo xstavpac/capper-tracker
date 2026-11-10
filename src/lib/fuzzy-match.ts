@@ -126,7 +126,7 @@ export function capperKeys(name: string): string[] {
   const stripS = (s: string) => (s.length > 1 && s.endsWith("s") ? s.slice(0, -1) : s);
   const whole = stripS(exact);
   const perWord = name
-    .split(/s+/)
+    .split(/\s+/)
     .map((w) => stripS(normalizeName(w)))
     .join("");
   return [exact, whole, perWord];
@@ -141,6 +141,36 @@ export function findCanonicalCapperMatch(name: string, candidates: readonly stri
     if (capperKeys(c).some((k) => k !== "" && mine.includes(k))) return c;
   }
   return null;
+}
+
+// True when `a` and `b` (already normalized) differ by exactly one inserted/removed "s" and nothing else.
+function differsByOneS(a: string, b: string): boolean {
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  if (long.length !== short.length + 1) return false;
+  for (let i = 0; i < long.length; i++) {
+    if (long[i] === "s" && long.slice(0, i) + long.slice(i + 1) === short) return true;
+  }
+  return false;
+}
+
+// The ONE saved capper `name` is, apart from a single added/dropped "s" (anywhere in the squashed name).
+// Narrow on purpose: both names must be at least MIN_PLURAL_KEY_LENGTH normalized characters (short handles
+// stay a question), exactly one saved capper may qualify, and no OTHER saved capper may be a suggestion-level
+// match either (any ambiguity stays a question). Null otherwise.
+export function findPluralOnlyMatch(name: string, candidates: readonly string[]): string | null {
+  const n = normalizeName(name);
+  if (n.length < MIN_PLURAL_KEY_LENGTH) return null;
+  const hits = candidates.filter((c) => {
+    const m = normalizeName(c);
+    return m.length >= MIN_PLURAL_KEY_LENGTH && differsByOneS(n, m);
+  });
+  if (hits.length === 0) return null;
+  if (new Set(hits.map(normalizeName)).size !== 1) return null;
+  const hit = hits[0];
+  const others = candidates.filter((c) => normalizeName(c) !== normalizeName(hit));
+  if (findCanonicalCapperMatch(name, others) !== null) return null;
+  if (findClosestFuzzyMatch(name, others as string[], (x) => x) !== null) return null;
+  return hit;
 }
 
 // A person's answer to one "did you mean" prompt, keyed by the NAME PAIR: the
@@ -161,7 +191,7 @@ export function resolveCapperNameSuggestion(
   name: string,
   existing: readonly string[],
   decisions: readonly StoredCapperNameDecision[]
-): { suggestion: string | null; remembered: CapperNameDecisionKind | null } {
+): { suggestion: string | null; remembered: CapperNameDecisionKind | null; auto?: boolean } {
   const normalized = normalizeName(name);
   if (existing.some((n) => normalizeName(n) === normalized && normalized !== "")) return { suggestion: null, remembered: null };
   const suggestion =
@@ -169,5 +199,11 @@ export function resolveCapperNameSuggestion(
   if (!suggestion) return { suggestion: null, remembered: null };
   const { rawKey, suggestedKey } = capperPairKeys(name, suggestion);
   const hit = decisions.find((d) => d.rawKey === rawKey && d.suggestedKey === suggestedKey);
-  return { suggestion, remembered: hit ? hit.decision : null };
+  if (hit) return { suggestion, remembered: hit.decision };
+  // Never answered, and the only difference is one "s" from exactly one saved capper: file it there without
+  // asking (reported as a remembered SAME so every caller rewrites the name the same way). A stored
+  // DIFFERENT answer above always wins; anything else stays a question.
+  const plural = findPluralOnlyMatch(name, existing);
+  if (plural) return { suggestion: plural, remembered: "SAME", auto: true };
+  return { suggestion, remembered: null };
 }
