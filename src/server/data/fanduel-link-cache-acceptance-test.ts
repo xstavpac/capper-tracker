@@ -35,7 +35,8 @@ console.warn = (...args: unknown[]) => {
 console.error = () => {};
 
 async function main() {
-  const { oddsApiDeps } = await import("@/server/data/fanduel-link");
+  const { oddsApiDeps, fanDuelFetchTuning } = await import("@/server/data/fanduel-link");
+  fanDuelFetchTuning.retryDelayMs = 0;
   const now = new Date("2026-11-09T12:00:00Z");
   const marketCalls = () => calls.filter((u) => u.includes("/odds?")).length;
   const eventCalls = () => calls.filter((u) => u.includes("/events?")).length;
@@ -66,7 +67,7 @@ async function main() {
   respond = () => json({}, 429);
   check("a 429 answers null", await mk("basketball_nba")(oddsApiDeps(now)), null);
   await mk("basketball_nba")(oddsApiDeps(now));
-  check("a 429 is not kept (unchanged)", marketCalls(), 2);
+  check("a 429 is not kept: each tap tries again (2 calls per tap: the call and its one retry)", marketCalls(), 4);
 
   calls.length = 0;
   respond = () => json({ bookmakers: [{ key: "fanduel", markets: [market("h2h")] }] });

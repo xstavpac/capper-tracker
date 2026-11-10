@@ -47,12 +47,52 @@ function dropExpired(now: number) {
 }
 
 // The url carries the API key, so it is never logged - only what was asked for.
-async function oddsApiGet(url: string, ctx: Record<string, unknown>): Promise<Response | null> {
+//
+// Two guards against the Odds API's burst rate limit (prod: every 429 on this path came in a second with 5+ calls
+// from one send; credits were never the cause):
+//   - at most maxConcurrent calls in flight per serverless instance, the rest wait their turn;
+//   - one retry, after a short pause, of a call that threw, got a 429, or got a 5xx. A second failure is returned
+//     as it is (the leg then reads "Unavailable"). Each attempt is passed to onResponse, so every response, the
+//     429s included, is still written to the usage log. The slot is released while waiting to retry.
+// Tunable (and zeroed in the test) through fanDuelFetchTuning.
+export const fanDuelFetchTuning = { maxConcurrent: 4, retryDelayMs: 500 };
+let inFlight = 0;
+const waiting: (() => void)[] = [];
+async function acquireSlot() {
+  if (inFlight < fanDuelFetchTuning.maxConcurrent) {
+    inFlight++;
+    return;
+  }
+  // The releasing call hands its slot straight to the next waiter, so inFlight stays put.
+  await new Promise<void>((resolve) => waiting.push(resolve));
+}
+function releaseSlot() {
+  const next = waiting.shift();
+  if (next) next();
+  else inFlight--;
+}
+const retryableStatus = (status: number) => status === 429 || status >= 500;
+
+async function fetchOnce(url: string, ctx: Record<string, unknown>): Promise<Response | null> {
+  await acquireSlot();
   try {
     return await fetch(url, { cache: "no-store" });
   } catch (err) {
     console.error(LOG_TAG + " upstream fetch threw", JSON.stringify({ ...ctx, error: err instanceof Error ? err.name : "unknown" }));
     return null;
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function oddsApiGet(url: string, ctx: Record<string, unknown>, onResponse?: (res: Response) => Promise<void>): Promise<Response | null> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetchOnce(url, ctx);
+    if (res) await onResponse?.(res);
+    if ((res !== null && !retryableStatus(res.status)) || attempt >= 1) return res;
+    console.warn(LOG_TAG + " retrying once", JSON.stringify({ ...ctx, status: res?.status ?? null }));
+    await res?.body?.cancel().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, fanDuelFetchTuning.retryDelayMs === 0 ? 0 : fanDuelFetchTuning.retryDelayMs + Math.random() * 250));
   }
 }
 
@@ -84,17 +124,18 @@ async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: 
   const ctx = { sportKey, eventId, marketKeys };
   const res = await oddsApiGet(
     ODDS_API_BASE_URL + "/sports/" + sportKey + "/events/" + encodeURIComponent(eventId) + "/odds?" + params.toString(),
-    ctx
+    ctx,
+    // Every attempt, including a 429 that is about to be retried: logs x-requests-remaining / -used / -last.
+    async (attempt) => {
+      const credits = readOddsApiCredits(attempt, { sportKey, requestSportKey: sportKey });
+      try {
+        await persistOddsApiUsage({ sportKey, marketsRequested: marketKeys, eventsRequested: 1, credits, httpStatus: attempt.status, caller: "fanduel-link" });
+      } catch (err) {
+        console.error(LOG_TAG + " failed to persist usage log", JSON.stringify({ ...ctx, error: err instanceof Error ? err.message : String(err) }));
+      }
+    }
   );
   if (!res) return null;
-
-  // Logs x-requests-remaining / -used / -last for this call.
-  const credits = readOddsApiCredits(res, { sportKey, requestSportKey: sportKey });
-  try {
-    await persistOddsApiUsage({ sportKey, marketsRequested: marketKeys, eventsRequested: 1, credits, httpStatus: res.status, caller: "fanduel-link" });
-  } catch (err) {
-    console.error(LOG_TAG + " failed to persist usage log", JSON.stringify({ ...ctx, error: err instanceof Error ? err.message : String(err) }));
-  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "<unreadable body>");
