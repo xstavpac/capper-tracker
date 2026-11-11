@@ -23,11 +23,12 @@ import {
 import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
 import { resolveAnytimeGoalOdds, resolveThreeWayOdds } from "@/server/data/nhl-goal-scorer-odds";
 import { findAltLinePrice } from "@/server/data/alt-line-odds";
-import { resolvePickPrice, postedOddsCapture, unpricedReasonFor, type PickOddsSource, type PostedOddsCapture } from "@/lib/odds-source";
+import { findNbaPropPrice, NBA_SPORT_KEY } from "@/server/data/nba-prop-odds";
+import { resolvePickPrice, postedOddsCapture, unpricedReasonFor, type OddsNullReason, type PickOddsSource, type PostedOddsCapture } from "@/lib/odds-source";
 import { createPricingOddsLoader, type PricingOddsLoader } from "@/server/data/fresh-odds";
 import { extractLine, parsePlayerPropLine, parseAnyPlayerProp, isAnytimeTdPick } from "@/lib/bet-line";
 import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
-import { parseNbaProp } from "@/lib/nba-prop";
+import { normalizeNbaNPlus, parseNbaProp } from "@/lib/nba-prop";
 import { threeWayWording } from "@/lib/nhl-three-way";
 import { isInvalidOdds } from "@/lib/pick-validation";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
@@ -174,6 +175,10 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 // the preview that shows what the import will store; off for the callers that
 // only want the matched game.
 //
+// buyPropOdds: an NBA player prop with no price of its own may buy its event's prop market from the Odds API
+// (nba-prop-odds.ts - once per event and market per 2 h, bounded wait). On for exactly the callers that turn on
+// altLines; off for the callers that only want the matched game.
+//
 // realTimeIngest: the line comes from a Telegram message imported as it arrives (telegram-ingest.ts, and the review
 // rows it resolves at the same moment). A game already final then is never matched - the line stays unmatched with
 // finishedBeforePost set. Every other caller leaves it off: a manual paste still matches a just-finished game.
@@ -183,9 +188,10 @@ export async function resolveGameAndOdds(
   {
     retryOnMiss = true,
     altLines = false,
+    buyPropOdds = false,
     pricing,
     realTimeIngest = false,
-  }: { retryOnMiss?: boolean; altLines?: boolean; pricing?: PricingOddsLoader; realTimeIngest?: boolean } = {}
+  }: { retryOnMiss?: boolean; altLines?: boolean; buyPropOdds?: boolean; pricing?: PricingOddsLoader; realTimeIngest?: boolean } = {}
 ): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -243,6 +249,10 @@ export async function resolveGameAndOdds(
   let feedPrice: number | null = null;
   // Set only when feedPrice came off a game line (h2h/spreads/totals): the bookmaker and the odds event it was read off.
   let pricedPoint: { book: string; eventId: string } | null = null;
+  // NBA props only (nba-prop-odds.ts): where a prop price came from, why there was none, and the line it is for.
+  let pricedProp: { book: string; capturedAt: Date } | null = null;
+  let propUnpricedReason: OddsNullReason | null = null;
+  let propPostedLine: number | null = null;
   const importedAt = new Date();
   let matched = false;
   let pickedSide: "HOME" | "AWAY" | "DRAW" | null = null;
@@ -366,6 +376,27 @@ export async function resolveGameAndOdds(
               feedPrice = goalPrice;
             }
           }
+        } else if (liveSportKey === NBA_SPORT_KEY && parsedProp) {
+          // NBA: the line is read after N+ normalization ("25+ points" is Over 24.5), the same text grading reads.
+          // Priced at its exact line only, from the event's prop market bought on demand (nba-prop-odds.ts).
+          const nbaLine = parsePlayerPropLine(normalizeNbaNPlus(item.description));
+          if (nbaLine) {
+            propPostedLine = nbaLine.line;
+            const playerName = stripTeamNamesFromPlayerName(parsedProp.playerName, [game.homeTeam, game.awayTeam], item.sportName);
+            if (playerName && buyPropOdds) {
+              const nba = await findNbaPropPrice(
+                game,
+                { playerName, propMarket: parsedProp.propMarket, side: nbaLine.direction === "OVER" ? "Over" : "Under", point: nbaLine.line },
+                getOdds
+              );
+              if (nba.price !== null) {
+                feedPrice = nba.price;
+                pricedProp = { book: nba.book, capturedAt: nba.capturedAt };
+              } else {
+                propUnpricedReason = nba.reason;
+              }
+            }
+          }
         } else if (parsedProp && parsedLine && isNflOddsPropMarket(parsedProp.propMarket)) {
           // parsePlayerProp leaves a capper-included team nickname in the
           // player name untouched (e.g. "Chiefs Travis Kelce" from "Chiefs
@@ -463,7 +494,9 @@ export async function resolveGameAndOdds(
   let priced: { capturedAt: Date | null; book: string | null } | null = null;
   if (oddsSource === "MARKET" && liveSportKey) {
     const pastFetchDate = pastSnapshotDateFor(gameTime.toISOString());
-    priced = pricedPoint
+    priced = pricedProp
+      ? pricedProp
+      : pricedPoint
       ? { capturedAt: pricing?.capturedAt(liveSportKey, pricedPoint.eventId) ?? null, book: pricedPoint.book }
       : {
           capturedAt: (await (pastFetchDate === undefined ? pricing?.snapshotAt(liveSportKey) : pricing?.snapshotAt(liveSportKey, pastFetchDate))) ?? null,
@@ -473,9 +506,15 @@ export async function resolveGameAndOdds(
   const posted = postedOddsCapture({
     oddsSource,
     importedAt,
-    line: extractLine(item.betType, item.description) ?? item.inferredLine ?? null,
+    line: propPostedLine ?? extractLine(item.betType, item.description) ?? item.inferredLine ?? null,
     priced,
-    unpricedReason: oddsSource === "DEFAULTED" ? unpricedReasonFor({ betType: item.betType, gameTime, importedAt }) : null,
+    // A started game outranks the NBA prop reason, as it does every other (unpricedReasonFor).
+    unpricedReason:
+      oddsSource === "DEFAULTED"
+        ? propUnpricedReason && gameTime.getTime() > importedAt.getTime()
+          ? propUnpricedReason
+          : unpricedReasonFor({ betType: item.betType, gameTime, importedAt })
+        : null,
   });
 
   return {
@@ -524,7 +563,7 @@ export async function previewBulkImportMatchesCore(
   await Promise.all(
     items.map(async (item, i) => {
       if (item.hasExplicitOdds) return;
-      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true, pricing });
+      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true, buyPropOdds: true, pricing });
       if (matched && odds !== item.odds) enriched[i] = odds;
       if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
     })
@@ -784,7 +823,7 @@ export async function importPicksForUser(
   type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
   type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
   const resolveOne = (item: BulkImportItem, loader: OddsLoader, pricing: PricingOddsLoader): Promise<Outcome> =>
-    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, pricing, realTimeIngest }).then(
+    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, buyPropOdds: true, pricing, realTimeIngest }).then(
       (resolved): Outcome => ({ ok: true, resolved }),
       (err: unknown): Outcome => ({ ok: false, err })
     );
@@ -1070,7 +1109,7 @@ export function createPickRowResolver({ realTimeIngest = false }: { realTimeInge
   return async (item) => {
     try {
       if (!item.capperName.trim()) return { ok: false, reason: "Capper name is required." };
-      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, pricing, realTimeIngest });
+      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, buyPropOdds: true, pricing, realTimeIngest });
       if (r.resolvable && !r.matched) {
         return {
           ok: false,

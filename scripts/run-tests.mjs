@@ -68,6 +68,7 @@ const NEEDS_DB = new Set([
 // these without a DB; force them to always run.
 const PURE_DESPITE_PRISMA_IMPORT = new Set([
   "src/server/data/duplicate-db-match-acceptance-test.ts",
+  "src/server/data/nba-prop-odds-import-acceptance-test.ts",
   "src/server/data/shared-caches-acceptance-test.ts",
   "src/server/data/delete-scoping-acceptance-test.ts",
   "src/server/data/parlays-bounded-acceptance-test.ts",

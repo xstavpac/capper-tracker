@@ -34,7 +34,9 @@ export function resolvePickPrice(
 //               row's createdAt - the data is at least that new); oddsBook is the bookmaker for a game line.
 //   DEFAULTED - the -110 placeholder is NOT a real price: no capture time, no book, and a reason.
 // ---------------------------------------------------------------------------
-export type OddsNullReason = "no_market" | "game_started" | "unsupported_prop";
+// no_exact_line: an NBA prop whose player is listed in the event's prop market, but by no book at the pick's own
+// number (nba-prop-odds.ts never prices off the nearest line).
+export type OddsNullReason = "no_market" | "game_started" | "unsupported_prop" | "no_exact_line";
 
 export type PostedOddsCapture = {
   postedLine: number | null;

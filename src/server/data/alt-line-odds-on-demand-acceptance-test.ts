@@ -341,7 +341,7 @@ async function main() {
 
   // ---- 10. the import itself uses the same switch as the preview ----
   const source = readFileSync(join(__dirname, "bulk-import-core.ts"), "utf8");
-  expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true, pricing(, realTimeIngest)? \}\)/.test(source), true);
+  expect("wiring: the import resolves with altLines on", /resolveGameAndOdds\(item, loader, \{ retryOnMiss: false, altLines: true, (buyPropOdds: true, )?pricing(, realTimeIngest)? \}\)/.test(source), true);
   // The import, the preview, and the ingest review resolver (createPickRowResolver: the same resolution the import would have
   // done, run ahead of time for a held pick). Nothing else may turn it on.
   expect("wiring: only the import, the preview and the ingest review resolver turn it on", (source.match(/altLines: true/g) ?? []).length, 3);
