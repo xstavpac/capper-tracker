@@ -137,10 +137,12 @@ export type ResolvableItem = {
 // How long a line with no matching game waits before its one second look.
 export const UNMATCHED_RETRY_DELAY_MS = 1000;
 
-function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null, getOdds: OddsLoader) {
-  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds });
-  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds });
-  return Promise.resolve({ game: null, doubleheaderBothLegsFinal: false });
+// excludeFinal: real-time ingest only - a game already final when the message arrives is never matched (see
+// ResolveGameOpts.excludeFinal in odds.ts). Manual paste passes false and matches exactly as before.
+function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null, getOdds: OddsLoader, excludeFinal = false) {
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds, excludeFinal });
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds, excludeFinal });
+  return Promise.resolve({ game: null, doubleheaderBothLegsFinal: false, finishedOnly: false });
 }
 
 // Shared by the real import (bulkImportPicksAction) and the read-only preview
@@ -171,10 +173,19 @@ function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2
 // once per event and market per day, bounded wait). On for the import and for
 // the preview that shows what the import will store; off for the callers that
 // only want the matched game.
+//
+// realTimeIngest: the line comes from a Telegram message imported as it arrives (telegram-ingest.ts, and the review
+// rows it resolves at the same moment). A game already final then is never matched - the line stays unmatched with
+// finishedBeforePost set. Every other caller leaves it off: a manual paste still matches a just-finished game.
 export async function resolveGameAndOdds(
   item: ResolvableItem,
   getOdds: OddsLoader,
-  { retryOnMiss = true, altLines = false, pricing }: { retryOnMiss?: boolean; altLines?: boolean; pricing?: PricingOddsLoader } = {}
+  {
+    retryOnMiss = true,
+    altLines = false,
+    pricing,
+    realTimeIngest = false,
+  }: { retryOnMiss?: boolean; altLines?: boolean; pricing?: PricingOddsLoader; realTimeIngest?: boolean } = {}
 ): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -220,6 +231,9 @@ export async function resolveGameAndOdds(
   // generic "couldn't match to today's schedule" one, since there's nothing
   // left to default to. False for every other unmatched reason.
   doubleheaderBothLegsFinal: boolean;
+  // Real-time ingest only: unmatched because every game the team had in the window was already final when the
+  // message arrived (the pick was posted after its game). False everywhere else.
+  finishedBeforePost: boolean;
 }> {
   let homeTeam = item.description;
   let awayTeam = "-";
@@ -235,6 +249,7 @@ export async function resolveGameAndOdds(
   let mlFavoredSide: "HOME" | "AWAY" | null = null;
   let resolvedGameNumber: 1 | 2 | null = null;
   let doubleheaderBothLegsFinal = false;
+  let finishedBeforePost = false;
 
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
@@ -253,15 +268,16 @@ export async function resolveGameAndOdds(
     // otherwise hand lookupGame two nicknames that both resolve to the same
     // team, which it reads as a two-team matchup and fails.
     const nicknames = [...new Set(item.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
-    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
+    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
     if (!lookup.game && retryOnMiss) {
       await new Promise((resolve) => setTimeout(resolve, UNMATCHED_RETRY_DELAY_MS));
-      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds);
+      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest);
     }
     const game = lookup.game;
     doubleheaderBothLegsFinal = lookup.doubleheaderBothLegsFinal;
+    finishedBeforePost = !game && lookup.finishedOnly === true;
     if (game) {
       matched = true;
       homeTeam = game.homeTeam;
@@ -475,6 +491,7 @@ export async function resolveGameAndOdds(
     mlFavoredSide,
     resolvedGameNumber,
     doubleheaderBothLegsFinal,
+    finishedBeforePost,
   };
 }
 
@@ -739,7 +756,10 @@ export async function importPicksForUser(
   skippedDuplicates: SkippedDuplicateItem[] = [],
   // How the browser settled ambiguous team names in this paste, for the ops
   // console's Imports tab only (validated in recordImportRun).
-  ambiguity: unknown = []
+  ambiguity: unknown = [],
+  // realTimeIngest: set only by the Telegram ingest (catalog-import-orchestrator, from telegram-ingest.ts) - a game
+  // already final when the message arrived is never matched (resolveGameAndOdds). The manual paste never sets it.
+  { realTimeIngest = false }: { realTimeIngest?: boolean } = {}
 ): Promise<BulkImportResult> {
   const user = { id: userId };
   const getOdds = createRequestOddsLoader();
@@ -764,7 +784,7 @@ export async function importPicksForUser(
   type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
   type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
   const resolveOne = (item: BulkImportItem, loader: OddsLoader, pricing: PricingOddsLoader): Promise<Outcome> =>
-    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, pricing }).then(
+    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, pricing, realTimeIngest }).then(
       (resolved): Outcome => ({ ok: true, resolved }),
       (err: unknown): Outcome => ({ ok: false, err })
     );
@@ -833,6 +853,7 @@ export async function importPicksForUser(
         mlFavoredSide,
         resolvedGameNumber,
         doubleheaderBothLegsFinal,
+        finishedBeforePost,
       } = outcome.resolved;
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
@@ -848,7 +869,8 @@ export async function importPicksForUser(
           logSkip(item, "DOUBLEHEADER_FINAL", "Doubleheader with every leg already final");
         } else {
           unmatchedGames.push(item.capperName + " - " + item.description);
-          logSkip(item, "GAME_UNMATCHED", "No scheduled game matched");
+          // Real-time ingest: the team's only games were already final when the message arrived - posted after the game.
+          logSkip(item, "GAME_UNMATCHED", finishedBeforePost ? FINISHED_BEFORE_POST_REASON : "No scheduled game matched");
         }
         continue;
       }
@@ -1032,17 +1054,32 @@ export async function importPicksForUser(
 // This mirrors the per-item body of importPicksForUser's resolution loop above (same resolveGameAndOdds call, same
 // invalid-odds / total-without-line refusals, same prop stamping). It is a separate function on purpose: the manual
 // loop is pinned by source-text guards and a parity test, and stays untouched.
+//
+// Matching happens HERE, at the message's arrival - answering the question later inserts the stored row without
+// matching again (ingest-review.ts resolveReviewItem). So a review item approved after its game ended still gets the
+// game it matched when the message came in, and realTimeIngest's "never a game already final" is judged at the
+// message's time, never at approval time.
 export type PickRowResolution = { ok: true; row: DedupPickRow } | { ok: false; reason: string };
 
-export function createPickRowResolver(): (item: BulkImportItem) => Promise<PickRowResolution> {
+// The skipped-line / unmatched reason for a real-time ingest line whose team's only games were already final.
+export const FINISHED_BEFORE_POST_REASON = "Game already final when the message was posted";
+
+export function createPickRowResolver({ realTimeIngest = false }: { realTimeIngest?: boolean } = {}): (item: BulkImportItem) => Promise<PickRowResolution> {
   const getOdds = createRequestOddsLoader();
   const pricing = createPricingOddsLoader(getOdds);
   return async (item) => {
     try {
       if (!item.capperName.trim()) return { ok: false, reason: "Capper name is required." };
-      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, pricing });
+      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, pricing, realTimeIngest });
       if (r.resolvable && !r.matched) {
-        return { ok: false, reason: r.doubleheaderBothLegsFinal ? "Doubleheader with every leg already final" : "No scheduled game matched" };
+        return {
+          ok: false,
+          reason: r.doubleheaderBothLegsFinal
+            ? "Doubleheader with every leg already final"
+            : r.finishedBeforePost
+              ? FINISHED_BEFORE_POST_REASON
+              : "No scheduled game matched",
+        };
       }
       if (isInvalidOdds(r.odds)) return { ok: false, reason: "Odds must be a valid non-zero number (resolved " + r.odds + ")" };
       const extractedLine = extractLine(item.betType, item.description);

@@ -59,6 +59,9 @@ export type CatalogImportHooks = {
   preFilterText?: (text: string) => { text: string; skipped: SkippedLineEntry[] };
   // Applied to the picks after ambiguous teams are auto-resolved (ingest uses it for the league allowlist).
   filterPicks?: (picks: ParsedPick[]) => { keep: ParsedPick[]; skipped: SkippedLineEntry[] };
+  // The text is a message being imported as it arrives (Telegram ingest): a game already final now - final at the
+  // message's time - is never matched (bulk-import-core resolveGameAndOdds). Unset: matching exactly as the form's.
+  realTimeIngest?: boolean;
 };
 
 export type CatalogImportResult = {
@@ -253,7 +256,7 @@ export async function runCatalogImportForUser(
   const ambiguityLog = resolved.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount }));
   const importResult =
     toImport.length > 0 || skippedDuplicates.length > 0
-      ? await importPicksForUser(userId, toImport, skippedDuplicates, ambiguityLog)
+      ? await importPicksForUser(userId, toImport, skippedDuplicates, ambiguityLog, { realTimeIngest: hooks.realTimeIngest === true })
       : null;
 
   return {

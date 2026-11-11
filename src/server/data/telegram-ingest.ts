@@ -48,13 +48,16 @@ export async function ingestTelegramBatch(input: IngestBatchInput, config: Inges
   }
 
   // 2. The import, as the signed-in user would have pasted it, with every question parked instead of asked.
+  //    realTimeIngest: the message is imported as it arrives, so a game already final now was final when it was
+  //    posted - never matched (the line is logged as skipped). Review choices are matched now too, by the same rule.
   try {
     const result = await runCatalogImportForUser(config.userId, text, day, {
       preFilterText: dropCombinedBetLines,
       prepareAmbiguous: (picks) => narrowAmbiguousByLeague(config.allowedLeagues, picks),
       filterPicks: (picks) => filterPicksByLeague(config.allowedLeagues, picks),
+      realTimeIngest: true,
     });
-    const drafts = await buildReviewDrafts(result.questions);
+    const drafts = await buildReviewDrafts(result.questions, { realTimeIngest: true });
 
     const imported = result.importResult?.success ? result.importResult.imported : 0;
     // Lines that were lost for a reason nobody chose (as opposed to a filter or a duplicate doing its job).
