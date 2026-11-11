@@ -206,9 +206,10 @@ async function main() {
   check("TD all-time (football): 10-4 - NCAAF counts", wl(td?.allTime) === "10-4", wl(td?.allTime));
   check("passing yards: 6-4 in-league and all-time", wl(yds?.league) === "6-4" && wl(yds?.allTime) === "6-4", `${wl(yds?.league)} / ${wl(yds?.allTime)}`);
   check("only the slate's entries: 2 records", Object.keys(recs).length === 2, Object.keys(recs).join(", "));
-  const tdCard = snapshot.leagueRecords.records[`${tdCapper}|NFL|TD_PROP`];
-  // 7-3 NFL + 3-1 NCAAF + 0-5 legacy + the future WIN: 11-9.
-  check("the TD_PROP card itself is unchanged: every decided TD_PROP pick, as before (11-9)", wl(tdCard?.overall) === "11-9", wl(tdCard?.overall));
+  // PICK_CATEGORY_VERSION 5: the picks are stamped ANYTIME_TD_PROP (legacy no-propMarket TD text too), so the
+  // category card is that key's. 7-3 NFL + 3-1 NCAAF + 0-5 legacy + the future WIN: 11-9.
+  const tdCard = snapshot.leagueRecords.records[`${tdCapper}|NFL|ANYTIME_TD_PROP`];
+  check("the ANYTIME_TD_PROP card counts every decided TD pick, legacy text included (11-9)", wl(tdCard?.overall) === "11-9", wl(tdCard?.overall));
   const tdLegs = first.parlay.legs.filter((l) => l.pick.capperId === tdCapper);
   // Best of two at z = 1.5: all-time 10-4 (Wilson ~0.514) beats in-league 7-3 (~0.463).
   check(

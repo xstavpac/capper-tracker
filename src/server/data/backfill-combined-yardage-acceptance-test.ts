@@ -91,7 +91,10 @@ async function main() {
   // Verify (read-only): the would-change count, by target category.
   const v = await verifyPickCategory({ batchSize: 2, scope });
   check("verify: in-scope rows are the four TD_PROP props", v.total, 4);
-  check("verify: two would change", v.staleChanges, 2);
+  // Version 5: the anytime-TD and passing-TD rows stored as TD_PROP would change too (to ANYTIME_TD_PROP /
+  // PASS_TDS_PROP) - verify counts them; --combined-yardage still writes only its two (checked below).
+  check("verify: four would change (the two combined-yards rows + TD and passing TDs under version 5)", v.staleChanges, 4);
+  check("verify: the version 5 moves of the other two", ["TD_PROP -> ANYTIME_TD_PROP", "TD_PROP -> PASS_TDS_PROP"].map((p) => v.staleChangePairs.get(p) ?? 0), [1, 1]);
   check(
     "verify: one to each combined category",
     COMBINED_YARDAGE_CATEGORIES.map((c) => v.staleChangePairs.get("TD_PROP -> " + c) ?? 0),
