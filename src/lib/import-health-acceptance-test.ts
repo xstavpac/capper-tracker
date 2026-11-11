@@ -121,7 +121,8 @@ const now = T("2026-10-19T20:00:00Z");
 {
   const action = src("src/server/data/bulk-import-core.ts");
   const fn = action.slice(action.indexOf("export async function importPicksForUser"), action.length);
-  expect("action: takes the ambiguity log as its 3rd arg", /skippedDuplicates: SkippedDuplicateItem\[\] = \[\],[\s\S]*?ambiguity: unknown = \[\]\s*\n\): Promise<BulkImportResult>/.test(fn), true);
+  // Followed only by the optional real-time-ingest options object (telegram ingest), never by another positional arg.
+  expect("action: takes the ambiguity log as its 3rd arg", /skippedDuplicates: SkippedDuplicateItem\[\] = \[\],[\s\S]*?ambiguity: unknown = \[\],?\s*\n(?:\s*\/\/[^\n]*\n)*(?:\s*\{ realTimeIngest = false \}: \{ realTimeIngest\?: boolean \} = \{\}\s*\n)?\): Promise<BulkImportResult>/.test(fn), true);
   expect("action: a fallback flag per queued row (no score source)", [/toInsert\.push\(\{[\s\S]*?\}\);\s*\n\s*fallback\.push\(!resolvable\);/.test(fn), (fn.match(/toInsert\.push\(/g) ?? []).length], [true, 1]);
   expect("action: fallback picks mapped through insertedIndexes -> created ids", /result\.insertedIndexes\.flatMap\(\(rowIndex, k\) =>\s*\n?\s*fallback\[rowIndex\] \? \[\{ pickId: result\.created\[k\]\.id/.test(fn), true);
   const record = fn.indexOf("await recordImportRun(");

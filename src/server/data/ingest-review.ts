@@ -34,9 +34,12 @@ const choiceFrom = (base: Omit<ReviewChoice, "pick" | "unmatched">, r: PickRowRe
 // One draft per held pick. For each possible answer the game is matched and priced now (the same lookup the import
 // uses), so resolveReviewItem never has to match again. The reads are the import's own cached feeds: one loader is
 // shared by every choice of every question in the batch.
-export async function buildReviewDrafts(questions: CatalogQuestion[]): Promise<ReviewItemDraft[]> {
+//
+// realTimeIngest (the Telegram ingest passes it): matched as the message arrives, so a game already final then is
+// never a choice's game - and because the match is stored, approving the item later never re-judges it.
+export async function buildReviewDrafts(questions: CatalogQuestion[], { realTimeIngest = false }: { realTimeIngest?: boolean } = {}): Promise<ReviewItemDraft[]> {
   if (questions.length === 0) return [];
-  const resolve = createPickRowResolver();
+  const resolve = createPickRowResolver({ realTimeIngest });
   const drafts: ReviewItemDraft[] = [];
   for (const q of questions) {
     const lineText = q.pick.raw;

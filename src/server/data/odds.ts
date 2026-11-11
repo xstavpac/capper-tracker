@@ -2130,7 +2130,10 @@ function isConfirmedMissingPartnerLeg(only: ScoreGame, gameNumber: 1 | 2 | null)
 // own caller-facing message instead of the generic "couldn't match" one - a
 // confirmed doubleheader (MLB flags it) whose every leg is already final, so
 // there is no "earliest not-final leg" default left to resolve to.
-export type ScheduleCandidateResult = { game: ScoreGame | null; doubleheaderBothLegsFinal: boolean };
+//
+// `finishedOnly` is set only by a real-time ingest lookup (excludeFinal) that found nothing because every game the
+// team had in the window was already final: the caller logs "already final when posted" instead of "no game".
+export type ScheduleCandidateResult = { game: ScoreGame | null; doubleheaderBothLegsFinal: boolean; finishedOnly?: boolean };
 
 function noMatch(): ScheduleCandidateResult {
   return { game: null, doubleheaderBothLegsFinal: false };
@@ -2231,13 +2234,32 @@ export function resolveScheduleGameFromFeeds(
   // (see getNcaafUpcomingFcsGames). Same standing as the odds feed: consulted
   // only when the score feed has no same-day or upcoming match. A game the
   // odds feed also lists is taken from the odds feed, not doubled.
-  scheduleGames: ScoreGame[] = []
+  scheduleGames: ScoreGame[] = [],
+  // excludeFinal: real-time ingest (see ResolveGameOpts.excludeFinal). sportKey: for matching an odds/schedule game
+  // to its finished score-feed twin with the league's alias rows.
+  rules: { excludeFinal?: boolean; sportKey?: string } = {}
 ): ScheduleCandidateResult {
   const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
 
   // A postponed or cancelled slot is never a game to attach a pick to: the
   // makeup (a new entry, same gamePk for MLB) is, once the feed lists it.
-  const fromScores = scoreGames.filter((g) => !isUnplayed(g.status) && teamMatches(g) && inWindow(g));
+  const teamScores = scoreGames.filter((g) => !isUnplayed(g.status) && teamMatches(g) && inWindow(g));
+  // Real-time ingest: every finished game leaves the pool here, before any step runs - the same-day step, the
+  // upcoming step and the last resort below all read fromScores, and the odds/schedule fallback drops the same games
+  // (an odds listing is "preview" by construction, so a game that has since finished would otherwise come back
+  // through it). Without excludeFinal, fromScores is exactly what it always was.
+  const finishedScores = rules.excludeFinal ? teamScores.filter((g) => g.status === "final") : [];
+  const fromScores = rules.excludeFinal ? teamScores.filter((g) => g.status !== "final") : teamScores;
+  const isFinishedGame = (g: { homeTeam: string; awayTeam: string; commenceTime: string }) =>
+    finishedScores.some(
+      (f) =>
+        teamNamesMatch(f.homeTeam, g.homeTeam, rules.sportKey) &&
+        teamNamesMatch(f.awayTeam, g.awayTeam, rules.sportKey) &&
+        Math.abs(Date.parse(f.commenceTime) - Date.parse(g.commenceTime)) <= FINISHED_TWIN_DRIFT_MS
+    );
+  // Nothing left, and finished games were all the team had: say so (the caller logs "already final when posted").
+  const markFinishedOnly = (r: ScheduleCandidateResult): ScheduleCandidateResult =>
+    rules.excludeFinal && !r.game && !r.doubleheaderBothLegsFinal && finishedScores.length > 0 ? { ...r, finishedOnly: true } : r;
 
   const sameDayScores = fromScores.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
   if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime, gameNumber);
@@ -2245,18 +2267,23 @@ export function resolveScheduleGameFromFeeds(
   const scoresUpcoming = fromScores.filter((g) => g.status !== "final");
   if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime, gameNumber);
 
-  const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g)).map(oddsGameToScheduleGame);
+  const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g) && !isFinishedGame(g)).map(oddsGameToScheduleGame);
   const fromSchedule = scheduleGames.filter(
     (g) =>
       teamMatches(g) &&
       inWindow(g) &&
+      !isFinishedGame(g) &&
       !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
   );
   const ahead = [...fromOdds, ...fromSchedule];
   if (ahead.length > 0) return pickBestScheduleCandidate(ahead, referenceTime, gameNumber);
 
-  return pickBestScheduleCandidate(fromScores, referenceTime, gameNumber);
+  return markFinishedOnly(pickBestScheduleCandidate(fromScores, referenceTime, gameNumber));
 }
+
+// How far apart an odds/schedule listing and a finished score-feed game may start and still be the same game (the
+// two feeds' start times differ by minutes; a rematch is days away). Same bound grading uses (MAX_GAME_TIME_DRIFT_MS).
+const FINISHED_TWIN_DRIFT_MS = 6 * 3600000;
 
 // `nearTermOnly` skips the odds-feed fallback: it answers "does this team have
 // a game in the ~yesterday..tomorrow score feed" rather than "anywhere in the
@@ -2279,6 +2306,12 @@ export type ResolveGameOpts = {
   // score-feed game, nothing whose start time has passed. The disambiguation
   // check asks this for a shared college school (ambiguous-hierarchy.ts step 2).
   upcomingOnly?: boolean;
+  // Real-time ingest only (a Telegram message imported as it arrives - see telegram-ingest.ts): a game the score
+  // feed already has as FINAL is never a candidate, at any step of resolveScheduleGameFromFeeds - not the same-day
+  // step, not the last resort, and not as its odds-feed twin. The import runs when the message arrives, so "final
+  // now" is "final at the message's time": a pick posted after its game ended is left unmatched, not imported.
+  // Live games still match. Manual paste leaves this off and keeps matching a just-finished game.
+  excludeFinal?: boolean;
 };
 
 function notStartedBy(g: { commenceTime: string; status?: string }, referenceTime: Date): boolean {
@@ -2316,7 +2349,7 @@ async function fetchFeedOrEmpty<T>(label: string, fetch: () => Promise<T[]>): Pr
 async function resolveScheduleGame(
   sportKey: string,
   matchesTeam: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport, upcomingOnly = false }: ResolveGameOpts
+  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport, upcomingOnly = false, excludeFinal = false }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
   const teamMatches = (g: { homeTeam: string; awayTeam: string }) =>
     matchesTeam(g) && (!upcomingOnly || notStartedBy(g as { homeTeam: string; awayTeam: string; commenceTime: string; status?: string }, referenceTime));
@@ -2332,7 +2365,7 @@ async function resolveScheduleGame(
     scoreHasUpcoming || sportKey !== "americanfootball_ncaaf"
       ? []
       : await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames());
-  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames);
+  return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames, { excludeFinal, sportKey });
 }
 
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
