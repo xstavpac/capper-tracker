@@ -382,7 +382,7 @@ model Pick {
     // fetchedAt of the fresh fetch, or the snapshot row's createdAt (the data is at least that new). null for DEFAULTED.
     // NOT the capper's own post time - that is not recoverable from pasted text (datePosted stays our import time).
   oddsBook       String? // the bookmaker key that supplied a MARKET game-line price; null otherwise
-  oddsNullReason String? // why there is no real price when oddsSource is DEFAULTED: no_market | game_started | unsupported_prop
+  oddsNullReason String? // why there is no real price when oddsSource is DEFAULTED: no_market | game_started | unsupported_prop | no_exact_line
   period     Period     @default(FULL_GAME)
   sportsbook String?
   units      Float

@@ -54,22 +54,23 @@ function gradeAgainstLine(actual: number, line: number, direction: "OVER" | "UND
   return actual > line === (direction === "OVER") ? "WIN" : "LOSS";
 }
 
-function stripSuffix(name: string): string {
+export function stripSuffix(name: string): string {
   return name.replace(/\s+(jr\.?|sr\.?|II|III|IV|V)$/i, "").trim();
 }
 
 // normalizeName drops every non a-z character, so an accented letter would
 // vanish ("Jokić" -> "joki") instead of matching its plain form. Fold first.
-function fold(name: string): string {
+export function fold(name: string): string {
   return name.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
-type NameMatch<T> = { status: "one"; item: T } | { status: "many" } | { status: "none" };
+export type NameMatch<T> = { status: "one"; item: T } | { status: "many" } | { status: "none" };
 
 // Exact normalized full name -> fuzzy full name -> (single typed token only)
 // bare surname; each tier counts only if it narrows to exactly one distinct
 // player id. Same tier policy as nhl-prop-grading.ts / player-roster-fallback.ts.
-function matchByName<T>(typed: string, items: T[], id: (i: T) => string, fullName: (i: T) => string, lastName: (i: T) => string): NameMatch<T> {
+// Also used by nba-prop-odds.ts to resolve which player a prop is priced for.
+export function matchByName<T>(typed: string, items: T[], id: (i: T) => string, fullName: (i: T) => string, lastName: (i: T) => string): NameMatch<T> {
   const t = stripSuffix(fold(typed));
   const nt = normalizeName(t);
   const distinct = (xs: T[]) => [...new Map(xs.map((x) => [id(x), x])).values()];
