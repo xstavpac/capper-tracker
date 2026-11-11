@@ -106,9 +106,9 @@ const max3 = buildSameGameLegs(parlayA, games, cr, 3);
   const boundaryGames = games.filter((g) => g.gameId === "g1").map((g) => ({ ...g, picks: g.picks.filter((p) => ["g1-a", "g1-e", "g1-f"].includes(p.pickId)) }));
   const a = buildAutoParlay(boundaryGames, lr, 3);
   check("gate: exactly 55.0% (11-9) qualifies", ids(buildSameGameLegs(a, boundaryGames, cr, 3).legs), ["g1-e"]);
-  const under: Record<string, CategoryBreakdownItem | null> = { ...cr, "capE|TD_PROP": { key: "TD_PROP", label: "", wins: 109, losses: 91, pushes: 0, winPct: 54.5, count: 200 } };
+  const under: Record<string, CategoryBreakdownItem | null> = { ...cr, "capE|HITS_PROP": { key: "HITS_PROP", label: "", wins: 109, losses: 91, pushes: 0, winPct: 54.5, count: 200 } };
   check("gate: 54.5% does not, however large the sample", buildSameGameLegs(a, boundaryGames, under, 3).legs, []);
-  check("gate: no record does not", buildSameGameLegs(a, boundaryGames, { ...cr, "capE|TD_PROP": null }, 3).legs, []);
+  check("gate: no record does not", buildSameGameLegs(a, boundaryGames, { ...cr, "capE|HITS_PROP": null }, 3).legs, []);
   check("gate: no record entry at all does not", buildSameGameLegs(a, boundaryGames, {}, 3).legs, []);
   const noCategory = boundaryGames.map((g) => ({ ...g, picks: g.picks.map((p) => (p.pickId === "g1-e" ? { ...p, category: null } : p)) }));
   check("gate: a pick with no category does not", buildSameGameLegs(buildAutoParlay(noCategory, lr, 3), noCategory, cr, 3).legs, []);
@@ -149,7 +149,7 @@ const max3 = buildSameGameLegs(parlayA, games, cr, 3);
       gameLabel: gameId,
       gameTime: base.gameTime,
       leagueName: "MLB",
-      picks: [side, mk("-b", "TOTAL", "Over 8.5", "OVER", 8.5), mk("-c", "PLAYER_PROP", "Player " + gameId.replace(/\d/g, (d) => "abcdefghij"[+d]) + " over 1.5 total bases", "TD_PROP", null)],
+      picks: [side, mk("-b", "TOTAL", "Over 8.5", "OVER", 8.5), mk("-c", "PLAYER_PROP", "Player " + gameId.replace(/\d/g, (d) => "abcdefghij"[+d]) + " over 1.5 total bases", "TB_PROP", null)],
     });
   }
   const a20 = buildAutoParlay(many, league, MAX_PARLAY_LEGS);

@@ -310,6 +310,9 @@ export function specialistCandidatesSelect(scope: {
 export async function queryCategoryPanel(scope: {
   userId: string;
   sportName: string;
+  // The sport's chip set (chipSetForLeague): only its tiles' categories are aggregated
+  // and returned - a category the panel would drop in JS never leaves the database.
+  chipSet: readonly string[];
   minPicks: number;
   limit: number;
 }): Promise<CategoryPanelRow[]> {
@@ -323,7 +326,7 @@ export async function queryCategoryPanel(scope: {
         (count(*) FILTER (WHERE p.status = 'PUSH'))::int AS pu,
         min(${KEY}) AS k
       FROM picks p
-      WHERE p."userId" = ${scope.userId} AND p.category IS NOT NULL
+      WHERE p."userId" = ${scope.userId} AND p.category = ANY(${[...scope.chipSet]}::text[])
         AND p."sportId" IN (SELECT id FROM sports WHERE name = ${scope.sportName})
       GROUP BY p."capperId", p.category
     ),

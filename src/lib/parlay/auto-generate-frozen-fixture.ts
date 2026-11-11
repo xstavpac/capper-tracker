@@ -39,16 +39,16 @@ const ROWS: Row[] = [
   { game: G1, pickId: "g1-b", capperId: "capB", betType: "TOTAL", betDetail: "Over 8.5", odds: -110, line: 8.5, category: "OVER", league: [12, 8], market: [16, 9] },
   // The strongest candidate on the slate, and a second side on G1.
   { game: G1, pickId: "g1-c", capperId: "capC", betType: "MONEYLINE", betDetail: "Rays ML", odds: 130, line: null, category: "DOG_ML", league: [7, 5], market: [40, 10] },
-  { game: G1, pickId: "g1-d", capperId: "capD", betType: "PLAYER_PROP", betDetail: "Seiya Suzuki over 1.5 total bases", odds: -115, line: null, category: "TD_PROP", league: [9, 6], market: [30, 20] },
+  { game: G1, pickId: "g1-d", capperId: "capD", betType: "PLAYER_PROP", betDetail: "Seiya Suzuki over 1.5 total bases", odds: -115, line: null, category: "TB_PROP", league: [9, 6], market: [30, 20] },
   // Exactly 55.0%.
-  { game: G1, pickId: "g1-e", capperId: "capE", betType: "PLAYER_PROP", betDetail: "Yandy Diaz over 0.5 hits", odds: -200, line: null, category: "TD_PROP", league: [5, 5], market: [11, 9] },
+  { game: G1, pickId: "g1-e", capperId: "capE", betType: "PLAYER_PROP", betDetail: "Yandy Diaz over 0.5 hits", odds: -200, line: null, category: "HITS_PROP", league: [5, 5], market: [11, 9] },
   // 54.5%: under the gate.
   { game: G1, pickId: "g1-f", capperId: "capF", betType: "TEAM_TOTAL", betDetail: "Rays team total over 3.5", odds: -105, line: 3.5, category: "TEAM_TOTAL", league: [4, 6], market: [6, 5] },
 
   { game: G2, pickId: "g2-a", capperId: "capG", betType: "MONEYLINE", betDetail: "Yankees ML", odds: -130, line: null, category: "FAV_ML", league: [26, 14], market: [26, 14] },
   { game: G2, pickId: "g2-b", capperId: "capH", betType: "TOTAL", betDetail: "Under 7.5", odds: -110, line: 7.5, category: "UNDER", league: [6, 4], market: [33, 17] },
-  { game: G2, pickId: "g2-c", capperId: "capI", betType: "PLAYER_PROP", betDetail: "Aaron Judge over 1.5 total bases", odds: 105, line: null, category: "TD_PROP", league: [5, 4], market: [28, 12] },
-  { game: G2, pickId: "g2-d", capperId: "capJ", betType: "PLAYER_PROP", betDetail: "Aaron Judge under 0.5 home runs", odds: -260, line: null, category: "TD_PROP", league: [4, 4], market: [12, 8] },
+  { game: G2, pickId: "g2-c", capperId: "capI", betType: "PLAYER_PROP", betDetail: "Aaron Judge over 1.5 total bases", odds: 105, line: null, category: "TB_PROP", league: [5, 4], market: [28, 12] },
+  { game: G2, pickId: "g2-d", capperId: "capJ", betType: "PLAYER_PROP", betDetail: "Aaron Judge under 0.5 home runs", odds: -260, line: null, category: "HR_PROP", league: [4, 4], market: [12, 8] },
 
   { game: G3, pickId: "g3-a", capperId: "capK", betType: "MONEYLINE", betDetail: "Dodgers ML", odds: -140, line: null, category: "FAV_ML", league: [31, 19], market: [31, 19] },
 

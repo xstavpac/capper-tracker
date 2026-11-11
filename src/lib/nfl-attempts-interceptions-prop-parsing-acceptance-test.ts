@@ -158,7 +158,7 @@ for (const [market, category] of CATEGORY) {
   check(`category ${market}`, pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "x", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: market as PropMarket }), category);
 }
 check("category from text alone (legacy null propMarket)", pickCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "JK Dobbins over 13.5 rushing attempts", odds: -110, line: null, sportName: "NFL", pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }), "RUSH_ATTEMPTS_PROP");
-check("PICK_CATEGORY_VERSION is 4 (moneyline odds-source rule + totals side)", PICK_CATEGORY_VERSION, 4);
+check("PICK_CATEGORY_VERSION is 5 (per-market player-prop categories)", PICK_CATEGORY_VERSION, 5);
 check("filter category (stored)", betTypeFilterCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "x", propMarket: "PASS_INTERCEPTIONS" }), "PASS_INTERCEPTIONS");
 check("filter category (from text)", betTypeFilterCategory({ betType: "PLAYER_PROP", period: "FULL_GAME", betDetail: "Rodgers Over 34.5 Pass Attempts", propMarket: null }), "PASS_ATTEMPTS");
 
