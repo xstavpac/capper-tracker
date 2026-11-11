@@ -10,6 +10,7 @@ import { useSharedLiveScoresIfAny } from "@/components/live/use-live-scores";
 import { useLiveGameJump } from "@/components/live/live-game-jump";
 import { useLiveListScope } from "@/components/live/live-list-scope";
 import { easternDateKey } from "@/lib/dates";
+import { CATEGORY_TILES_COLLAPSED, visibleCategoryTiles } from "@/lib/category-tile-order";
 import {
   LIVE_CATEGORY_REVEAL_STEP,
   buildCategoryTiles,
@@ -58,6 +59,9 @@ export function LiveCategoryPanel({
   const [records, setRecords] = useState<Records | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Past 12 tiles (two rows of six), the rest sit behind "See more". Collapsed on every load - plain
+  // component state, never persisted.
+  const [expanded, setExpanded] = useState(false);
 
   // No shared scores means no board is mounted, so no card is showing a pick. The pool follows the
   // boards' "See more" toggle, so a tile's count is still the number of picks on the cards shown.
@@ -123,6 +127,13 @@ export function LiveCategoryPanel({
   }
 
   const reveal = revealState(requested, rows.length);
+  const visible = visibleCategoryTiles(tiles, expanded);
+
+  function collapse() {
+    setExpanded(false);
+    // An open tile that the collapse hides closes with it, so the pick list never points at a hidden card.
+    if (activeKey !== null && tiles.findIndex((t) => t.key === activeKey) >= CATEGORY_TILES_COLLAPSED) setActiveKey(null);
+  }
 
   return (
     <PanelShell
@@ -130,7 +141,7 @@ export function LiveCategoryPanel({
       footer={undefined}
     >
       <div className={CATEGORY_GRID}>
-        {tiles.map((tile) => (
+        {visible.shown.map((tile) => (
           <CategoryCard
             key={tile.key}
             label={tile.label}
@@ -145,6 +156,19 @@ export function LiveCategoryPanel({
           />
         ))}
       </div>
+
+      {visible.toggle && (
+        <div className="mt-2.5 flex justify-center">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => (expanded ? collapse() : setExpanded(true))}
+            className="rounded-[9px] border border-[#E6E8EF] bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-[#F4F6FA] dark:border-border dark:bg-card dark:hover:bg-white/[0.06]"
+          >
+            {expanded ? "Show less" : "See more"}
+          </button>
+        </div>
+      )}
 
       {activeTile && activePicks.length === 0 && (
         <p className="mt-3 rounded-[14px] border border-[#E6E8EF] bg-[#FAFBFD] px-3.5 py-3 text-[13px] font-medium text-muted-foreground dark:border-border dark:bg-white/[0.03]">

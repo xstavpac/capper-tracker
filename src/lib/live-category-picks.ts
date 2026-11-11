@@ -14,6 +14,7 @@ import type { ScoreGame } from "@/server/data/odds";
 import type { PickCategoryKey, LeagueRecordCard } from "@/server/data/stats";
 import { orderBoardGames, matchScoreToGame } from "@/components/live/live-scoreboard-ordering";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
+import { orderTilesByPickCount } from "@/lib/category-tile-order";
 
 // A capper's league+category record drives a pick's rank only once it has this
 // many decided picks (wins + losses + pushes); below it the all-time category
@@ -166,9 +167,10 @@ export type LiveCategoryTile = {
   slateCount: number;
 };
 
-// The tiles, in the league's chip-set order: every category with a graded
-// record (as before), plus a 0-0 tile for a category that has slate picks but
-// no graded history yet - there only while it has picks.
+// The tiles: every category with a graded record (as before), plus a 0-0 tile
+// for a category that has slate picks but no graded history yet - there only
+// while it has picks. Ordered by all-time decided picks in the league, most
+// first; equal counts keep the chip-set order (lib/category-tile-order.ts).
 export function buildCategoryTiles(
   chipSet: { key: PickCategoryKey; label: string }[],
   breakdown: { key: PickCategoryKey; wins: number; losses: number; pushes: number; winPct: number }[],
@@ -190,5 +192,5 @@ export function buildCategoryTiles(
       slateCount,
     });
   }
-  return tiles;
+  return orderTilesByPickCount(tiles);
 }

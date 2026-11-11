@@ -1,6 +1,18 @@
 import type { BetType, Period, PropMarket } from "@prisma/client";
 import { nrfiSide, parseAnyPlayerProp } from "@/lib/bet-line";
 import type { PickCategoryKey } from "@/server/data/stats";
+import { PROP_CATEGORY_BY_FAMILY, propTileKeysForFamily } from "@/lib/prop-category";
+import type { PropSportFamily } from "@/lib/prop-market-key";
+
+const PROP_FAMILIES = Object.keys(PROP_CATEGORY_BY_FAMILY) as PropSportFamily[];
+
+// The markets a family has its own category key for (not "OTHER") - each is a
+// filter key too (every PropMarket value is a BetTypeFilterKey).
+function propMarketsForFamily(family: PropSportFamily): BetTypeFilterKey[] {
+  return (Object.entries(PROP_CATEGORY_BY_FAMILY[family]) as [PropMarket, string][])
+    .filter(([, slot]) => slot !== "OTHER")
+    .map(([market]) => market satisfies BetTypeFilterKey);
+}
 
 // Extracted out of the Picks page (where this originated) so the capper
 // comparison tool can reuse the exact same bet-type classification instead
@@ -62,10 +74,8 @@ export type BetTypeFilterKey =
   | "RUNS"
   | "RBIS"
   | "HOME_RUNS"
-  // NBA markets: in the type because a stored pick's propMarket can be one, so
-  // betTypeFilterCategory can return it. No filter option lists them yet
-  // (BET_TYPE_FILTER_OPTIONS / betTypeOptionsForChipSet), so such a pick
-  // matches no filter - the same as any market without an option.
+  // NBA / WNBA markets (POINTS / ASSISTS above are shared with the NHL - the
+  // filter key is the market alone, so "Points" filters both sports' picks).
   | "REBOUNDS"
   | "DEFENSIVE_REBOUNDS"
   | "THREES_MADE"
@@ -105,6 +115,16 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "SHOTS_ON_GOAL", label: "Shots on Goal" },
   { value: "POINTS", label: "Points" },
   { value: "ASSISTS", label: "Assists" },
+  { value: "REBOUNDS", label: "Rebounds" },
+  { value: "THREES_MADE", label: "Threes Made" },
+  { value: "POINTS_REBOUNDS_ASSISTS", label: "Pts + Reb + Ast" },
+  { value: "POINTS_REBOUNDS", label: "Pts + Reb" },
+  { value: "POINTS_ASSISTS", label: "Pts + Ast" },
+  { value: "REBOUNDS_ASSISTS", label: "Reb + Ast" },
+  { value: "STEALS", label: "Steals" },
+  { value: "BLOCKS", label: "Blocks" },
+  { value: "DEFENSIVE_REBOUNDS", label: "Defensive Rebounds" },
+  { value: "DOUBLE_DOUBLE", label: "Double-Double" },
   { value: "SAVES", label: "Goalie Saves" },
   { value: "STRIKEOUTS", label: "Strikeouts" },
   { value: "OUTS_RECORDED", label: "Outs Recorded" },
@@ -197,16 +217,16 @@ export function betTypeOptionsForChipSet(chipSet: PickCategoryKey[] | null): Set
   const options = [...always];
   if (has(FIRST_HALF_CATEGORY_KEYS)) options.push("F5_SPREAD", "F5_MONEYLINE", "F5_TOTAL");
   if (chipSet.includes("TEAM_TOTAL")) options.push("TEAM_TOTAL");
-  if (chipSet.includes("TD_PROP"))
-    options.push(
-      "TD", "TD_COUNT", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS",
-      "PASS_ATTEMPTS", "PASS_COMPLETIONS", "PASS_INTERCEPTIONS", "RUSH_ATTEMPTS"
-    );
-  // NHL player props: hockey is the only chip set with the P1/P2/P3 segment
-  // categories (and it has no TD_PROP tile, so the block above skips it).
-  if (has(["FIRST_PERIOD_ML"])) options.push("ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES");
-  // MLB player props: baseball is the chip set with the NRFI/YRFI tiles.
-  if (has(["NRFI", "YRFI"])) options.push("STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS", "NRFI", "YRFI");
+  // Player props: a sport whose chip set carries a prop family's own tiles
+  // (lib/prop-category.ts) offers every market that family has a key for - the
+  // same table the tiles come from, so a filter option and a tile never disagree.
+  // OTHER_PROP is in every family's tiles, so it never decides the family.
+  for (const family of PROP_FAMILIES) {
+    const own = propTileKeysForFamily(family).filter((k) => k !== "OTHER_PROP");
+    if (has(own)) options.push(...propMarketsForFamily(family));
+  }
+  // NRFI/YRFI: baseball is the chip set with the NRFI/YRFI tiles.
+  if (has(["NRFI", "YRFI"])) options.push("NRFI", "YRFI");
   return new Set(options);
 }
 

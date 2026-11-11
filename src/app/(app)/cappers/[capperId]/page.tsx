@@ -16,6 +16,7 @@ import { MUTED } from "@/components/dashboard/stat-card";
 import { ThemedPage } from "@/components/dashboard/themed-page";
 import { leagueColorVars } from "@/lib/league-colors";
 import { formatSignedUnits, unitsExtremes } from "@/lib/units-extremes";
+import { orderTilesByPickCount } from "@/lib/category-tile-order";
 
 const ALL_SPORTS_LABEL = "All Sports";
 
@@ -238,7 +239,7 @@ export default async function CapperDetailPage({
             <CapperUnitsChart data={chartData} />
           </PanelShell>
 
-          {/* The same tiles, in the same grid, as /live's "record by category" panel. */}
+          {/* The same tiles, in the same grid and order (most picks first), as /live's "record by category" panel. */}
           <PanelShell
             theme={{ ...TINTS.neutral, title: "Market breakdown", subtitle: filterLabel, icon: <TargetIcon className={PANEL_ICON} /> }}
             control={
@@ -250,7 +251,7 @@ export default async function CapperDetailPage({
           >
             {tiles.length > 0 ? (
               <div className={CATEGORY_GRID}>
-                {tiles.map((item) => (
+                {orderTilesByPickCount(tiles).map((item) => (
                   <CategoryCard key={item.key} label={item.label} wins={item.wins} losses={item.losses} pushes={item.pushes} winPct={item.winPct} graded={item.count} tinted />
                 ))}
               </div>
