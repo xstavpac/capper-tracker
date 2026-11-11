@@ -11,11 +11,12 @@ import { CalendarIcon } from "@/components/dashboard/cappers-icons";
 import { unplayedLabel } from "@/lib/feed-game-status";
 import { SeeMoreGamesButton } from "@/components/live/live-list-scope";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
+import { tileOdds } from "@/lib/grid-tile-odds";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
 // Live's full accordion cards. Deliberately minimal - just enough to
-// identify and select a game (teams, live status/score, pick count) - not
-// the odds/spread/total detail the Feed Live card shows. Consumes the
+// identify and select a game (teams, live status/score, pick count, moneyline
+// and total) - not the spread / total-price detail the Feed Live card shows. Consumes the
 // exact same `sortedGames` shape live-scoreboard.tsx already derives
 // (game/gameIndex/score triples from orderBoardGames), so selecting which
 // games appear and in what order is unchanged, shared logic - nothing here
@@ -75,7 +76,11 @@ export function GridLiveGameList({
         const isSelected = game.id === selectedGameId;
         const isLive = score?.status === "live";
         const unplayed = unplayedLabel(score?.status);
-        const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
+        const odds = tileOdds(game);
+        // The odds feed drops events at commence time, so a live game's numbers are
+        // the last pregame pull - muted like the Feed card's (#442), style only.
+        const staleOdds = isLive ? " opacity-50" : "";
+        const pickCount =matchedPicksByGame[gameIndex]?.length ?? 0;
         // Desktop-only (see the `lg:` gates below) - mobile's collapsed list
         // rows stay pixel-identical whether or not a game is live or
         // selected, per this component's file header on why selecting a
@@ -133,23 +138,39 @@ export function GridLiveGameList({
                 </span>
               ) : null}
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
-                <span className="truncate text-[13px] font-semibold text-foreground">{game.awayTeam}</span>
-              </span>
-              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
-                {teamScore(score, game.awayTeam, activeSport) ?? ""}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
-                <span className="truncate text-[13px] font-semibold text-foreground">{game.homeTeam}</span>
-              </span>
-              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
-                {teamScore(score, game.homeTeam, activeSport) ?? ""}
-              </span>
+            <div className="flex items-stretch gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
+                    <span className="truncate text-[13px] font-semibold text-foreground">{game.awayTeam}</span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
+                    {teamScore(score, game.awayTeam, activeSport) ?? ""}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
+                    <span className="truncate text-[13px] font-semibold text-foreground">{game.homeTeam}</span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
+                    {teamScore(score, game.homeTeam, activeSport) ?? ""}
+                  </span>
+                </div>
+              </div>
+              {(odds.away || odds.home) && (
+                <div className={"flex shrink-0 flex-col justify-between border-l border-[#E1E7FA] pl-3 text-right text-[13px] tabular-nums text-muted-foreground dark:border-border" + staleOdds}>
+                  <span>{odds.away ?? " "}</span>
+                  <span className="mt-1">{odds.home ?? " "}</span>
+                </div>
+              )}
+              {odds.total && (
+                <div className={"flex w-[72px] shrink-0 flex-col items-center justify-center rounded-lg bg-[#EEF2FF] px-2 py-1 dark:bg-brand-500/10" + staleOdds}>
+                  <span className="text-[10px] font-medium leading-none text-muted-foreground">O/U</span>
+                  <span className="mt-0.5 text-[15px] font-semibold leading-tight tabular-nums text-foreground">{odds.total}</span>
+                </div>
+              )}
             </div>
             {isSelected && progress && (
               <div className="hidden lg:block">
