@@ -80,7 +80,14 @@ export function GridLiveGameList({
         // The odds feed drops events at commence time, so a live game's numbers are
         // the last pregame pull - muted like the Feed card's (#442), style only.
         const staleOdds = isLive ? " opacity-50" : "";
-        const pickCount =matchedPicksByGame[gameIndex]?.length ?? 0;
+        const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
+        // Shared by the live and pregame headers so the pill is identical in both.
+        const picksPill =
+          pickCount > 0 ? (
+            <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+              {pickCount} pick{pickCount === 1 ? "" : "s"}
+            </span>
+          ) : null;
         // Desktop-only (see the `lg:` gates below) - mobile's collapsed list
         // rows stay pixel-identical whether or not a game is live or
         // selected, per this component's file header on why selecting a
@@ -122,6 +129,7 @@ export function GridLiveGameList({
                   <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-600 dark:bg-red-500/15 dark:text-red-400">
                     LIVE
                   </span>
+                  {picksPill}
                 </span>
               ) : unplayed || pickCount > 0 ? (
                 <span className="flex items-center gap-1.5">
@@ -130,11 +138,7 @@ export function GridLiveGameList({
                       {unplayed.toUpperCase()}
                     </span>
                   )}
-                  {pickCount > 0 && (
-                    <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-                      {pickCount} pick{pickCount === 1 ? "" : "s"}
-                    </span>
-                  )}
+                  {picksPill}
                 </span>
               ) : null}
             </div>
