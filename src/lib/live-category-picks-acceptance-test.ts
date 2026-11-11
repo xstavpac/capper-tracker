@@ -25,7 +25,6 @@ import {
   drivingRecord,
   rankCategoryPicks,
   revealState,
-  slateCountText,
   slateEmptyText,
   slateListHeader,
   slatePicksByCategory,
@@ -219,12 +218,6 @@ expect("no card -> no record", [drivingRecord(null), drivingRecord(undefined)], 
   expect("a row carries nothing else to show - no odds, no record", Object.keys(rows[0]).sort(), ["capper", "gameId", "pick", "pickId", "rank"]);
   expect("each row opens its own pick's game", rows.map((r) => r.gameId), ["g-padres", "g-padres", "g-dodgers", "g-dodgers"]);
 }
-expect(
-  "tile count wording: daily leagues say Today, football says This week",
-  ["MLB", "NBA", "NHL", "WNBA", "NFL", "NCAAF"].map((l) => slateCountText(l, 47)),
-  ["Today: 47 picks", "Today: 47 picks", "Today: 47 picks", "Today: 47 picks", "This week: 47 picks", "This week: 47 picks"]
-);
-expect("0 and 1", [slateCountText("MLB", 0), slateCountText("MLB", 1)], ["Today: 0 picks", "Today: 1 pick"]);
 expect("list header", [slateListHeader("MLB", "Fav ML"), slateListHeader("NFL", "Spread +")], ["Today's Fav ML Picks", "This Week's Spread + Picks"]);
 
 // ---- 5. reveal ----
@@ -293,7 +286,6 @@ expect("list header", [slateListHeader("MLB", "Fav ML"), slateListHeader("NFL", 
     [Object.keys(empty ?? {}).sort(), empty],
     [Object.keys(tiles[0]).sort(), { key: "DOG_ML", label: "Dog ML", wins: 40, losses: 60, pushes: 0, winPct: 40, slateCount: 0 }]
   );
-  expect("it says 0 picks", [slateCountText("MLB", 0), slateCountText("NFL", 0)], ["Today: 0 picks", "This week: 0 picks"]);
   expect(
     "it opens to one line: today for daily leagues, this week for football",
     ["MLB", "NBA", "NHL", "WNBA", "NFL", "NCAAF", "nfl"].map((l) => slateEmptyText(l, "Dog ML")),

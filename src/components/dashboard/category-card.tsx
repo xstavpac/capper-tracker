@@ -1,4 +1,5 @@
 import { getRecordColor } from "@/server/data/stats";
+import { PicksCountPill } from "@/components/live/picks-count-pill";
 import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 
 // One market's all-time record, shared by /dashboard and /live: W-L-P, the win % in the app's win/loss
@@ -8,7 +9,8 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 // and up, soft red with a red border below - and colors the market name to match; without it
 // (/dashboard) the card is the neutral white stat-card surface.
 // `onToggle` makes the card a button; `active` rings the one that is open.
-// `note` (/live) is one more small line under the record.
+// `pickCount` (/live) is today's picks in the market: the solid blue capsule under the record, or nothing
+// at 0. Its row is reserved either way, so the cards in a row keep one height and their bars line up.
 
 // The grid a set of tinted cards sits in (/live's panel and the capper page's market breakdown): two
 // across on a phone, up to six from 1500px.
@@ -41,7 +43,7 @@ export function CategoryCard({
   tinted,
   active,
   onToggle,
-  note,
+  pickCount,
 }: {
   label: string;
   wins: number;
@@ -53,7 +55,7 @@ export function CategoryCard({
   tinted?: boolean;
   active?: boolean;
   onToggle?: () => void;
-  note?: string;
+  pickCount?: number;
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
@@ -94,8 +96,12 @@ export function CategoryCard({
           </p>
         )}
       </div>
-      {graded !== undefined && <p className={"-mt-0.5 text-[11px] font-medium leading-4 tabular-nums " + (note === undefined ? "mb-2 " : "") + MUTED}>{graded} graded</p>}
-      {note !== undefined && <p className="mb-2 truncate text-[11px] font-semibold leading-4 tabular-nums text-foreground">{note}</p>}
+      {graded !== undefined && <p className={"-mt-0.5 text-[11px] font-medium leading-4 tabular-nums " + (pickCount === undefined ? "mb-2 " : "") + MUTED}>{graded} graded</p>}
+      {pickCount !== undefined && (
+        <div className="mb-2 flex h-4 items-center">
+          <PicksCountPill count={pickCount} />
+        </div>
+      )}
       {/* Pinned to the bottom, so the bars in a row line up when one card wraps and its neighbour does not. */}
       <WinPctBar winPct={winPct} decided={decided} className={"mt-auto " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : WIN_PCT_TRACK)} />
     </div>
