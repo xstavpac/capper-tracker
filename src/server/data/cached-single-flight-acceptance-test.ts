@@ -12,7 +12,8 @@
 //    consumers; a consumer that sorts, pushes, splices or assigns onto what it
 //    was handed throws here (modules are strict).
 //
-// No database, no network: prisma delegates are swapped for spies, global fetch
+// No database, no network: prisma delegates (odds snapshots, rosters, sport,
+// game results, $queryRaw) are swapped for spies, global fetch
 // serves a canned schedule, and the clock is frozen on a day when NFL, NCAAF,
 // NHL and MLB are all in season (getOddsForSport never reads the table for an
 // out-of-season sport). Outside a Next request context cachedByTag has no Data
@@ -145,6 +146,9 @@ db.mlbRosterPlayer.findMany = async () => (counts.mlbRoster++, await sleep(10), 
 // persistFinalScores: no existing rows; capture what it would write.
 const upserts: { create: Record<string, unknown> }[] = [];
 db.$queryRaw = async () => [];
+// persistFinalScores also resolves the sport id by name (sport-ids.ts, memoized);
+// a fixed row keeps that lookup off the database.
+db.sport.findUnique = async (args: unknown) => ({ id: "sport-" + (args as { where: { name: string } }).where.name });
 db.gameResult.upsert = async (args: unknown) => (upserts.push(args as { create: Record<string, unknown> }), {});
 
 globalThis.fetch = (async (input: unknown) => {
