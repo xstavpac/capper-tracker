@@ -13,8 +13,10 @@
 //   - Bounded: skipped at >= 95% credit usage (the existing ladder), and capped at FRESH_DAILY_CREDIT_CAP credits
 //     a day (FRESH_DAILY_CREDIT_CAP / FRESH_CALL_CREDITS calls). Any shortfall - gate, cap, lost claim, API
 //     failure - falls back to the snapshot, exactly what the import did before; it is never an error.
-//   - A started game is never in a fresh result (the feed would hand back an in-play price for it, as the seed's
-//     own filter notes), so it keeps pricing from the snapshot and is stamped with the snapshot's time.
+//   - A started game is never BOUGHT for (the feed would hand back an in-play price for it, as the seed's own filter
+//     notes). It is priced from the newest retained listing fetched before its tip, when that listing is newer than
+//     its row (forGame / preferPreTipListing) - the price a pregame import just before tip would have read - and
+//     otherwise from its row (today's or its game day's snapshot), stamped with that row's time.
 //
 // Pure decisions (shouldFetchFresh, mergeFreshOverSnapshot) are separate from the I/O so they are provable without a
 // database; the loader takes its I/O as `deps`.
@@ -25,7 +27,7 @@ import { cachedByTag } from "@/server/data/cached";
 import { prisma } from "@/lib/prisma";
 import { easternDateKey, easternDayStart } from "@/lib/dates";
 import { isSportInSeason, oddsApiRequestKeys } from "@/lib/sport-seasons";
-import { fetchMergedOddsListing, type OddsGame, type OddsLoader } from "@/server/data/odds";
+import { fetchMergedOddsListing, resolveOddsGame, type OddsGame, type OddsLoader } from "@/server/data/odds";
 import { classifyCreditUsage, getLatestCreditUsageLevel, persistOddsApiUsage } from "@/server/data/odds-api-usage";
 
 export const FRESH_WINDOW_MS = 2 * 3600_000;
@@ -83,11 +85,36 @@ export type FreshOddsDeps = {
   readFresh: (sportKey: string, since: Date) => Promise<FreshListing | null>;
   // Buys a listing if the gate, the cap and the claim allow; null otherwise.
   buyFresh: (sportKey: string, now: Date) => Promise<FreshListing | null>;
+  // One event, as the newest stored listing fetched at or after `since` AND before that event's own start carried it -
+  // the last pre-tip price this app read for it. Only that event is read (Postgres-side), never a whole listing.
+  // Read-only: never buys. Optional so a caller with no listing store simply prices started games as before.
+  readPreTipEvent?: (sportKey: string, eventId: string, since: Date) => Promise<PreTipEvent | null>;
 };
+
+// One event out of a stored fresh listing, and when that listing was fetched.
+export type PreTipEvent = { game: OddsGame; fetchedAt: Date };
+
+// Whether a started game is priced from its last pre-tip fresh listing instead of the row it was found in: the game
+// has started, the listing was fetched before the game's own start (a later listing could not hold a pregame price
+// for it), and that listing is newer than the data the game would otherwise be priced from (the game-day snapshot,
+// or nothing known). Otherwise the snapshot price stands, exactly as before.
+export function preferPreTipListing(args: { event: OddsGame; baseCapturedAt: Date | null; listing: PreTipEvent | null; now: Date }): boolean {
+  const { event, baseCapturedAt, listing, now } = args;
+  if (!listing) return false;
+  const start = new Date(event.commenceTime).getTime();
+  if (!(start <= now.getTime())) return false;
+  if (!(listing.fetchedAt.getTime() < start)) return false;
+  return baseCapturedAt === null || listing.fetchedAt.getTime() > baseCapturedAt.getTime();
+}
 
 export type PricingOddsLoader = {
   // Same shape as every other resolver's loader: the games to price a pick against.
   load: OddsLoader;
+  // load, for pricing ONE pick's game. For a game that has started, its event is swapped for the same event as the
+  // newest retained fresh listing fetched before tip carried it, when that listing is newer than the row the game was
+  // found in (preferPreTipListing) - the price a pregame import just before tip would have read. capturedAt then
+  // reports that listing's fetchedAt. A game that has not started gets exactly load's games.
+  forGame: (game: { homeTeam: string; awayTeam: string; commenceTime: string }) => OddsLoader;
   // When the data that priced this event was read; null if unknown.
   capturedAt: (sportKey: string, eventId: string) => Date | null;
   // The snapshot's own time, for prices read from caches this loader does not see (alt lines, props): the data is at
@@ -143,31 +170,69 @@ export function createPricingOddsLoader(snapshotLoader: OddsLoader, deps: FreshO
     return merged;
   };
 
+  const load: OddsLoader = async (sportKey, pastFetchDate) => {
+    const key = dayKey(sportKey, pastFetchDate);
+    let p = held.get(key);
+    if (!p) {
+      p = pastFetchDate === undefined ? build(sportKey) : buildPastDay(sportKey, pastFetchDate);
+      held.set(key, p);
+      p.catch(() => {
+        if (held.get(key) === p) held.delete(key);
+      });
+    }
+    return (await p).games;
+  };
+
+  // Event ids are unique across days, so an event is found in whichever (sport, day) read priced it.
+  const rowCapturedAt = (sportKey: string, eventId: string): Date | null => {
+    const today = byEvent.get(sportKey)?.get(eventId);
+    if (today) return today;
+    for (const [key, events] of byEvent) {
+      if (key.startsWith(`${sportKey}|`)) {
+        const at = events.get(eventId);
+        if (at) return at;
+      }
+    }
+    return null;
+  };
+
+  // A started game's last pre-tip listing: read once per (sport, event) for the life of the loader. Pricing never
+  // fails the import - a failed read is "no listing", and the game keeps its row's price.
+  const preTip = new Map<string, Promise<PreTipEvent | null>>();
+  // (sport|event) -> the listing time that priced it, for events swapped by forGame.
+  const listingAt = new Map<string, Date>();
+  const readPreTip = (sportKey: string, eventId: string): Promise<PreTipEvent | null> => {
+    const key = `${sportKey}|${eventId}`;
+    let p = preTip.get(key);
+    if (!p) {
+      const since = new Date(deps.now().getTime() - FRESH_RETAIN_MS);
+      p = (deps.readPreTipEvent ? deps.readPreTipEvent(sportKey, eventId, since) : Promise.resolve(null)).catch((err) => {
+        console.error("[fresh-odds] pre-tip listing read failed - pricing from the row", JSON.stringify({ sportKey, eventId, error: err instanceof Error ? err.message : String(err) }));
+        return null;
+      });
+      preTip.set(key, p);
+    }
+    return p;
+  };
+
+  const forGame: PricingOddsLoader["forGame"] = (game) => async (sportKey, pastFetchDate) => {
+    const games = pastFetchDate === undefined ? await load(sportKey) : await load(sportKey, pastFetchDate);
+    const now = deps.now();
+    // Cheap check first: a game that has not started by the pick's own start time reads exactly load's games.
+    if (!(new Date(game.commenceTime).getTime() <= now.getTime())) return games;
+    // The same event resolveOddsGame would pick from these games (its loader just hands them back).
+    const event = await resolveOddsGame(sportKey, game, async () => games);
+    if (!event) return games;
+    const listing = await readPreTip(sportKey, event.id);
+    if (!listing || !preferPreTipListing({ event, baseCapturedAt: rowCapturedAt(sportKey, event.id), listing, now })) return games;
+    listingAt.set(`${sportKey}|${event.id}`, listing.fetchedAt);
+    return games.map((g) => (g.id === event.id ? listing.game : g));
+  };
+
   return {
-    load: async (sportKey, pastFetchDate) => {
-      const key = dayKey(sportKey, pastFetchDate);
-      let p = held.get(key);
-      if (!p) {
-        p = pastFetchDate === undefined ? build(sportKey) : buildPastDay(sportKey, pastFetchDate);
-        held.set(key, p);
-        p.catch(() => {
-          if (held.get(key) === p) held.delete(key);
-        });
-      }
-      return (await p).games;
-    },
-    // Event ids are unique across days, so an event is found in whichever (sport, day) read priced it.
-    capturedAt: (sportKey, eventId) => {
-      const today = byEvent.get(sportKey)?.get(eventId);
-      if (today) return today;
-      for (const [key, events] of byEvent) {
-        if (key.startsWith(`${sportKey}|`)) {
-          const at = events.get(eventId);
-          if (at) return at;
-        }
-      }
-      return null;
-    },
+    load,
+    forGame,
+    capturedAt: (sportKey, eventId) => listingAt.get(`${sportKey}|${eventId}`) ?? rowCapturedAt(sportKey, eventId),
     snapshotAt: snapAt,
   };
 }
@@ -337,4 +402,23 @@ async function pruneFresh(now: Date): Promise<void> {
   if (due.length > 0) await prisma.oddsFreshFetch.deleteMany({ where: { id: { in: due.map((r) => r.id) } } });
 }
 
-export const defaultFreshOddsDeps: FreshOddsDeps = { now: () => new Date(), readSnapshotAt, readFresh, buyFresh };
+// One event out of the newest retained listing fetched at/after `since` and before that event's own start. Postgres
+// unnests the (at most ~12/day/sport) listings and returns the one matching element - a few KB, never a listing blob.
+// Both times compare as UTC: fetchedAt is a timestamp-without-zone column holding UTC, commenceTime an ISO "Z" string.
+async function readPreTipEvent(sportKey: string, eventId: string, since: Date): Promise<PreTipEvent | null> {
+  const rows = await prisma.$queryRaw<Array<{ ev: OddsGame; fetchedAt: Date }>>`
+    SELECT e.ev, f."fetchedAt"
+    FROM odds_fresh_fetches f,
+      jsonb_array_elements(CASE WHEN jsonb_typeof(f.data) = 'array' THEN f.data ELSE '[]'::jsonb END) AS e(ev)
+    WHERE f."sportKey" = ${sportKey}
+      AND f."fetchedAt" IS NOT NULL
+      AND f."fetchedAt" >= (${since.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+      AND e.ev->>'id' = ${eventId}
+      AND f."fetchedAt" < ((e.ev->>'commenceTime')::timestamptz AT TIME ZONE 'UTC')
+    ORDER BY f."fetchedAt" DESC
+    LIMIT 1`;
+  const row = rows[0];
+  return row ? { game: row.ev, fetchedAt: row.fetchedAt } : null;
+}
+
+export const defaultFreshOddsDeps: FreshOddsDeps = { now: () => new Date(), readSnapshotAt, readFresh, buyFresh, readPreTipEvent };
