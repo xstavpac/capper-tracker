@@ -84,7 +84,7 @@ export function GridLiveGameList({
         // Shared by the live and pregame headers so the pill is identical in both.
         const picksPill =
           pickCount > 0 ? (
-            <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+            <span className="rounded-full bg-brand-600 px-2 py-0.5 text-[10.5px] font-semibold leading-none text-white dark:bg-brand-500">
               {pickCount} pick{pickCount === 1 ? "" : "s"}
             </span>
           ) : null;
