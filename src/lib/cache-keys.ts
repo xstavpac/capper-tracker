@@ -54,6 +54,10 @@ export const cacheKeys = {
   // today. Its own key (it must not collide with the full-blob or ticker entries) but
   // TAGGED with odds(sportKey, fetchDate) - see yesterdayOddsCacheParams (odds.ts).
   yesterdayOdds: (sportKey: string, fetchDate: string) => `yesterday-odds:${sportKey}:${fetchDate}`,
+  // The FULL snapshot blob of a past ET day, read only to price a game that started on that day
+  // (getPastDayOddsForSport, odds.ts). Its own key - never the today-keyed odds() entry - but TAGGED
+  // with odds(sportKey, fetchDate), like yesterdayOdds.
+  pastDayOdds: (sportKey: string, fetchDate: string) => `past-day-odds:${sportKey}:${fetchDate}`,
   // Today's projected board (getBoardOddsForSport, odds.ts) - same projection as
   // yesterdayOdds, its own key, TAGGED with odds(sportKey, fetchDate).
   boardOdds: (sportKey: string, fetchDate: string) => `board-odds:${sportKey}:${fetchDate}`,

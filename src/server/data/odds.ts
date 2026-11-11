@@ -200,7 +200,13 @@ const BASE_URL = ODDS_API_BASE_URL;
 // throws OddsSnapshotMissingError, which is never stored). readSnapshotOrSeed
 // decides which one request across the fleet does the fetch - see
 // odds-seed-claim.ts. Everyone else gets [] for that request.
-export async function getOddsForSport(sportKey: string): Promise<OddsGame[]> {
+//
+// pastFetchDate: the ET day of an already-finished day's snapshot, for pricing a
+// game that started on that day (see pastSnapshotDateFor). Read-only, never seeds -
+// see getPastDayOddsForSport. Omitted (every caller but resolveOddsGame) = today,
+// exactly as before.
+export async function getOddsForSport(sportKey: string, pastFetchDate?: string): Promise<OddsGame[]> {
+  if (pastFetchDate !== undefined) return getPastDayOddsForSport(sportKey, pastFetchDate);
   const fetchDate = easternDateKey(new Date());
   return readSnapshotOrSeed<OddsGame, OddsGame[]>({
     sportKey,
@@ -260,7 +266,92 @@ export async function getBoardOddsForSport(sportKey: string): Promise<OddsGame[]
 // How a resolver gets a sport's odds games. Every resolver below defaults to
 // getOddsForSport; a caller resolving many things in one request passes one
 // createRequestOddsLoader() instead.
-export type OddsLoader = (sportKey: string) => Promise<OddsGame[]>;
+//
+// pastFetchDate is set only by resolveOddsGame, and only for a game whose own ET
+// day is already over (pastSnapshotDateFor): that game is in that day's snapshot
+// and never in today's. Omitted = today's snapshot, as every loader always read.
+export type OddsLoader = (sportKey: string, pastFetchDate?: string) => Promise<OddsGame[]>;
+
+// The past ET day whose snapshot holds this game, or undefined when the game's own
+// ET day is today or later (today's snapshot - the freshest row that lists it).
+//
+// Why: every snapshot write (seed, backfill, prop enrichment) keeps only games that
+// have not started, and the day's row is written at ET midnight or later. So a game
+// from an earlier ET day had started before today's row existed and can never be in
+// it - reading today's row for it always found nothing, and a pick entered after ET
+// midnight on a game that tipped before it was stored at -110 with no favored side
+// (Thunder @ Blazers, 04:00Z tip, imported 06:06Z, 2026-11-11). Choosing the row by
+// the game's day (min(game day, today)) fixes exactly those reads and no others:
+// for every game on today or later the result is undefined, the read is today's
+// row, byte-for-byte as before. There is deliberately no fallback to today's row
+// for a past-day game: nothing there can be it, and a same-teams game later in a
+// series could be matched instead.
+export function pastSnapshotDateFor(commenceTime: string, now: Date = new Date()): string | undefined {
+  const start = new Date(commenceTime);
+  if (Number.isNaN(start.getTime())) return undefined;
+  const gameDay = easternDateKey(start);
+  return gameDay < easternDateKey(now) ? gameDay : undefined;
+}
+
+// How long a past day's full blob may live in the shared cache. Nothing writes a
+// snapshot after its ET day ends (see YESTERDAY_ODDS_CACHE_TTL_SECONDS), and any
+// write that does still revalidates the odds(sportKey, fetchDate) tag this entry
+// carries, so the TTL is only a backstop and can be long.
+const PAST_DAY_ODDS_CACHE_TTL_SECONDS = 6 * 3600;
+
+// A missing past-day row is not cached: the one write that can land after its day
+// ends (a run that started seconds before ET midnight) must be seen once it lands.
+class PastDaySnapshotMissing extends Error {}
+
+export type PastDayOddsDeps = {
+  // The (sportKey, fetchDate) row's games, or null when there is no row.
+  readRow: (sportKey: string, fetchDate: string) => Promise<OddsGame[] | null>;
+  cached: <T>(key: string, ttlSeconds: number, fn: () => Promise<T>, tags: string[]) => Promise<T>;
+};
+
+const pastDayOddsDeps: PastDayOddsDeps = {
+  readRow: async (sportKey, fetchDate) => {
+    const row = await prisma.oddsSnapshot.findUnique({
+      where: { sportKey_fetchDate: { sportKey, fetchDate } },
+      select: { data: true },
+    });
+    if (!row) return null;
+    const games = row.data as unknown as OddsGame[];
+    console.log(
+      "[getOddsForSport] past-day snapshot read from db",
+      JSON.stringify({ sportKey, fetchDate, gameCount: games.length, bytes: Buffer.byteLength(JSON.stringify(row.data)) })
+    );
+    return games;
+  },
+  cached: (key, ttlSeconds, fn, tags) => cachedByTag(key, ttlSeconds, fn, tags),
+};
+
+// A finished ET day's FULL snapshot (every bookmaker and market - pricing needs
+// them; getYesterdayOddsForSport's projection does not carry them). Read-only: no
+// seed claim, no Odds API call, no write, ever - an on-demand seed here would write
+// today's listing into a past day's row. A missing row (that day's seed never ran,
+// or the sport was off-season) is [] - the pick stays DEFAULTED, as it was before.
+export async function getPastDayOddsForSport(
+  sportKey: string,
+  fetchDate: string,
+  deps: PastDayOddsDeps = pastDayOddsDeps
+): Promise<OddsGame[]> {
+  try {
+    return await deps.cached(
+      cacheKeys.pastDayOdds(sportKey, fetchDate),
+      PAST_DAY_ODDS_CACHE_TTL_SECONDS,
+      async () => {
+        const games = await deps.readRow(sportKey, fetchDate);
+        if (games === null) throw new PastDaySnapshotMissing();
+        return games;
+      },
+      [cacheKeys.odds(sportKey, fetchDate)]
+    );
+  } catch (err) {
+    if (err instanceof PastDaySnapshotMissing) return [];
+    throw err;
+  }
+}
 
 // One odds read per sport for the life of the returned loader. A catalog import
 // resolves every pasted line concurrently and each line asks for its sport's
@@ -269,16 +360,18 @@ export type OddsLoader = (sportKey: string) => Promise<OddsGame[]>;
 // so the import holds the promise itself instead of depending on that. Lazy: a
 // sport is read only if some line actually needs it, exactly as before. A
 // rejected read is dropped so the next line retries, as each line used to.
-// The games are shared between every caller - read-only.
+// The games are shared between every caller - read-only. Held per (sport, day):
+// a past day's snapshot is its own read, and today's is still read at most once.
 export function createRequestOddsLoader(load: OddsLoader = getOddsForSport): OddsLoader {
-  const bySport = new Map<string, Promise<OddsGame[]>>();
-  return (sportKey) => {
-    const held = bySport.get(sportKey);
+  const bySportDay = new Map<string, Promise<OddsGame[]>>();
+  return (sportKey, pastFetchDate) => {
+    const key = pastFetchDate === undefined ? sportKey : `${sportKey}|${pastFetchDate}`;
+    const held = bySportDay.get(key);
     if (held) return held;
-    const pending = load(sportKey);
-    bySport.set(sportKey, pending);
+    const pending = pastFetchDate === undefined ? load(sportKey) : load(sportKey, pastFetchDate);
+    bySportDay.set(key, pending);
     pending.catch(() => {
-      if (bySport.get(sportKey) === pending) bySport.delete(sportKey);
+      if (bySportDay.get(key) === pending) bySportDay.delete(key);
     });
     return pending;
   };
@@ -2330,12 +2423,19 @@ export function matchScoreToGame(
 // Home and away still have to agree: a feed that lists a neutral-site game the
 // other way round does not match, because reading side "home" off it would
 // price the other team.
+//
+// Which day's snapshot: the game's own ET day once that day is over, else today's
+// (pastSnapshotDateFor). A game that tipped before ET midnight is only in its own
+// day's row, so a pick entered after midnight is priced from there, the same row a
+// pregame import that night read. Every price lookup goes through here (market
+// price, spread/total line, favored side, alt lines, props), so they all agree.
 export async function resolveOddsGame(
   sportKey: string,
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   getOdds: OddsLoader = getOddsForSport
 ): Promise<OddsGame | null> {
-  const oddsGames = await getOdds(sportKey);
+  const pastFetchDate = pastSnapshotDateFor(game.commenceTime);
+  const oddsGames = pastFetchDate === undefined ? await getOdds(sportKey) : await getOdds(sportKey, pastFetchDate);
   const candidates = oddsGames.filter(
     (g) => teamNamesMatch(g.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(g.awayTeam, game.awayTeam, sportKey)
   );
