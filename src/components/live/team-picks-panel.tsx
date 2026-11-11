@@ -9,6 +9,7 @@ import { orderTeamSections, placeNonTeamSections, type GridLiveGamePanelData, ty
 import { LiveProgressBar } from "@/components/live/live-progress-bar";
 import type { LiveGameProgress } from "@/lib/live-game-progress";
 import { LocalGameTime } from "@/components/local-game-time";
+import { PicksCountPill } from "@/components/live/picks-count-pill";
 import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
@@ -198,9 +199,7 @@ export function GameDetailPanel({
         </h2>
         <p className="flex shrink-0 items-center gap-2 text-xs font-medium text-[#5B6275] dark:text-muted-foreground">
           <LocalGameTime date={commenceTime} options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />
-          <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-            {pickCount} pick{pickCount === 1 ? "" : "s"}
-          </span>
+          <PicksCountPill count={pickCount} />
         </p>
         {slipGame && <TargetGameCheckbox game={slipGame} />}
       </div>

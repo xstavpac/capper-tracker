@@ -139,10 +139,6 @@ export function isWeeklySlateLeague(leagueName: string): boolean {
   return WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase());
 }
 
-export function slateCountText(leagueName: string, count: number): string {
-  return (WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase()) ? "This week" : "Today") + ": " + count + " pick" + (count === 1 ? "" : "s");
-}
-
 export function slateListHeader(leagueName: string, categoryLabel: string): string {
   return (WEEKLY_SLATE_LEAGUES.has(leagueName.toUpperCase()) ? "This Week's " : "Today's ") + categoryLabel + " Picks";
 }

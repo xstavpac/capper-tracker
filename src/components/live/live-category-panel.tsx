@@ -16,7 +16,6 @@ import {
   categoryPickRows,
   rankCategoryPicks,
   revealState,
-  slateCountText,
   slateEmptyText,
   slateListHeader,
   slatePicksByCategory,
@@ -139,7 +138,7 @@ export function LiveCategoryPanel({
             losses={tile.losses}
             pushes={tile.pushes}
             winPct={tile.winPct}
-            note={slateCountText(sportLabel, tile.slateCount)}
+            pickCount={tile.slateCount}
             tinted
             active={tile.key === activeTile?.key}
             onToggle={() => toggle(tile.key)}

@@ -11,6 +11,7 @@ import { CalendarIcon } from "@/components/dashboard/cappers-icons";
 import { unplayedLabel } from "@/lib/feed-game-status";
 import { SeeMoreGamesButton } from "@/components/live/live-list-scope";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
+import { PicksCountPill } from "@/components/live/picks-count-pill";
 import { tileOdds } from "@/lib/grid-tile-odds";
 
 // The compact, one-row-per-game list Grid Live shows instead of Feed
@@ -82,12 +83,7 @@ export function GridLiveGameList({
         const staleOdds = isLive ? " opacity-50" : "";
         const pickCount = matchedPicksByGame[gameIndex]?.length ?? 0;
         // Shared by the live and pregame headers so the pill is identical in both.
-        const picksPill =
-          pickCount > 0 ? (
-            <span className="rounded-full bg-[#E6ECFF] px-2 py-0.5 text-[10.5px] font-semibold leading-none text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-              {pickCount} pick{pickCount === 1 ? "" : "s"}
-            </span>
-          ) : null;
+        const picksPill = <PicksCountPill count={pickCount} />;
         // Desktop-only (see the `lg:` gates below) - mobile's collapsed list
         // rows stay pixel-identical whether or not a game is live or
         // selected, per this component's file header on why selecting a
