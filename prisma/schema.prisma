@@ -676,6 +676,47 @@ model OddsFreshFetch {
   @@map("odds_fresh_fetches")
 }
 
+// One event-level player-prop market bought at import, for one (event, market) - see server/data/prop-line-odds.ts.
+// Kept out of odds_snapshots on purpose: merging prop markets into the day's snapshot row (the NFL path) makes every
+// full read of that row pay for them, and these are only read by the one pick being priced. `bucket` is
+// floor(epoch ms / the 2 h reuse window), the claim key: the row is created BEFORE the request (so the unique key stops
+// a second buyer) with fetchedAt null, and stamped when the response lands. A fetch younger than the window is reused
+// by createdAt, whichever bucket it is in. A row whose request failed (nothing bought) is deleted by id.
+model OddsPropFetch {
+  id           String         @id @default(cuid())
+  sportKey     String
+  eventId      String // the Odds API event id (OddsGame.id)
+  marketKey    String // e.g. "player_points"
+  commenceTime DateTime // the game's start
+  bucket       Int
+  fetchedAt    DateTime? // when the response landed; null while the request is in flight
+  linesStored  Int? // outcomes stored in odds_prop_lines for this fetch
+  createdAt    DateTime       @default(now())
+  lines        OddsPropLine[]
+
+  @@unique([eventId, marketKey, bucket])
+  @@index([eventId, marketKey, createdAt])
+  @@map("odds_prop_fetches")
+}
+
+// One bookmaker outcome of an OddsPropFetch: a player, a side and a line at one book. bookOrder is the book's position
+// in the response's bookmakers array, so "first book in feed order" survives the round trip through the table.
+model OddsPropLine {
+  id             String        @id @default(cuid())
+  fetchId        String
+  fetch          OddsPropFetch @relation(fields: [fetchId], references: [id], onDelete: Cascade)
+  bookOrder      Int
+  bookKey        String
+  playerName     String // the book's own spelling (outcome.description)
+  side           String // "Over" | "Under"
+  point          Float?
+  price          Int
+  bookLastUpdate DateTime? // the market's last_update at this book
+
+  @@index([fetchId, side, point])
+  @@map("odds_prop_lines")
+}
+
 // Where in the catalog-import pipeline a line was lost (see ImportSkippedLine).
 enum ImportSkipStage {
   PARSE_SILENT // parseCatalog read it as a capper header though it looks like a pick (older rows: also lines discarded after a known-capper prefix)
