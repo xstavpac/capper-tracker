@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
-import { SEGMENT_CATEGORY_KEYS, splitSegmentCategoryKey, type PickCategoryKey } from "@/server/data/stats";
+import { SEGMENT_CATEGORY_KEYS, splitSegmentCategoryKey, type PickCategoryKey, type SegmentCategoryKey } from "@/server/data/stats";
+import { PROP_CATEGORY_BY_FAMILY, PROP_CATEGORY_KEYS, type PropCategoryKey } from "@/lib/prop-category";
+import type { PropSportFamily } from "@/lib/prop-market-key";
 import { HotStreaksIcon } from "@/components/dashboard/hot-streaks-icon";
 
 // Straight vertical arrow (shaft + open chevron head, not a filled triangle
@@ -170,6 +172,71 @@ function TdPropIcon() {
   );
 }
 
+// Basketball: ball outline + the vertical seam + two curved side seams. Same gentle bob as the
+// football (rocket-drift reuse), so the prop families read as one set.
+function BasketballPropIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-orange-500 animate-rocket-drift" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5 L12 20.5" />
+      <path d="M3.5 12 L20.5 12" />
+      <path d="M6.2 5.8 C9 8.5 9 15.5 6.2 18.2" />
+      <path d="M17.8 5.8 C15 8.5 15 15.5 17.8 18.2" />
+    </svg>
+  );
+}
+
+// Hockey puck: a short cylinder (top ellipse, sides, bottom arc), a disc rather than a ball so it
+// never reads as the basketball / baseball circles at 20px.
+function HockeyPropIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400 animate-rocket-drift" aria-hidden="true">
+      <ellipse cx="12" cy="9.5" rx="8" ry="3.5" />
+      <path d="M4 9.5 L4 14 C4 16 7.6 17.5 12 17.5 C16.4 17.5 20 16 20 14 L20 9.5" />
+    </svg>
+  );
+}
+
+// Baseball: ball outline + the two facing stitch curves.
+function BaseballPropIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-red-500 animate-rocket-drift" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M7.5 4.8 C10 8.5 10 15.5 7.5 19.2" strokeDasharray="1.6 1.4" />
+      <path d="M16.5 4.8 C14 8.5 14 15.5 16.5 19.2" strokeDasharray="1.6 1.4" />
+    </svg>
+  );
+}
+
+// Other props (a prop whose market has no key of its own, any sport): a plain player silhouette,
+// neutral, with no sport's ball.
+function OtherPropIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-slate-600 dark:text-slate-400" aria-hidden="true">
+      <circle cx="12" cy="7.5" r="3.5" />
+      <path d="M5 20 C5 15.5 8 13 12 13 C16 13 19 15.5 19 20" />
+    </svg>
+  );
+}
+
+const PROP_FAMILY_ICONS: Record<PropSportFamily, () => ReactElement> = {
+  FOOTBALL: () => <TdPropIcon />,
+  BASKETBALL: () => <BasketballPropIcon />,
+  HOCKEY: () => <HockeyPropIcon />,
+  BASEBALL: () => <BaseballPropIcon />,
+};
+
+// Every prop key gets its family's icon (lib/prop-category.ts - keys never repeat across
+// families), OTHER_PROP the neutral one. Built from PROP_CATEGORY_KEYS, so a new key is covered.
+const PROP_CATEGORY_ICONS = Object.fromEntries(
+  PROP_CATEGORY_KEYS.map((key) => {
+    const family = (Object.keys(PROP_CATEGORY_BY_FAMILY) as PropSportFamily[]).find((f) =>
+      (Object.values(PROP_CATEGORY_BY_FAMILY[f]) as string[]).includes(key)
+    );
+    return [key, family ? PROP_FAMILY_ICONS[family] : () => <OtherPropIcon />];
+  })
+) as Record<PropCategoryKey, () => ReactElement>;
+
 // Two bars + baseline (a team's own scoring tally, distinct from the
 // game-total Over/Under arrows). Each bar flickers on its own delay - the
 // exact staggered-opacity technique HotStreaksIcon's embers and the
@@ -223,7 +290,7 @@ const SEGMENT_CATEGORY_ICONS = Object.fromEntries(
         ),
     ];
   })
-) as Record<PickCategoryKey, () => ReactElement>;
+) as Record<SegmentCategoryKey, () => ReactElement>;
 
 // One entry per PickCategoryKey (same exhaustive-Record convention
 // PICK_CATEGORY_LABELS/SPECIALIST_LABELS already use in stats.ts) so this
@@ -231,6 +298,7 @@ const SEGMENT_CATEGORY_ICONS = Object.fromEntries(
 // to surface a category it doesn't today.
 const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
   ...SEGMENT_CATEGORY_ICONS,
+  ...PROP_CATEGORY_ICONS,
   FAV_ML: () => <HotStreaksIcon />,
   DOG_ML: () => <DogMlIcon />,
   SPREAD_MINUS: () => <DiagonalArrowIcon direction="down" colorClass={VIOLET} />,
@@ -243,17 +311,8 @@ const CATEGORY_ICONS: Record<PickCategoryKey, () => ReactElement> = {
   FIRST_HALF_OVER: () => <VerticalArrowIcon direction="up" colorClass={AMBER_1H} />,
   FIRST_HALF_UNDER: () => <VerticalArrowIcon direction="down" colorClass={AMBER_1H} />,
   FIRST_HALF_SPREAD: () => <DiagonalArrowIcon direction="down" colorClass={AMBER_1H} />,
-  TD_PROP: () => <TdPropIcon />,
-  PASS_YDS_PROP: () => <TdPropIcon />,
-  RUSH_YDS_PROP: () => <TdPropIcon />,
-  REC_YDS_PROP: () => <TdPropIcon />,
-  RECEPTIONS_PROP: () => <TdPropIcon />,
-  RUSH_REC_YDS_PROP: () => <TdPropIcon />,
-  PASS_RUSH_YDS_PROP: () => <TdPropIcon />,
-  PASS_ATTEMPTS_PROP: () => <TdPropIcon />,
-  PASS_COMPLETIONS_PROP: () => <TdPropIcon />,
-  PASS_INTERCEPTIONS_PROP: () => <TdPropIcon />,
-  RUSH_ATTEMPTS_PROP: () => <TdPropIcon />,
+  // Legacy key (no chip set shows it): the neutral prop icon, like OTHER_PROP.
+  TD_PROP: () => <OtherPropIcon />,
   NRFI: () => <BadgeIcon glyph="no" colorClass={RED} />,
   YRFI: () => <BadgeIcon glyph="yes" colorClass={EMERALD} />,
   F5_SPREAD_MINUS: () => <DiagonalArrowIcon direction="down" colorClass={VIOLET} />,

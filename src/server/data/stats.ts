@@ -651,8 +651,9 @@ export type PickCategoryKey =
   // real home. MLB first-half spread stays F5_SPREAD_MINUS/PLUS below.
   | "FIRST_HALF_SPREAD"
   // Legacy (version <= 4) blended "Player Props" key: every prop outside the 10
-  // football stat markets. Nothing stamps it from version 5 on - kept only so
-  // rows not yet restamped by the --props backfill keep a tile (NFL chip set).
+  // football stat markets. Nothing stamps it from version 5 on and no chip set
+  // shows it (the --props backfill restamped every row). Kept in the type for
+  // historical fixtures and ALL_CATEGORY_KEYS lookups.
   | "TD_PROP"
   // Player props: one permanent key per market per sport family, plus
   // OTHER_PROP (lib/prop-category.ts; see pickCategory's PLAYER_PROP branch).
@@ -929,10 +930,8 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   // One tile per football prop market, then Other props (lib/prop-category.ts).
   ...propTileKeysForFamily("FOOTBALL"),
-  // Legacy alias: picks stamped before version 5 (anytime TD, passing TDs) keep
-  // a tile until the --props backfill restamps them; empty afterwards, and
-  // computeCategoryBreakdown drops an empty tile. Removed in a later PR.
-  "TD_PROP",
+  // No TD_PROP tile: the version 5 --props backfill restamped every legacy row
+  // (prod verified 0 TD_PROP picks, 2026-11-11), so the alias tile is gone.
   "TEAM_TOTAL",
 ];
 

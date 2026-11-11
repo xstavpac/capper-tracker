@@ -99,8 +99,10 @@ async function main() {
     check("text parser: 'Connor McDavid over 1.5 points' -> NHL POINTS", parseAnyPlayerProp("Connor McDavid over 1.5 points")?.propMarket, "POINTS");
     check("text parser: no line returns an NBA-only market", ["LeBron James over 7.5 rebounds", "Stephen Curry over 4.5 threes", "Nikola Jokic over 48.5 PRA", "Nikola Jokic double-double"].map((t) => parseAnyPlayerProp(t)?.propMarket ?? null), [null, null, null, null]);
     // Other sports' filter options are untouched.
-    check("no filter option lists a new value", BET_TYPE_FILTER_OPTIONS.filter((o) => NEW_VALUES.includes(o.value)).map((o) => o.value), []);
-    check("the option list is the 31 from before plus the 4 NFL attempts / completions / interceptions markets and TD Count", BET_TYPE_FILTER_OPTIONS.length, 36);
+    // Prop categories PR 2: every new NBA value has a /picks filter option now (36 before + 10).
+    check("every new value has a filter option", NEW_VALUES.filter((v) => !BET_TYPE_FILTER_OPTIONS.some((o) => o.value === v)), []);
+    check("the option list is the 36 from before plus the 10 NBA markets", BET_TYPE_FILTER_OPTIONS.length, 46);
+    check("hockey's filter options are exactly the six NHL markets (no NBA-only one)", [...betTypeOptionsForChipSet(chipSetForLeague("NHL"))].filter((k) => NEW_VALUES.includes(k)), []);
   }
 
   console.log("\n########## PART C: a pick carrying an NBA value, today (pinned for the PRs that follow) ##########");
@@ -128,10 +130,15 @@ async function main() {
     check("grading: all four read ESPN's basketball summary, never hockey's", asked.map((u) => u.includes("/basketball/nba/summary?event=1")), [true, true, true, true]);
 
     // Filter: the key is the market alone, so an NBA POINTS pick answers to the
-    // same "Points" option an NHL one does; the new values have no option.
+    // same "Points" option an NHL one does. Prop categories PR 2: the NBA and WNBA chip sets
+    // offer all twelve basketball markets (the family's own tiles, lib/prop-category.ts).
     check("filter: NBA POINTS pick -> the same key as NHL (market alone, no sport)", betTypeFilterCategory(filterPick("POINTS", "Nikola Jokic Over 27.5 Points")), "POINTS");
-    check("filter: NBA REBOUNDS pick -> a key no option offers", betTypeFilterCategory(filterPick("REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "REBOUNDS");
-    check("filter: the NBA chip set offers no prop option at all", [...betTypeOptionsForChipSet(chipSetForLeague("NBA"))].filter((k) => k === "POINTS" || k === "ASSISTS" || NEW_VALUES.includes(k)), []);
+    check("filter: NBA REBOUNDS pick -> the REBOUNDS option", betTypeFilterCategory(filterPick("REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "REBOUNDS");
+    for (const league of ["NBA", "WNBA"]) {
+      const opts = betTypeOptionsForChipSet(chipSetForLeague(league));
+      check(`filter: the ${league} chip set offers POINTS, ASSISTS and every new value`, ["POINTS", "ASSISTS", ...NEW_VALUES].filter((k) => !opts.has(k as never)), []);
+      check(`filter: the ${league} chip set offers no other sport's prop`, ["TD", "PASS_YDS", "SAVES", "SHOTS_ON_GOAL", "STRIKEOUTS", "HITS"].filter((k) => opts.has(k as never)), []);
+    }
 
     // Category (version 5): each basketball market has its own key and tile; never the NFL-only legacy TD_PROP.
     check("category: NBA REBOUNDS pick -> REB_PROP", pickCategory(categoryPick("NBA", "REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "REB_PROP");

@@ -156,7 +156,7 @@ function main() {
 
   const nflOptions = betTypeOptionsForChipSet(NFL_CHIP_SET);
   check(
-    "NFL chip set (has TD_PROP) exposes all 7 concrete prop markets",
+    "NFL chip set (football prop tiles) exposes all 7 concrete prop markets",
     ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS"].every((k) => nflOptions.has(k as BetTypeFilterKey)),
     true
   );
@@ -164,7 +164,7 @@ function main() {
 
   const mlbOptions = betTypeOptionsForChipSet(MLB_CHIP_SET);
   check(
-    "MLB chip set (no TD_PROP) exposes none of the 7 concrete prop markets",
+    "MLB chip set (no football prop tiles) exposes none of the 7 concrete prop markets",
     ["TD", "PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "RUSH_REC_YDS", "PASS_RUSH_YDS"].some((k) => mlbOptions.has(k as BetTypeFilterKey)),
     false
   );

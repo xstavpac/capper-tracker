@@ -129,9 +129,10 @@ function main() {
   check("TD_PROP (legacy alias) is still in ALL_CATEGORY_KEYS", ALL_CATEGORY_KEYS.includes("TD_PROP"), true);
   check("every prop category is in ALL_CATEGORY_KEYS", PROP_CATEGORY_KEYS.every((k) => ALL_CATEGORY_KEYS.includes(k)), true);
   check("ALL_CATEGORY_KEYS has no duplicates", new Set(ALL_CATEGORY_KEYS).size, ALL_CATEGORY_KEYS.length);
-  check("NFL chip set: the legacy TD_PROP alias and every football prop tile", ["TD_PROP", ...propTileKeysForFamily("FOOTBALL")].every((k) => NFL_CHIP_SET.includes(k as never)), true);
+  // PR 2: the legacy TD_PROP alias tile is gone (the --props backfill restamped every row).
+  check("NFL chip set: every football prop tile, and no legacy TD_PROP alias", [propTileKeysForFamily("FOOTBALL").every((k) => NFL_CHIP_SET.includes(k)), NFL_CHIP_SET.includes("TD_PROP")], [true, false]);
   const propTiles = (sport: string) => chipSetForLeague(sport).filter((k) => k.endsWith("_PROP"));
-  check("NFL prop tiles, in order", propTiles("NFL"), [...propTileKeysForFamily("FOOTBALL"), "TD_PROP"]);
+  check("NFL prop tiles, in order", propTiles("NFL"), propTileKeysForFamily("FOOTBALL"));
   check("NBA prop tiles", propTiles("NBA"), propTileKeysForFamily("BASKETBALL"));
   check("WNBA prop tiles = NBA's", propTiles("WNBA"), propTileKeysForFamily("BASKETBALL"));
   check("NHL prop tiles", propTiles("NHL"), propTileKeysForFamily("HOCKEY"));
