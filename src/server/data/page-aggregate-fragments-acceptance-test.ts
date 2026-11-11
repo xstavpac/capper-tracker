@@ -347,8 +347,15 @@ async function main() {
     const unstampedDecided = picksA.filter((p) => p.categoryVersion === 0 && ["WIN", "LOSS", "PUSH"].includes(p.status)).length;
     const tileTotal = tiles.filter((t) => t.window === "ALL").reduce((a, t) => a + t.wins + t.losses + t.pushes, 0);
     const stampedNullDecided = eligibleA.filter((p) => p.category === null && ["WIN", "LOSS", "PUSH"].includes(p.status)).length;
+    // With groupBySport the tiles keep only each sport's own tile set (tileSetFilter, the SQL form of
+    // chipSetForLeague): a stored category no tile of that sport shows never leaves the database.
     const decided = picksA.filter((p) => ["WIN", "LOSS", "PUSH"].includes(p.status)).length;
-    check(`tiles omit NULL-category rows (${unstampedDecided} unstamped + ${stampedNullDecided} stamped-null decided) - counted in totals, in no tile`, unstampedDecided > 0 && tileTotal === decided - unstampedDecided - stampedNullDecided);
+    const decidedStamped = eligibleA.filter((p) => p.category !== null && ["WIN", "LOSS", "PUSH"].includes(p.status));
+    const inTileSet = decidedStamped.filter((p) => (chipSetForLeague(p.sport.name) as string[]).includes(p.category!)).length;
+    check(
+      `tiles omit NULL-category rows (${unstampedDecided} unstamped + ${stampedNullDecided} stamped-null decided) and categories outside the sport's tile set (${decidedStamped.length - inTileSet}) - counted in totals, in no tile`,
+      unstampedDecided > 0 && tileTotal === inTileSet
+    );
     check("tiles: PENDING/CANCELLED never appear (only WIN/LOSS/PUSH rows are grouped)", tileTotal <= decided);
 
     // Sport tabs: tile-total desc, ties by first appearance over ALL statuses - capper B has an exact tie.

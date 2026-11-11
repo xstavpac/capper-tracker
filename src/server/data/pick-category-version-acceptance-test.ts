@@ -79,7 +79,8 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
   ["TOTAL NFL first half under", { betType: "TOTAL", period: "FIRST_HALF", sportName: "NFL", betDetail: "1H Under 21.5" }, "FIRST_HALF_UNDER"],
   ["TOTAL NBA second quarter over", { betType: "TOTAL", period: "SECOND_QUARTER", sportName: "NBA", betDetail: "Q2 Over 55.5" }, "SECOND_QUARTER_OVER"],
   ["TOTAL NBA second quarter no direction (null)", { betType: "TOTAL", period: "SECOND_QUARTER", sportName: "NBA", betDetail: "55.5" }, null],
-  ["PLAYER_PROP propMarket TD", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD", betDetail: "anything" }, "TD_PROP"],
+  // Version 5: every prop market has a key of its own per sport family (lib/prop-category.ts).
+  ["PLAYER_PROP propMarket TD", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD", betDetail: "anything" }, "ANYTIME_TD_PROP"],
   ["PLAYER_PROP propMarket PASS_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_YDS", betDetail: "anything" }, "PASS_YDS_PROP"],
   ["PLAYER_PROP propMarket RUSH_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "RUSH_YDS", betDetail: "anything" }, "RUSH_YDS_PROP"],
   ["PLAYER_PROP propMarket REC_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "REC_YDS", betDetail: "anything" }, "REC_YDS_PROP"],
@@ -89,14 +90,21 @@ const GOLDEN: [string, Partial<Input> & { betType: Input["betType"] }, string | 
   ["PLAYER_PROP propMarket PASS_RUSH_YDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_RUSH_YDS", betDetail: "anything" }, "PASS_RUSH_YDS_PROP"],
   ["PLAYER_PROP legacy pass + rush text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Josh Allen Over 249.5 Passing + Rushing Yards" }, "PASS_RUSH_YDS_PROP"],
   ["PLAYER_PROP legacy rush and rec text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Kenneth Walker over 110 rushing and receiving yards" }, "RUSH_REC_YDS_PROP"],
-  ["PLAYER_PROP propMarket with no key of its own", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_TDS", betDetail: "anything" }, "TD_PROP"],
+  ["PLAYER_PROP propMarket PASS_TDS", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "PASS_TDS", betDetail: "anything" }, "PASS_TDS_PROP"],
+  ["PLAYER_PROP NFL TD count", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD_COUNT", betDetail: "anything" }, "TD_COUNT_PROP"],
+  ["PLAYER_PROP NBA points", { betType: "PLAYER_PROP", sportName: "NBA", propMarket: "POINTS", betDetail: "anything" }, "PTS_PROP"],
+  ["PLAYER_PROP NHL points (not the NBA key)", { betType: "PLAYER_PROP", sportName: "NHL", propMarket: "POINTS", betDetail: "anything" }, "NHL_POINTS_PROP"],
+  ["PLAYER_PROP NHL anytime goal", { betType: "PLAYER_PROP", sportName: "NHL", propMarket: "ANYTIME_GOAL", betDetail: "anything" }, "ANYTIME_GOAL_PROP"],
+  ["PLAYER_PROP MLB strikeouts", { betType: "PLAYER_PROP", sportName: "MLB", propMarket: "STRIKEOUTS", betDetail: "anything" }, "K_PROP"],
+  ["PLAYER_PROP market outside its family", { betType: "PLAYER_PROP", sportName: "NFL", propMarket: "SAVES", betDetail: "anything" }, "OTHER_PROP"],
+  ["PLAYER_PROP sport with no family", { betType: "PLAYER_PROP", sportName: "ATP", propMarket: "REC_YDS", betDetail: "anything" }, "OTHER_PROP"],
   ["PLAYER_PROP legacy passing-yards text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Joe Burrow Over 250 Passing Yards" }, "PASS_YDS_PROP"],
-  ["PLAYER_PROP legacy TD text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Puka Nacua Anytime TD" }, "TD_PROP"],
+  ["PLAYER_PROP legacy TD text", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "Puka Nacua Anytime TD" }, "ANYTIME_TD_PROP"],
   ["PLAYER_PROP unparseable (null)", { betType: "PLAYER_PROP", sportName: "NFL", betDetail: "??" }, null],
 ];
 
 // The expected values above were captured at this version.
-expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 4);
+expect("PICK_CATEGORY_VERSION matches the version the golden table was captured at", PICK_CATEGORY_VERSION, 5);
 for (const [label, overrides, expected] of GOLDEN) {
   expect(`pickCategory: ${label}`, pickCategory({ ...base, ...overrides } as Input), expected);
 }

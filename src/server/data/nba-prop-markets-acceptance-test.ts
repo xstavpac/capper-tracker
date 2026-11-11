@@ -92,7 +92,7 @@ async function main() {
     check("NHL POINTS pick -> filter key POINTS", betTypeFilterCategory(filterPick("POINTS", "Connor McDavid Over 1.5 Points")), "POINTS");
     check("NHL ASSISTS pick -> filter key ASSISTS", betTypeFilterCategory(filterPick("ASSISTS", "Connor McDavid Over 0.5 Assists")), "ASSISTS");
     check("hockey's filter options still offer the six NHL markets", ["ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES"].filter((k) => !betTypeOptionsForChipSet(chipSetForLeague("NHL")).has(k as never)), []);
-    check("NHL POINTS pick -> category TD_PROP (unchanged)", pickCategory(categoryPick("NHL", "POINTS", "Connor McDavid Over 1.5 Points")), "TD_PROP");
+    check("NHL POINTS pick -> category NHL_POINTS_PROP (version 5: its own hockey key)", pickCategory(categoryPick("NHL", "POINTS", "Connor McDavid Over 1.5 Points")), "NHL_POINTS_PROP");
     check("NHL POINTS label", buildPickDisplayLabel(labelInput("NHL", "Connor McDavid", "POINTS", "Connor McDavid Over 1.5 Points")), "Connor McDavid Over 1.5 Points");
     check("NHL POINTS dedup key", dedupCategory("TD_PROP", "PLAYER_PROP", "Connor McDavid Over 1.5 Points", null, { propMarket: "POINTS", playerName: "Connor McDavid" }), "TD_PROP:POINTS:connormcdavid"); // the player part is normalizeName-d (no spaces/punctuation) so an alias and its full name share a key
     // The sport-blind text parser still reads a low points / assists line as the NHL market, and nothing as an NBA one.
@@ -133,8 +133,9 @@ async function main() {
     check("filter: NBA REBOUNDS pick -> a key no option offers", betTypeFilterCategory(filterPick("REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "REBOUNDS");
     check("filter: the NBA chip set offers no prop option at all", [...betTypeOptionsForChipSet(chipSetForLeague("NBA"))].filter((k) => k === "POINTS" || k === "ASSISTS" || NEW_VALUES.includes(k)), []);
 
-    // Category: everything outside the four NFL stat markets is TD_PROP, a tile the NBA chip set does not have.
-    check("category: NBA REBOUNDS pick -> TD_PROP", pickCategory(categoryPick("NBA", "REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "TD_PROP");
+    // Category (version 5): each basketball market has its own key and tile; never the NFL-only legacy TD_PROP.
+    check("category: NBA REBOUNDS pick -> REB_PROP", pickCategory(categoryPick("NBA", "REBOUNDS", "Nikola Jokic Over 12.5 Rebounds")), "REB_PROP");
+    check("category: the NBA chip set has a REB_PROP tile", chipSetForLeague("NBA").includes("REB_PROP"), true);
     check("category: the NBA chip set has no TD_PROP tile", chipSetForLeague("NBA").includes("TD_PROP"), false);
 
     // Label: POINTS / ASSISTS reuse the NHL phrase; a new value has none and falls back to the raw text.

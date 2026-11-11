@@ -1,0 +1,2 @@
+=== PICK_CATEGORY_VERSION 5 restamp (TD_PROP -> per-market keys, split records): 62 cases, 246 TD_PROP prop picks across them ===
+0 case(s) moved

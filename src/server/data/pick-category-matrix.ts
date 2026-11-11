@@ -31,19 +31,13 @@ export type MatrixCase = { group: string; input: MatrixInput };
 
 const PERIODS = Object.values(Period);
 const BET_TYPES = Object.values(BetType);
-// NHL, MLB and NBA markets (added 2026-10) are deliberately not swept: they have no category of
-// their own (any market outside STAT_PROP_CATEGORY -> TD_PROP), so they add no branch, and
-// keeping the axis at the NFL values keeps the pinned golden table valid without a regen.
-const NON_NFL_PROP_MARKETS = new Set<string>([
-  "ANYTIME_GOAL", "FIRST_GOAL", "SHOTS_ON_GOAL", "POINTS", "ASSISTS", "SAVES",
-  "STRIKEOUTS", "OUTS_RECORDED", "TOTAL_BASES", "HITS", "WALKS", "RUNS", "RBIS", "HOME_RUNS",
-  "REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS",
-  // TD_COUNT (2026-11) lands in TD_PROP like every market without a category of its own; the
-  // sweep axis stays at the values the pinned golden table was generated from.
-  "TD_COUNT",
-  "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE",
-]);
-const PROP_MARKETS: (PropMarket | null)[] = [null, ...Object.values(PropMarket).filter((m) => !NON_NFL_PROP_MARKETS.has(m))];
+// Every market (version 5): each sport family maps every PropMarket to its own key or
+// OTHER_PROP (lib/prop-category.ts), so the whole enum is a real branch now.
+const PROP_MARKETS: (PropMarket | null)[] = [null, ...Object.values(PropMarket)];
+// The prop focused group's sports: one league of each family (NBA and WNBA both, for the
+// shared basketball keys), NCAAF for the shared football keys, and two sports with no
+// family (NCAAB, ATP) that land every market in OTHER_PROP.
+const SPORTS_PROP = ["NFL", "NCAAF", "NBA", "WNBA", "NHL", "MLB", "NCAAB", "ATP"];
 const SIDES: (PickedSide | null)[] = [null, ...Object.values(PickedSide)];
 
 // Only MLB vs everyone else matters today (F5 vs first-half naming) - lower-case
@@ -186,7 +180,7 @@ function* focusedNrfi(): Generator<MatrixInput> {
 }
 
 function* focusedProp(): Generator<MatrixInput> {
-  for (const sportName of ["NFL", "MLB"])
+  for (const sportName of SPORTS_PROP)
     for (const period of ["FULL_GAME", "FIRST_HALF"] as const)
       for (const propMarket of PROP_MARKETS)
         for (const betDetail of DETAILS_PROP) {

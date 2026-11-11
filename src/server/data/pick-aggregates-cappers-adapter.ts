@@ -112,7 +112,7 @@ export function specialistTagsFromCandidateRows(rows: SpecialistCandidateRow[]):
 
 export async function getSportCategoryPanelData(userId: string, sportName: string): Promise<SportCategoryPanelData> {
   const [rows, roster] = await Promise.all([
-    queryCategoryPanel({ userId, sportName, minPicks: CATEGORY_LEADERBOARD_MIN_PICKS, limit: CATEGORY_LEADERBOARD_LIMIT }),
+    queryCategoryPanel({ userId, sportName, chipSet: chipSetForLeague(sportName), minPicks: CATEGORY_LEADERBOARD_MIN_PICKS, limit: CATEGORY_LEADERBOARD_LIMIT }),
     getCappersForUser(userId),
   ]);
 

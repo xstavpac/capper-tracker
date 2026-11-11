@@ -131,12 +131,12 @@ async function main() {
     check("platform rates: joins on exact propMarket equality", /m\.market = p\."propMarket"::text/.test(sqlText), true);
     check("platform rates: NFL TD and NFL TD_COUNT map to different keys", [flat.includes('"NFL","TD","FOOTBALL:TD"'), flat.includes('"NFL","TD_COUNT","FOOTBALL:TD_COUNT"')], [true, true]);
   }
-  // The capper "Record by category" tile TD_PROP is the catch-all for every market without a category of its own
-  // (anytime TD, passing TDs, NHL, MLB and NBA props already share it); TD_COUNT joins that group, unchanged.
-  check("category tile: TD_COUNT lands in the same catch-all as TD (existing grouping, not a per-market record)", [
-    pickCategory({ betType: "PLAYER_PROP", propMarket: "TD_COUNT", betDetail: "x" } as any),
-    pickCategory({ betType: "PLAYER_PROP", propMarket: "TD", betDetail: "x" } as any),
-  ], ["TD_PROP", "TD_PROP"]);
+  // The capper "Record by category" tile (PICK_CATEGORY_VERSION 5): a TD count and an anytime TD are different
+  // categories, never one catch-all - the same split the per-market record keys above already make.
+  check("category tile: TD_COUNT and TD are separate categories", [
+    pickCategory({ betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD_COUNT", betDetail: "x" } as any),
+    pickCategory({ betType: "PLAYER_PROP", sportName: "NFL", propMarket: "TD", betDetail: "x" } as any),
+  ], ["TD_COUNT_PROP", "ANYTIME_TD_PROP"]);
 
   console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
   process.exit(failures === 0 ? 0 : 1);

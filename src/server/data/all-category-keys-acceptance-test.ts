@@ -61,8 +61,13 @@ check(
     .join("; ")
 );
 
-const unreachable = ALL_CATEGORY_KEYS.filter((k) => !produced.has(k));
-check(`every key in ALL_CATEGORY_KEYS is produced by some matrix case (${produced.size}/${ALL_CATEGORY_KEYS.length})`, unreachable.length === 0, `never produced: ${unreachable.join(", ")}`);
+// TD_PROP is the one legacy key: nothing stamps it from PICK_CATEGORY_VERSION 5 on, but rows
+// not yet restamped by the --props backfill still carry it, so it stays in ALL_CATEGORY_KEYS
+// (and the NFL chip set) until a later PR removes the alias. Pinned as NOT produced.
+const LEGACY_ONLY = new Set<string>(["TD_PROP"]);
+const unreachable = ALL_CATEGORY_KEYS.filter((k) => !produced.has(k) && !LEGACY_ONLY.has(k));
+check(`every key in ALL_CATEGORY_KEYS is produced by some matrix case (${produced.size}/${ALL_CATEGORY_KEYS.length - LEGACY_ONLY.size}, legacy excluded)`, unreachable.length === 0, `never produced: ${unreachable.join(", ")}`);
+check("the legacy TD_PROP key is never produced", !produced.has("TD_PROP"), "pickCategory returned TD_PROP");
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
 process.exit(failures === 0 ? 0 : 1);

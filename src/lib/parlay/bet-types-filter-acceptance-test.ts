@@ -55,7 +55,9 @@ type Shape = { betType: string; period: string; detail: string; line: number | n
 function shape(g: number, k: Kind): Shape {
   const [, , home, away] = TEAMS[g];
   const who = (n: string) => `${n} ${SURNAMES[g]}`;
-  const prop = (detail: string, line: number, market: string): Shape => ({ betType: "PLAYER_PROP", period: "FULL_GAME", detail, line, category: "TD_PROP" as PickCategoryKey, propMarket: market, away: false });
+  // Each MLB prop's own PICK_CATEGORY_VERSION 5 key (lib/prop-category.ts).
+  const PROP_CATEGORY: Record<string, PickCategoryKey> = { HITS: "HITS_PROP", TOTAL_BASES: "TB_PROP", STRIKEOUTS: "K_PROP" };
+  const prop = (detail: string, line: number, market: string): Shape => ({ betType: "PLAYER_PROP", period: "FULL_GAME", detail, line, category: PROP_CATEGORY[market], propMarket: market, away: false });
   switch (k) {
     case "HML": return { betType: "MONEYLINE", period: "FULL_GAME", detail: `${home} ML`, line: null, category: "FAV_ML", propMarket: null, away: false };
     case "AML": return { betType: "MONEYLINE", period: "FULL_GAME", detail: `${away} ML`, line: null, category: "DOG_ML", propMarket: null, away: true };

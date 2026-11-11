@@ -1,8 +1,10 @@
 // recordForGate (pick-record.ts) on a player prop: a prop with a market key
 // (prop-market-key.ts) is gated and ranked on its per-market record - in-league
 // and all-time across the market's sport family, best of two by Wilson at
-// GENERATOR_Z, as every other pick - and NEVER on its TD_PROP "Player Props"
-// category record, which blends every prop market of every league. No record on
+// GENERATOR_Z, as every other pick - and NEVER on its category record (before
+// PICK_CATEGORY_VERSION 5 the blended TD_PROP "Player Props"; a per-market key
+// since, but still never read for a keyed prop - the cards below deliberately
+// disagree with the market records to prove it). No record on
 // the market is no record. A prop with no key (no propMarket) and every game
 // line keep the category path, unchanged. NFL TD props have a key too.
 // The generated leg names its market: "· NBA points", not "· NBA player prop".
@@ -34,7 +36,7 @@ type Spec = {
   betType: "PLAYER_PROP" | "MONEYLINE";
   propMarket: string | null;
   category: PickCategoryKey;
-  // The category card (in-league, all-time) - TD_PROP for a prop.
+  // The category card (in-league, all-time) - the prop's version 5 category key.
   card: [[number, number], [number, number]] | null;
   // The per-market record (in-league, all-time) for a prop with a key.
   market?: { key: PropMarketKey; lg: [number, number]; all: [number, number] } | null;
@@ -87,20 +89,20 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
 }
 
 const SPECS: Spec[] = [
-  // Strong on NBA points, weak on "Player Props" as a whole: gated on points.
-  { id: "nbaPts", league: "NBA", betType: "PLAYER_PROP", propMarket: "POINTS", category: "TD_PROP", card: [[2, 8], [20, 80]], market: { key: "BASKETBALL:POINTS", lg: [8, 2], all: [9, 5] } },
-  // Strong on "Player Props", nothing on this market: no record - never the category's.
-  { id: "noMarketRecord", league: "NBA", betType: "PLAYER_PROP", propMarket: "REBOUNDS", category: "TD_PROP", card: [[80, 20], [80, 20]], market: null },
+  // Strong on NBA points, weak on the category card: gated on points.
+  { id: "nbaPts", league: "NBA", betType: "PLAYER_PROP", propMarket: "POINTS", category: "PTS_PROP", card: [[2, 8], [20, 80]], market: { key: "BASKETBALL:POINTS", lg: [8, 2], all: [9, 5] } },
+  // Strong on the category card, nothing on this market: no record - never the category's.
+  { id: "noMarketRecord", league: "NBA", betType: "PLAYER_PROP", propMarket: "REBOUNDS", category: "REB_PROP", card: [[80, 20], [80, 20]], market: null },
   // A prop with no propMarket: no key, the category path as before.
-  { id: "noKey", league: "NBA", betType: "PLAYER_PROP", propMarket: null, category: "TD_PROP", card: [[7, 3], [7, 3]] },
+  { id: "noKey", league: "NBA", betType: "PLAYER_PROP", propMarket: null, category: "OTHER_PROP", card: [[7, 3], [7, 3]] },
   // A game line: the category path as before.
   { id: "line", league: "NBA", betType: "MONEYLINE", propMarket: null, category: "FAV_ML", card: [[60, 40], [60, 40]] },
-  // NFL anytime TD: its own market now, not TD_PROP.
-  { id: "nflTd", league: "NFL", betType: "PLAYER_PROP", propMarket: "TD", category: "TD_PROP", card: [[9, 1], [9, 1]], market: { key: "FOOTBALL:TD", lg: [60, 40], all: [60, 40] } },
+  // NFL anytime TD: its own market, not the category card.
+  { id: "nflTd", league: "NFL", betType: "PLAYER_PROP", propMarket: "TD", category: "ANYTIME_TD_PROP", card: [[9, 1], [9, 1]], market: { key: "FOOTBALL:TD", lg: [60, 40], all: [60, 40] } },
   // Best of two on a market: 1-2 in the NHL vs 60-40 all time -> all time.
-  { id: "nhlSog", league: "NHL", betType: "PLAYER_PROP", propMarket: "SHOTS_ON_GOAL", category: "TD_PROP", card: [[0, 9], [0, 9]], market: { key: "HOCKEY:SHOTS_ON_GOAL", lg: [1, 2], all: [60, 40] } },
+  { id: "nhlSog", league: "NHL", betType: "PLAYER_PROP", propMarket: "SHOTS_ON_GOAL", category: "SOG_PROP", card: [[0, 9], [0, 9]], market: { key: "HOCKEY:SHOTS_ON_GOAL", lg: [1, 2], all: [60, 40] } },
   // Best of two on a market: 8-0 in-league beats 60-40 all time.
-  { id: "mlbKs", league: "MLB", betType: "PLAYER_PROP", propMarket: "STRIKEOUTS", category: "TD_PROP", card: [[1, 1], [1, 1]], market: { key: "BASEBALL:STRIKEOUTS", lg: [8, 0], all: [60, 40] } },
+  { id: "mlbKs", league: "MLB", betType: "PLAYER_PROP", propMarket: "STRIKEOUTS", category: "K_PROP", card: [[1, 1], [1, 1]], market: { key: "BASEBALL:STRIKEOUTS", lg: [8, 0], all: [60, 40] } },
 ];
 
 const snap = makeSnapshot(SPECS);
@@ -111,12 +113,12 @@ const gate = (id: string, withProps = true) => {
 };
 
 check("NBA points prop: its points record, not Player Props", gate("nbaPts"), "LEAGUE 8-2 BASKETBALL:POINTS");
-check("no record on the market: none (no TD_PROP fallback)", gate("noMarketRecord"), null);
+check("no record on the market: none (no category fallback)", gate("noMarketRecord"), null);
 check("a prop with no key: the category path", gate("noKey"), "LEAGUE 7-3");
 check("a game line: the category path", gate("line"), "LEAGUE 60-40");
 check("a game line: the same with and without prop records", gate("line", false), gate("line"));
 check("a prop with no key: the same with and without prop records", gate("noKey", false), gate("noKey"));
-check("NFL TD: its own market, not TD_PROP", gate("nflTd"), "LEAGUE 60-40 FOOTBALL:TD");
+check("NFL TD: its own market, not the category card", gate("nflTd"), "LEAGUE 60-40 FOOTBALL:TD");
 check("best of two on a market: all time", gate("nhlSog"), "OVERALL 60-40 HOCKEY:SHOTS_ON_GOAL");
 check("best of two on a market: in-league", gate("mlbKs"), "LEAGUE 8-0 BASEBALL:STRIKEOUTS");
 check("a keyed prop without the snapshot's prop records: none", gate("nbaPts", false), null);

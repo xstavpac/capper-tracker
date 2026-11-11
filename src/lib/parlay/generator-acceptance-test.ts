@@ -67,7 +67,7 @@ function makeSlate(specs: Spec[], start = START) {
     const detail =
       s.bet === "HOME" ? homeNick + " ML" : s.bet === "AWAY" ? awayNick + " ML" : s.bet === "PROP" ? `${s.player} Over 1.5 Hits` : `${s.bet === "OVER" ? "Over" : "Under"} ${line}`;
     const betType = s.bet === "HOME" || s.bet === "AWAY" ? "MONEYLINE" : s.bet === "PROP" ? "PLAYER_PROP" : "TOTAL";
-    const category: PickCategoryKey = s.bet === "HOME" ? "FAV_ML" : s.bet === "AWAY" ? "DOG_ML" : s.bet === "PROP" ? "TD_PROP" : s.bet;
+    const category: PickCategoryKey = s.bet === "HOME" ? "FAV_ML" : s.bet === "AWAY" ? "DOG_ML" : s.bet === "PROP" ? "HITS_PROP" : s.bet;
     const capperId = s.capper ?? "cap-" + s.id;
     const [wins, losses] = s.wl;
     const winPct = (wins / (wins + losses)) * 100;

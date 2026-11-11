@@ -118,13 +118,13 @@ const GAME_TIME = "2026-09-23T23:05:00.000Z";
 type Row = { teams: Teams; id: string; betType: string; detail: string; category: PickCategoryKey; league: [number, number]; market?: [number, number]; line?: number | null; propMarket?: string; leagueName?: string };
 const ROWS: Row[] = [
   { teams: G1, id: "gl1", betType: "MONEYLINE", detail: "Yankees ML", category: "FAV_ML", league: [21, 9], market: [12, 8] }, // 70%
-  { teams: G1, id: "p1", betType: "PLAYER_PROP", detail: "Aaron Judge over 1.5 total bases", category: "TD_PROP", league: [16, 4], propMarket: "TOTAL_BASES" }, // 80%
+  { teams: G1, id: "p1", betType: "PLAYER_PROP", detail: "Aaron Judge over 1.5 total bases", category: "TB_PROP", league: [16, 4], propMarket: "TOTAL_BASES" }, // 80%
   { teams: G2, id: "gl2", betType: "MONEYLINE", detail: "Mets ML", category: "FAV_ML", league: [13, 7] }, // 65%
-  { teams: G2, id: "p2", betType: "PLAYER_PROP", detail: "Pete Alonso over 0.5 hits", category: "TD_PROP", league: [12, 8], market: [40, 10], propMarket: "HITS" }, // 60%
+  { teams: G2, id: "p2", betType: "PLAYER_PROP", detail: "Pete Alonso over 0.5 hits", category: "HITS_PROP", league: [12, 8], market: [40, 10], propMarket: "HITS" }, // 60%
   { teams: G3, id: "gl3", betType: "MONEYLINE", detail: "Dodgers ML", category: "FAV_ML", league: [31, 19] }, // 62%
-  { teams: G4, id: "p4", betType: "PLAYER_PROP", detail: "Seiya Suzuki over 1.5 total bases", category: "TD_PROP", league: [14, 10], propMarket: "TOTAL_BASES" }, // 58.3%
+  { teams: G4, id: "p4", betType: "PLAYER_PROP", detail: "Seiya Suzuki over 1.5 total bases", category: "TB_PROP", league: [14, 10], propMarket: "TOTAL_BASES" }, // 58.3%
   { teams: G5, id: "gl5", betType: "MONEYLINE", detail: "Astros ML", category: "FAV_ML", league: [11, 9] }, // 55%
-  { teams: G6, id: "p6", betType: "PLAYER_PROP", detail: "Bryce Harper over 0.5 hits", category: "TD_PROP", league: [15, 5], propMarket: "HITS" }, // 75%
+  { teams: G6, id: "p6", betType: "PLAYER_PROP", detail: "Bryce Harper over 0.5 hits", category: "HITS_PROP", league: [15, 5], propMarket: "HITS" }, // 75%
 ];
 
 // Distinct capper per pick, so every record key is its own.
@@ -281,8 +281,8 @@ const legIds = (p: AutoParlay) => p.legs.map((l) => l.top.pick.pickId);
   // and a prop Under (allowed).
   const g7Rows: Row[] = [
     { teams: G7, id: "u7", betType: "TOTAL", detail: "Under 8.5", line: 8.5, category: "UNDER", league: [21, 9], market: [21, 9] },
-    { teams: G7, id: "po7", betType: "PLAYER_PROP", detail: "Vladimir Guerrero over 1.5 total bases", category: "TD_PROP", league: [12, 8], market: [45, 5], propMarket: "TOTAL_BASES" },
-    { teams: G7, id: "pu7", betType: "PLAYER_PROP", detail: "Julio Rodriguez under 1.5 total bases", category: "TD_PROP", league: [11, 9], market: [22, 10], propMarket: "TOTAL_BASES" },
+    { teams: G7, id: "po7", betType: "PLAYER_PROP", detail: "Vladimir Guerrero over 1.5 total bases", category: "TB_PROP", league: [12, 8], market: [45, 5], propMarket: "TOTAL_BASES" },
+    { teams: G7, id: "pu7", betType: "PLAYER_PROP", detail: "Julio Rodriguez under 1.5 total bases", category: "TB_PROP", league: [11, 9], market: [22, 10], propMarket: "TOTAL_BASES" },
   ];
   const g7 = slate(g7Rows);
   const a7 = buildAutoParlay(g7, leagueRecords(g7Rows), 2, 50);
@@ -293,9 +293,9 @@ const legIds = (p: AutoParlay) => p.legs.map((l) => l.top.pick.pickId);
   // One game, a side and three props on three players: Max Legs Per Game caps it.
   const g8Rows: Row[] = [
     { teams: G8, id: "s8", betType: "MONEYLINE", detail: "Guardians ML", category: "FAV_ML", league: [21, 9], market: [21, 9] },
-    { teams: G8, id: "pa8", betType: "PLAYER_PROP", detail: "Jose Ramirez over 0.5 hits", category: "TD_PROP", league: [12, 8], market: [30, 10], propMarket: "HITS" },
-    { teams: G8, id: "pb8", betType: "PLAYER_PROP", detail: "Riley Greene over 0.5 hits", category: "TD_PROP", league: [12, 8], market: [28, 12], propMarket: "HITS" },
-    { teams: G8, id: "pc8", betType: "PLAYER_PROP", detail: "Steven Kwan over 0.5 hits", category: "TD_PROP", league: [12, 8], market: [26, 14], propMarket: "HITS" },
+    { teams: G8, id: "pa8", betType: "PLAYER_PROP", detail: "Jose Ramirez over 0.5 hits", category: "HITS_PROP", league: [12, 8], market: [30, 10], propMarket: "HITS" },
+    { teams: G8, id: "pb8", betType: "PLAYER_PROP", detail: "Riley Greene over 0.5 hits", category: "HITS_PROP", league: [12, 8], market: [28, 12], propMarket: "HITS" },
+    { teams: G8, id: "pc8", betType: "PLAYER_PROP", detail: "Steven Kwan over 0.5 hits", category: "HITS_PROP", league: [12, 8], market: [26, 14], propMarket: "HITS" },
   ];
   const g8 = slate(g8Rows);
   const a8 = buildAutoParlay(g8, leagueRecords(g8Rows), 4, 50);
@@ -330,7 +330,7 @@ const legIds = (p: AutoParlay) => p.legs.map((l) => l.top.pick.pickId);
   const hedgeRows: Row[] = [
     { teams: G1, id: "h-ml", betType: "MONEYLINE", detail: "Yankees ML", category: "FAV_ML", league: [21, 9], market: [21, 9] },
     { teams: G1, id: "h-over", betType: "TOTAL", detail: "Over 8.5", line: 8.5, category: "OVER", league: [12, 8], market: [30, 10] },
-    { teams: G1, id: "h-prop", betType: "PLAYER_PROP", detail: "Aaron Judge over 1.5 total bases", category: "TD_PROP", league: [40, 2], market: [80, 2], propMarket: "TOTAL_BASES" },
+    { teams: G1, id: "h-prop", betType: "PLAYER_PROP", detail: "Aaron Judge over 1.5 total bases", category: "TB_PROP", league: [40, 2], market: [80, 2], propMarket: "TOTAL_BASES" },
   ];
   const hg = slate(hedgeRows);
   const hlr = leagueRecords(hedgeRows);

@@ -41,7 +41,7 @@ function pickOf(s: Spec): GeneratorPick {
     F5_TOTAL: ["TOTAL", "FIRST_HALF", `${awayNick} ${nick} First Five Over 4.5`, 4.5, "F5_OVER", null],
     TEAM_TOTAL: ["TEAM_TOTAL", "FULL_GAME", `${nick} team total over 4.5`, 4.5, "TEAM_TOTAL", null],
     NRFI: ["NRFI", "FULL_GAME", `${awayNick} ${nick} No Run First Inning`, null, "NRFI", null],
-    PROP: ["PLAYER_PROP", "FULL_GAME", `Hitter ${"ABCDEF"[s.game]}${s.id} Over 1.5 Hits`, 1.5, "TD_PROP", "HITS"],
+    PROP: ["PLAYER_PROP", "FULL_GAME", `Hitter ${"ABCDEF"[s.game]}${s.id} Over 1.5 Hits`, 1.5, "HITS_PROP", "HITS"],
   };
   const [betType, period, detail, line, category, propMarket] = shapes[s.market];
   return {

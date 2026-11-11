@@ -37,7 +37,7 @@ import {
   zeroOddsWinUnitsWon,
 } from "@/server/data/capper-list-aggregates";
 import { UNITS_CHART_MAX_POINTS, downsampleUnitsChart } from "@/server/data/units-chart-downsample";
-import { betTypeLabel, round2, type ScorecardWindow, type SeriesPick, type UnitsChartPoint } from "@/server/data/stats";
+import { betTypeLabel, chipSetsBySport, DEFAULT_CHIP_SET, round2, type ScorecardWindow, type SeriesPick, type UnitsChartPoint } from "@/server/data/stats";
 
 // ---------------------------------------------------------------------------
 // Bundle composition
@@ -118,11 +118,21 @@ export type CategoryTileRow = {
   unitsLost?: number;
 };
 
+// `p.category` is in its own sport's chip set (chipSetForLeague, as SQL): a CASE on the
+// sport name picking that sport's keys, DEFAULT_CHIP_SET for any other sport. Needs the
+// `s` (sports) join. Keeps the rows a sport's tiles would drop in JS from ever leaving
+// the database (a category no tile of that sport shows - e.g. a legacy blended prop).
+export function tileSetFilter(): Prisma.Sql {
+  const whens = Object.entries(chipSetsBySport()).map(([sport, keys]) => Prisma.sql`WHEN ${sport} THEN ${[...keys]}::text[]`);
+  return Prisma.sql`p.category = ANY(CASE upper(s.name) ${Prisma.join(whens, " ")} ELSE ${DEFAULT_CHIP_SET}::text[] END)`;
+}
+
 // Decided picks with a stored category, grouped per (window [, sport], category). Reads
 // the `w` CTE (windowsCte). The STORED Pick.category only - never runtime pickCategory().
 // `chipSet` pushes the dashboard's DEFAULT_CHIP_SET down (passed in from the JS constant
 // so the keys live in one place); the capper page omits it because chip sets vary per
-// sport and chipSetForLeague stays in JS. Counts only, unless `withUnits` asks for the two unit
+// sport - with groupBySport it filters per sport in SQL instead (tileSetFilter), the same
+// keys chipSetForLeague then applies in JS. Counts only, unless `withUnits` asks for the two unit
 // sums as well (the capper page; a WIN at odds = 0 adds nothing, as WIN_UNITS is NULL there).
 export function categoryTilesSelect(scope: {
   userId: string;
@@ -139,7 +149,11 @@ export function categoryTilesSelect(scope: {
   const sportSelect = scope.groupBySport ? Prisma.sql`s.name AS "sport",` : Prisma.empty;
   const sportJoin = scope.groupBySport ? Prisma.sql`JOIN sports s ON s.id = p."sportId"` : Prisma.empty;
   const capper = scope.capperId ? Prisma.sql`AND p."capperId" = ${scope.capperId}` : Prisma.empty;
-  const chips = scope.chipSet ? Prisma.sql`AND p.category = ANY(${scope.chipSet}::text[])` : Prisma.empty;
+  const chips = scope.chipSet
+    ? Prisma.sql`AND p.category = ANY(${scope.chipSet}::text[])`
+    : scope.groupBySport
+      ? Prisma.sql`AND ${tileSetFilter()}`
+      : Prisma.empty;
   const groupCols = [Prisma.sql`w.win`, scope.groupBySport ? Prisma.sql`s.name` : null, Prisma.sql`p.category`].filter(
     (c): c is Prisma.Sql => c !== null
   );

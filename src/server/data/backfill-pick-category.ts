@@ -29,6 +29,12 @@ export const COMBINED_YARDAGE_SCOPE: Prisma.PickWhereInput = { betType: "PLAYER_
 export const NULL_TOTALS_SCOPE: Prisma.PickWhereInput = { betType: "TOTAL", category: null };
 export const ML_FULL_GAME_SCOPE: Prisma.PickWhereInput = { betType: "MONEYLINE", period: "FULL_GAME" };
 
+// PICK_CATEGORY_VERSION 5: every player prop (recipient copies included - a copy's own
+// category feeds its recipient's tiles) moves from the blended TD_PROP to its family's
+// per-market key or OTHER_PROP (lib/prop-category.ts). No other bet type's category
+// changed in version 5, so this is the whole restamp: the CLI's --props.
+export const PROPS_SCOPE: Prisma.PickWhereInput = { betType: "PLAYER_PROP" };
+
 export type BackfillResult = {
   total: number;
   toStamp: number;

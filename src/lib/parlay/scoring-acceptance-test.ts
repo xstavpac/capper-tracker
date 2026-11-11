@@ -100,13 +100,13 @@ check("550-450 is ~55", shrunk([550, 450]), 54.9);
   const s = scored(scorePick(pick(), noCard));
   check("no card: the all-leagues record is the other-leagues level", [s.levels.league, s.levels.otherLeagues], [{ wins: 0, losses: 0 }, { wins: 18, losses: 4 }]);
 
-  const prop = pick({ betType: "PLAYER_PROP", category: "TD_PROP", propMarket: "POINTS", odds: -115, oddsSource: "MARKET" });
+  const prop = pick({ betType: "PLAYER_PROP", category: "PTS_PROP", propMarket: "POINTS", odds: -115, oddsSource: "MARKET" });
   const pr: PropMarketRecord = { key: "BASKETBALL:POINTS", league: col(10, 5), allTime: col(14, 7) };
-  const withProp: ScoringContext = { ...ctx([100, 0], [0, 0], FLAT_52, "TD_PROP"), propMarketRecords: { "c|NBA|BASKETBALL:POINTS": pr } };
+  const withProp: ScoringContext = { ...ctx([100, 0], [0, 0], FLAT_52, "PTS_PROP"), propMarketRecords: { "c|NBA|BASKETBALL:POINTS": pr } };
   const ps = scored(scorePick(prop, withProp));
   check("a prop with a market key reads its per-market record, not the category", [ps.levels.league, ps.levels.otherLeagues, ps.propMarket], [{ wins: 10, losses: 5 }, { wins: 4, losses: 2 }, "BASKETBALL:POINTS"]);
-  check("no per-market record is no record, whatever the category says", scorePick(prop, ctx([100, 0], [0, 0], FLAT_52, "TD_PROP")), { status: "NO_RECORD", pickId: "p", reason: "NO_PROP_MARKET_RECORD" });
-  const noKey = scored(scorePick({ ...prop, propMarket: null }, ctx([9, 3], [0, 0], FLAT_52, "TD_PROP")));
+  check("no per-market record is no record, whatever the category says", scorePick(prop, ctx([100, 0], [0, 0], FLAT_52, "PTS_PROP")), { status: "NO_RECORD", pickId: "p", reason: "NO_PROP_MARKET_RECORD" });
+  const noKey = scored(scorePick({ ...prop, propMarket: null, category: "OTHER_PROP" }, ctx([9, 3], [0, 0], FLAT_52, "OTHER_PROP")));
   check("a prop with no key keeps the category path", noKey.levels.league, { wins: 9, losses: 3 });
 
   check("no category", scorePick(pick({ category: null }), ctx([9, 3])), { status: "NO_RECORD", pickId: "p", reason: "NO_CATEGORY" });

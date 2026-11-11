@@ -4,6 +4,7 @@ import { favoriteOrUnderdog, extractLine, nrfiSide, totalSideFromText, oddsBucke
 import { formatEastern, startOfEasternDay } from "@/lib/dates";
 import { yesterdayRange } from "@/lib/cappers-panels";
 import { comparePicksChronological, comparePicksChronologicalDesc } from "@/lib/pick-order";
+import { PROP_CATEGORY_KEYS, PROP_CATEGORY_TEXT, propCategoryFor, propTileKeysForFamily, type PropCategoryKey } from "@/lib/prop-category";
 
 // Re-exported for existing importers (betTypeLabel moved to lib/bet-line.ts
 // so client components can use it without pulling in this file's
@@ -649,10 +650,13 @@ export type PickCategoryKey =
   // gradable now (persistFinalScores' first-half score sources), so it gets a
   // real home. MLB first-half spread stays F5_SPREAD_MINUS/PLUS below.
   | "FIRST_HALF_SPREAD"
+  // Legacy (version <= 4) blended "Player Props" key: every prop outside the 10
+  // football stat markets. Nothing stamps it from version 5 on - kept only so
+  // rows not yet restamped by the --props backfill keep a tile (NFL chip set).
   | "TD_PROP"
-  // Yardage / receptions props: one key per market, never summed into TD_PROP
-  // (see pickCategory's PLAYER_PROP branch).
-  | StatPropCategoryKey
+  // Player props: one permanent key per market per sport family, plus
+  // OTHER_PROP (lib/prop-category.ts; see pickCategory's PLAYER_PROP branch).
+  | PropCategoryKey
   | "NRFI"
   | "YRFI"
   | "F5_SPREAD_MINUS"
@@ -683,25 +687,12 @@ export type PickCategoryKey =
   // its own record instead of a conflated one.
   | SegmentCategoryKey;
 
-// The player-prop markets with a category of their own, keyed by PropMarket.
-// Every other market (touchdowns and the ones not split out yet) is TD_PROP.
-const STAT_PROP_CATEGORY = {
-  PASS_YDS: "PASS_YDS_PROP",
-  RUSH_YDS: "RUSH_YDS_PROP",
-  REC_YDS: "REC_YDS_PROP",
-  RECEPTIONS: "RECEPTIONS_PROP",
-  RUSH_REC_YDS: "RUSH_REC_YDS_PROP",
-  PASS_RUSH_YDS: "PASS_RUSH_YDS_PROP",
-  PASS_ATTEMPTS: "PASS_ATTEMPTS_PROP",
-  PASS_COMPLETIONS: "PASS_COMPLETIONS_PROP",
-  PASS_INTERCEPTIONS: "PASS_INTERCEPTIONS_PROP",
-  RUSH_ATTEMPTS: "RUSH_ATTEMPTS_PROP",
-} as const;
-export type StatPropCategoryKey = (typeof STAT_PROP_CATEGORY)[keyof typeof STAT_PROP_CATEGORY];
-export const STAT_PROP_CATEGORY_KEYS: StatPropCategoryKey[] = Object.values(STAT_PROP_CATEGORY);
-
-function playerPropCategory(market: string): PickCategoryKey {
-  return (STAT_PROP_CATEGORY as Record<string, StatPropCategoryKey>)[market] ?? "TD_PROP";
+// Player-prop category text (label / noun / specialist), from the one table in
+// lib/prop-category.ts.
+function propText(field: "label" | "noun" | "specialist"): Record<PropCategoryKey, string> {
+  const out = {} as Record<PropCategoryKey, string>;
+  for (const k of PROP_CATEGORY_KEYS) out[k] = PROP_CATEGORY_TEXT[k][field];
+  return out;
 }
 
 export const SEGMENT_CATEGORY_PERIODS = [
@@ -803,16 +794,7 @@ export const PICK_CATEGORY_LABELS: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "1st Half Under",
   FIRST_HALF_SPREAD: "1st Half Spread",
   TD_PROP: "Player Props",
-  PASS_YDS_PROP: "Passing Yards",
-  RUSH_YDS_PROP: "Rushing Yards",
-  REC_YDS_PROP: "Receiving Yards",
-  RECEPTIONS_PROP: "Receptions",
-  RUSH_REC_YDS_PROP: "Rush + Rec Yards",
-  PASS_RUSH_YDS_PROP: "Pass + Rush Yards",
-  PASS_ATTEMPTS_PROP: "Pass Attempts",
-  PASS_COMPLETIONS_PROP: "Completions",
-  PASS_INTERCEPTIONS_PROP: "Interceptions",
-  RUSH_ATTEMPTS_PROP: "Rushing Attempts",
+  ...propText("label"),
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "F5 Spread -",
@@ -865,16 +847,7 @@ export const PICK_CATEGORY_MARKET_NOUN: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "first-half under",
   FIRST_HALF_SPREAD: "first-half spread",
   TD_PROP: "player prop",
-  PASS_YDS_PROP: "passing yards",
-  RUSH_YDS_PROP: "rushing yards",
-  REC_YDS_PROP: "receiving yards",
-  RECEPTIONS_PROP: "receptions",
-  RUSH_REC_YDS_PROP: "rushing + receiving yards",
-  PASS_RUSH_YDS_PROP: "passing + rushing yards",
-  PASS_ATTEMPTS_PROP: "pass attempts",
-  PASS_COMPLETIONS_PROP: "completions",
-  PASS_INTERCEPTIONS_PROP: "interceptions thrown",
-  RUSH_ATTEMPTS_PROP: "rushing attempts",
+  ...propText("noun"),
   NRFI: "NRFI",
   YRFI: "YRFI",
   F5_SPREAD_MINUS: "first-5 favorite spread",
@@ -910,6 +883,8 @@ export const MLB_CHIP_SET: PickCategoryKey[] = [
   "NRFI",
   "YRFI",
   "TEAM_TOTAL",
+  // One tile per baseball prop market, then Other props (lib/prop-category.ts).
+  ...propTileKeysForFamily("BASEBALL"),
 ];
 export const DEFAULT_CHIP_SET: PickCategoryKey[] = ["FAV_ML", "DOG_ML", "SPREAD_MINUS", "SPREAD_PLUS", "OVER", "UNDER"];
 
@@ -952,8 +927,12 @@ export const NFL_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_UNDER",
   "FIRST_HALF_SPREAD",
   ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
+  // One tile per football prop market, then Other props (lib/prop-category.ts).
+  ...propTileKeysForFamily("FOOTBALL"),
+  // Legacy alias: picks stamped before version 5 (anytime TD, passing TDs) keep
+  // a tile until the --props backfill restamps them; empty afterwards, and
+  // computeCategoryBreakdown drops an empty tile. Removed in a later PR.
   "TD_PROP",
-  ...STAT_PROP_CATEGORY_KEYS,
   "TEAM_TOTAL",
 ];
 
@@ -998,6 +977,8 @@ export const NBA_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_SPREAD",
   ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TEAM_TOTAL",
+  // One tile per basketball prop market, then Other props (lib/prop-category.ts).
+  ...propTileKeysForFamily("BASKETBALL"),
 ];
 
 // NCAAB and KBO have no segment score source at all, so they just get
@@ -1009,7 +990,8 @@ const KBO_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, "TEAM_TOTAL"];
 // NHL has no "half" (hockey is period-based, not in supportsFirstHalf) but it
 // does have a per-period linescore source, so it gets the P1/P2/P3 segment
 // categories plus TEAM_TOTAL - no first-half keys.
-const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, ...HOCKEY_PERIOD_CATEGORY_KEYS, "TEAM_TOTAL"];
+// Plus one tile per hockey prop market, then Other props (lib/prop-category.ts).
+const NHL_CHIP_SET: PickCategoryKey[] = [...DEFAULT_CHIP_SET, ...HOCKEY_PERIOD_CATEGORY_KEYS, "TEAM_TOTAL", ...propTileKeysForFamily("HOCKEY")];
 // WNBA has a first-half score source (persistFinalScores' supportsFirstHalf)
 // and a per-quarter one, so its first-half and quarter/2nd-half ML/Over/Under/
 // Spread picks are real gradable categories - same chip set as NBA (no
@@ -1027,6 +1009,8 @@ const WNBA_CHIP_SET: PickCategoryKey[] = [
   "FIRST_HALF_SPREAD",
   ...QUARTER_SECOND_HALF_CATEGORY_KEYS,
   "TEAM_TOTAL",
+  // Same basketball prop tiles as NBA (the family shares keys).
+  ...propTileKeysForFamily("BASKETBALL"),
 ];
 
 // Sport-specific chip sets, keyed by the sport's display label (uppercased)
@@ -1051,20 +1035,30 @@ const CHIP_SET_BY_SPORT: Record<string, PickCategoryKey[]> = {
 // filtered out by a sport-specific list like MLB_CHIP_SET, which deliberately
 // does NOT include FIRST_HALF_ML (or NFL_CHIP_SET's FIRST_HALF_OVER/
 // FIRST_HALF_UNDER/TD_PROP, or any segment category).
-export const ALL_CATEGORY_KEYS: PickCategoryKey[] = [
-  ...MLB_CHIP_SET,
-  "SPREAD",
-  "FIRST_HALF_ML",
-  "FIRST_HALF_OVER",
-  "FIRST_HALF_UNDER",
-  "FIRST_HALF_SPREAD",
-  "TD_PROP",
-  ...STAT_PROP_CATEGORY_KEYS,
-  ...SEGMENT_CATEGORY_KEYS,
-];
+// Deduped: MLB_CHIP_SET already carries the baseball prop keys and OTHER_PROP.
+export const ALL_CATEGORY_KEYS: PickCategoryKey[] = Array.from(
+  new Set<PickCategoryKey>([
+    ...MLB_CHIP_SET,
+    "SPREAD",
+    "FIRST_HALF_ML",
+    "FIRST_HALF_OVER",
+    "FIRST_HALF_UNDER",
+    "FIRST_HALF_SPREAD",
+    "TD_PROP",
+    ...PROP_CATEGORY_KEYS,
+    ...SEGMENT_CATEGORY_KEYS,
+  ])
+);
 
 export function chipSetForLeague(sportName: string): PickCategoryKey[] {
   return CHIP_SET_BY_SPORT[sportName.toUpperCase()] ?? DEFAULT_CHIP_SET;
+}
+
+// Every sport with its own chip set (upper-case sport name -> keys); any other
+// sport gets DEFAULT_CHIP_SET. For SQL that filters tile rows per sport in one
+// statement (page-aggregate-fragments.ts's tileSetFilter).
+export function chipSetsBySport(): Readonly<Record<string, readonly PickCategoryKey[]>> {
+  return CHIP_SET_BY_SPORT;
 }
 
 type PickCategoryInput = {
@@ -1104,7 +1098,10 @@ type PickCategoryInput = {
 // value - so until that backfill runs they reflect the old classification.
 // pick-category-version-acceptance-test.ts pins pickCategory's outputs so changing
 // them without bumping this fails a test.
-export const PICK_CATEGORY_VERSION = 4;
+// Version 5: every player prop gets its family's per-market key or OTHER_PROP
+// (lib/prop-category.ts) instead of the blended TD_PROP - restamped by the
+// backfill's --props scope.
+export const PICK_CATEGORY_VERSION = 5;
 
 export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   if (pick.betType === "NRFI") {
@@ -1196,25 +1193,21 @@ export function pickCategory(pick: PickCategoryInput): PickCategoryKey | null {
   }
 
   if (pick.betType === "PLAYER_PROP") {
-    // Passing / rushing / receiving yards and receptions each have their own
-    // key (STAT_PROP_CATEGORY): "Joe Burrow Over 250 Passing Yards" is not a
-    // touchdown prop and must not be counted in the TD_PROP record. Neither
-    // is a combined-yards line ("Josh Allen Over 249.5 Passing + Rushing
-    // Yards"), which has its own key too (version 3), and neither are the NFL
-    // attempts / completions / interceptions counts (new markets in 2026-10:
-    // no stored row had them, so no version bump). Every other market (TD,
-    // and the passing-TD, NHL and MLB ones, which have no key of their own
-    // yet) still lands in TD_PROP.
+    // Every market has its own key per sport family (lib/prop-category.ts):
+    // "Joe Burrow Over 250 Passing Yards" is PASS_YDS_PROP, "Puka Nacua Anytime
+    // TD" ANYTIME_TD_PROP, an NHL anytime goal ANYTIME_GOAL_PROP - never one
+    // blended record, since their typical prices differ (~+150 vs ~-110). A
+    // market the family has no key for, or a sport with no family, is OTHER_PROP.
     // propMarket, when set, is trusted directly. When it's null (rows
     // predating the column, and any manually-entered PLAYER_PROP pick, which
     // never runs through parsePlayerProp at all), betDetail is re-parsed with
-    // the same shared parser as import time, so legacy TD text ("Puka Nacua
-    // Anytime TD") still resolves TD_PROP and legacy yardage text resolves
-    // its own key. Malformed/unparseable PLAYER_PROP text (a manual entry
-    // with no recognizable market in it) returns null - it was never really
-    // a TD prop, so it shouldn't silently count as one.
+    // the same shared football parser as import time, so legacy TD text still
+    // resolves ANYTIME_TD_PROP and legacy yardage text its own key.
+    // Malformed/unparseable PLAYER_PROP text returns null.
+    // Version 5: the market's own key in the pick's sport family, else
+    // OTHER_PROP (lib/prop-category.ts) - never the old blended TD_PROP.
     const market = pick.propMarket ?? parsePlayerProp(pick.betDetail ?? "")?.propMarket;
-    return market ? playerPropCategory(market) : null;
+    return market ? propCategoryFor(pick.sportName, market) : null;
   }
 
   return null;
@@ -1237,16 +1230,7 @@ const SPECIALIST_LABELS: Record<PickCategoryKey, string> = {
   FIRST_HALF_UNDER: "First-half unders specialist",
   FIRST_HALF_SPREAD: "First-half spread specialist",
   TD_PROP: "Player-prop specialist",
-  PASS_YDS_PROP: "Passing-yards specialist",
-  RUSH_YDS_PROP: "Rushing-yards specialist",
-  REC_YDS_PROP: "Receiving-yards specialist",
-  RECEPTIONS_PROP: "Receptions specialist",
-  RUSH_REC_YDS_PROP: "Rush + rec yards specialist",
-  PASS_RUSH_YDS_PROP: "Pass + rush yards specialist",
-  PASS_ATTEMPTS_PROP: "Pass-attempts specialist",
-  PASS_COMPLETIONS_PROP: "Completions specialist",
-  PASS_INTERCEPTIONS_PROP: "Interceptions specialist",
-  RUSH_ATTEMPTS_PROP: "Rushing-attempts specialist",
+  ...propText("specialist"),
   NRFI: "NRFI specialist",
   YRFI: "YRFI specialist",
   F5_SPREAD_MINUS: "F5 favorite spread specialist",

@@ -5,6 +5,14 @@
 //   npx tsx scripts/backfill-pick-category.ts --verify   # READ-ONLY audit of every stored stamp (see below)
 //   npx tsx scripts/backfill-pick-category.ts --ml-side [--sport=MLB] [--apply]
 //   npx tsx scripts/backfill-pick-category.ts --null-totals [--apply]
+//   npx tsx scripts/backfill-pick-category.ts --props [--apply | --verify]
+//
+// PICK_CATEGORY_VERSION 5 (per-market player-prop categories): run --props ONLY.
+// It restamps every PLAYER_PROP pick and nothing else. Do NOT run the default
+// (every-pick) mode for version 5 - it would restamp every moneyline from its
+// stored columns too (see the version 4 note below), and no non-prop category
+// changed in version 5. Non-prop rows stay at version 4, which is expected:
+// a plain --verify then reports them as unstamped; use --props --verify.
 //
 // PICK_CATEGORY_VERSION 4 (moneyline odds-source rule + totals side): run --ml-side
 // FIRST. The default mode restamps every pick from its stored columns, so legacy
@@ -15,6 +23,8 @@
 //                                 (PICK_CATEGORY_VERSION 3). Works with all three modes;
 //                                 with --apply it writes those rows only, by id, and
 //                                 leaves every other pick (category and version) alone.
+//            --props   only PLAYER_PROP picks (PICK_CATEGORY_VERSION 5). Works with all
+//                      three modes.
 //
 // BACKFILL (default / --apply): stamps picks that predate the stored-category
 // columns (categoryVersion = 0), or that were stamped by an older
@@ -45,6 +55,7 @@ import {
   COMBINED_YARDAGE_SCOPE,
   ML_FULL_GAME_SCOPE,
   NULL_TOTALS_SCOPE,
+  PROPS_SCOPE,
   verifyPickCategory,
 } from "@/server/data/backfill-pick-category";
 import { backfillMlSide } from "@/server/data/backfill-ml-side";
@@ -54,9 +65,10 @@ const verify = process.argv.includes("--verify");
 const combinedYardage = process.argv.includes("--combined-yardage");
 const mlSide = process.argv.includes("--ml-side");
 const nullTotals = process.argv.includes("--null-totals");
+const props = process.argv.includes("--props");
 const sportArg = process.argv.find((a) => a.startsWith("--sport="));
 const sportName = sportArg ? sportArg.slice("--sport=".length) : undefined;
-const known = new Set(["--apply", "--verify", "--combined-yardage", "--ml-side", "--null-totals"]);
+const known = new Set(["--apply", "--verify", "--combined-yardage", "--ml-side", "--null-totals", "--props"]);
 const unknownArg = process.argv.slice(2).find((a) => !known.has(a) && !a.startsWith("--batch=") && !a.startsWith("--sport="));
 const batchArg = process.argv.find((a) => a.startsWith("--batch="));
 const batchSize = batchArg ? Math.max(1, parseInt(batchArg.slice("--batch=".length), 10) || 500) : 500;
@@ -74,12 +86,14 @@ async function main() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set.");
   if (verify && apply) throw new Error("--verify is read-only and cannot be combined with --apply.");
   if (unknownArg) throw new Error(`Unknown argument ${unknownArg} - nothing was run.`);
-  if ([combinedYardage, mlSide, nullTotals].filter(Boolean).length > 1) throw new Error("--combined-yardage, --ml-side and --null-totals are separate modes; pass one.");
+  if ([combinedYardage, mlSide, nullTotals, props].filter(Boolean).length > 1) throw new Error("--combined-yardage, --ml-side, --null-totals and --props are separate modes; pass one.");
   if (sportArg && !mlSide) throw new Error("--sport only narrows --ml-side.");
-  const scope = combinedYardage ? COMBINED_YARDAGE_SCOPE : nullTotals ? NULL_TOTALS_SCOPE : mlSide && verify ? ML_FULL_GAME_SCOPE : undefined;
+  const scope = combinedYardage ? COMBINED_YARDAGE_SCOPE : nullTotals ? NULL_TOTALS_SCOPE : props ? PROPS_SCOPE : mlSide && verify ? ML_FULL_GAME_SCOPE : undefined;
   const scopeLabel = combinedYardage
     ? "combined-yardage props stored as TD_PROP -> " + COMBINED_YARDAGE_CATEGORIES.join(" / ")
-    : nullTotals
+    : props
+      ? "every PLAYER_PROP pick (recipient copies included)"
+      : nullTotals
       ? "TOTAL picks with no category"
       : mlSide
         ? "full-game MONEYLINE picks" + (verify ? "" : " with no mlFavoredSide, filed FAV_ML/DOG_ML") + (sportName ? ` (${sportName} only)` : ", every sport")
@@ -111,6 +125,10 @@ async function main() {
     console.log(`Unstamped rows:    ${r.unstamped}   (categoryVersion < ${PICK_CATEGORY_VERSION})`);
     console.log(`Mismatches:        ${r.mismatches}   (stamped rows whose stored category != pickCategory(row))`);
     if (r.aheadOfCurrent > 0) console.log(`Ahead of current:  ${r.aheadOfCurrent}   (categoryVersion > ${PICK_CATEGORY_VERSION}; compared like the rest)`);
+    if (r.staleChangePairs.size > 0) {
+      console.log(`\nUnstamped rows a backfill would change (stored -> computed):`);
+      for (const [pair, n] of Array.from(r.staleChangePairs.entries()).sort((a, b) => b[1] - a[1])) console.log(`  ${pair.padEnd(40)} ${n}`);
+    }
     if (r.samples.length > 0) {
       console.log(`\nSample mismatches (up to 20):`);
       for (const s of r.samples) console.log(`  ${s.id}  stored=${s.stored ?? "(null)"} (v${s.storedVersion})  computed=${s.computed ?? "(null)"}`);
