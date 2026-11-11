@@ -3,12 +3,14 @@ import { Prisma } from "@prisma/client";
 import type { GameResult, Pick, PickedSide, PropMarket } from "@prisma/client";
 import {
   getLiveScoresForSport,
-  getOddsForSport,
+  createRequestOddsLoader,
+  pastSnapshotDateFor,
   getMlbEarlyInningScores,
   getNflGameFacts,
   getEspnGameSegments,
   LIVE_SPORTS,
   type OddsGame,
+  type OddsLoader,
 } from "@/server/data/odds";
 import { extractPasserRows, type PasserRow } from "@/server/data/nfl-passer-rows";
 import { gradeNhlPlayerProp } from "@/server/data/nhl-prop-grading";
@@ -59,8 +61,9 @@ function findMarket(game: OddsGame, key: string) {
 }
 
 // Derives the team-trend ledger fields (see schema.prisma's GameResult
-// comment) from whichever odds snapshot is already cached for this sport
-// today - the SAME cache getOddsForSport always uses, not a separate fetch.
+// comment) from the odds snapshot that holds this game (see
+// ledgerFieldsForFinal for which day's row that is) - the SAME cache
+// getOddsForSport always uses, not a separate fetch.
 // Not a rigorous closing line (see the schema comment); still the best data
 // this app captures today. Returns nulls when the game isn't in that
 // snapshot at all (e.g. the day's fetch was missed), no candidate falls on
@@ -74,17 +77,20 @@ function findMarket(game: OddsGame, key: string) {
 // uses. referenceTime should be the actual finished game's own commenceTime
 // (what the caller has on hand), not "now" - grading can run well after the
 // game itself.
-function deriveLedgerFields(
+export function deriveLedgerFields(
   oddsGames: OddsGame[],
+  sportKey: string,
   homeTeam: string,
   awayTeam: string,
   referenceTime: Date
 ): { favTeam: string | null; totalLine: number | null } {
   // teamNamesMatch, not ===: homeTeam/awayTeam come from the score source
   // (ESPN), oddsGames from The Odds API, and the two disagree on a few names
-  // (see team-name-match.ts).
+  // (see team-name-match.ts). sportKey turns on that league's alias rows
+  // (NCAAB / NCAAF / "LA Clippers") - the same call resolveOddsGame makes.
+  // This one match picks the game both fields below are read from.
   const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, homeTeam) && teamNamesMatch(g.awayTeam, awayTeam)
+    (g) => teamNamesMatch(g.homeTeam, homeTeam, sportKey) && teamNamesMatch(g.awayTeam, awayTeam, sportKey)
   );
   const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
   if (sameDay.length === 0) return { favTeam: null, totalLine: null };
@@ -105,6 +111,27 @@ function deriveLedgerFields(
   const totalLine = totals?.outcomes.find((o) => o.point !== undefined)?.point ?? null;
 
   return { favTeam, totalLine };
+}
+
+// Which day's snapshot a final's ledger fields come from - the same rule
+// resolveOddsGame uses for pricing (#445): the game's own ET day once that day
+// is over (pastSnapshotDateFor), else today's row, read exactly as before.
+// Every snapshot write keeps only games that have not started, so a game from
+// an earlier ET day is only in its own day's row: a 9pm ET tip that goes final
+// after ET midnight was never in the row grading used to read, and got a null
+// favTeam. No fallback to today's row for a past-day game - nothing in it can be
+// that game, and a same-teams game later in a series could be matched instead.
+//
+// loadOdds should be one createRequestOddsLoader() per run, so each (sport, day)
+// row is read at most once however many finals share it.
+export async function ledgerFieldsForFinal(
+  loadOdds: OddsLoader,
+  sportKey: string,
+  game: { homeTeam: string; awayTeam: string; commenceTime: string }
+): Promise<{ favTeam: string | null; totalLine: number | null }> {
+  const pastFetchDate = pastSnapshotDateFor(game.commenceTime);
+  const oddsGames = pastFetchDate === undefined ? await loadOdds(sportKey) : await loadOdds(sportKey, pastFetchDate);
+  return deriveLedgerFields(oddsGames, sportKey, game.homeTeam, game.awayTeam, new Date(game.commenceTime));
 }
 
 // What persistFinalScores needs to know about a game's already-persisted
@@ -314,18 +341,28 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
     Object.fromEntries(scoredFinals.filter((g) => g.innings).map((g) => [g.id, g.innings]))
   );
 
-  // Same daily cache getOddsForSport always serves elsewhere - fetched at
-  // most once for this whole batch (not per-game) to derive the team-trend
-  // ledger fields below, and ONLY when some final actually needs them (a row
-  // that already has favTeam never consults the snapshot). A run with no
-  // finals, or whose finals are all already ledgered, never reads the odds
-  // blob at all. A cache hit costs nothing extra; a miss just means no
-  // ledger fields for this batch, same as any other day the fetch failed.
-  const anyNeedsLedger = scoredFinals.some((g) => {
-    const ex = existingById.get(g.id);
-    return !ex || ex.favTeam === null;
-  });
-  const oddsGames = anyNeedsLedger ? await getOddsForSport(sportKey) : [];
+  // Same daily cache getOddsForSport always serves elsewhere - each day's row
+  // read at most once for this whole batch (not per-game; the loader holds one
+  // promise per sport + day) to derive the team-trend ledger fields below, and
+  // ONLY when some final actually needs them (a row that already has favTeam
+  // never consults the snapshot). A run with no finals, or whose finals are all
+  // already ledgered, never reads the odds blob at all. Finals from today read
+  // today's row exactly as before; a final from an earlier ET day reads that
+  // day's row (see ledgerFieldsForFinal). A cache hit costs nothing extra; a
+  // miss just means no ledger fields for those games, same as any other day the
+  // fetch failed. Resolved here, before any write, like the one read it
+  // replaces: a failed odds read still fails the run before anything is written.
+  const loadOdds = createRequestOddsLoader();
+  const ledgerById = new Map(
+    await Promise.all(
+      scoredFinals
+        .filter((g) => {
+          const ex = existingById.get(g.id);
+          return !ex || ex.favTeam === null;
+        })
+        .map(async (g) => [g.id, await ledgerFieldsForFinal(loadOdds, sportKey, g)] as const)
+    )
+  );
 
   // What this run changed, for resetGradeFailuresForGames below: existing rows
   // that were corrected or backfilled (their id), and newly created ones (their
@@ -427,9 +464,7 @@ export async function persistFinalScores(sportKey: string, changes?: GameResultC
       // Same immutable-once-set reasoning as the first-half fields above -
       // only derive when this row doesn't already have a favTeam.
       const needsLedgerFields = !existing || existing.favTeam === null;
-      const ledger = needsLedgerFields
-        ? deriveLedgerFields(oddsGames, g.homeTeam, g.awayTeam, new Date(g.commenceTime))
-        : null;
+      const ledger = needsLedgerFields ? ledgerById.get(g.id) ?? null : null;
       const ledgerHasData = ledger && (ledger.favTeam !== null || ledger.totalLine !== null);
 
       // Nothing to write: the stored row already has these scores and the
