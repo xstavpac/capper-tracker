@@ -15,6 +15,7 @@ import {
   findMarketTotalLine,
   findFavoredSide,
   createRequestOddsLoader,
+  pastSnapshotDateFor,
   type OddsLoader,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
@@ -439,12 +440,17 @@ export async function resolveGameAndOdds(
   const { odds, oddsSource } = resolvePickPrice(item, feedPrice);
 
   // When the data that priced a MARKET pick was read. A game line carries its event's own time; a price read off an
-  // alternate-line or prop cache is stamped with the snapshot's time (the data is at least that new).
+  // alternate-line or prop cache is stamped with the snapshot's time (the data is at least that new) - the snapshot
+  // the game was priced from: its own ET day's row once that day is over (pastSnapshotDateFor), else today's.
   let priced: { capturedAt: Date | null; book: string | null } | null = null;
   if (oddsSource === "MARKET" && liveSportKey) {
+    const pastFetchDate = pastSnapshotDateFor(gameTime.toISOString());
     priced = pricedPoint
       ? { capturedAt: pricing?.capturedAt(liveSportKey, pricedPoint.eventId) ?? null, book: pricedPoint.book }
-      : { capturedAt: (await pricing?.snapshotAt(liveSportKey)) ?? null, book: null };
+      : {
+          capturedAt: (await (pastFetchDate === undefined ? pricing?.snapshotAt(liveSportKey) : pricing?.snapshotAt(liveSportKey, pastFetchDate))) ?? null,
+          book: null,
+        };
   }
   const posted = postedOddsCapture({
     oddsSource,

@@ -76,8 +76,9 @@ export function mergeFreshOverSnapshot(snapshotGames: OddsGame[], snapshotAt: Da
 
 export type FreshOddsDeps = {
   now: () => Date;
-  // The day's snapshot row's createdAt - one 8-byte column, no blob.
-  readSnapshotAt: (sportKey: string) => Promise<Date | null>;
+  // The day's snapshot row's createdAt - one 8-byte column, no blob. pastFetchDate: that past ET day's row instead
+  // of today's (a game that started on an earlier ET day is priced from its own day's row - pastSnapshotDateFor).
+  readSnapshotAt: (sportKey: string, pastFetchDate?: string) => Promise<Date | null>;
   // The newest stored listing fetched at or after `since`.
   readFresh: (sportKey: string, since: Date) => Promise<FreshListing | null>;
   // Buys a listing if the gate, the cap and the claim allow; null otherwise.
@@ -90,23 +91,37 @@ export type PricingOddsLoader = {
   // When the data that priced this event was read; null if unknown.
   capturedAt: (sportKey: string, eventId: string) => Date | null;
   // The snapshot's own time, for prices read from caches this loader does not see (alt lines, props): the data is at
-  // least that new. One column, no blob, and never buys anything.
-  snapshotAt: (sportKey: string) => Promise<Date | null>;
+  // least that new. One column, no blob, and never buys anything. pastFetchDate as on load: the past day's row.
+  snapshotAt: (sportKey: string, pastFetchDate?: string) => Promise<Date | null>;
 };
 
 // One pricing read per sport for the life of the loader (a paste resolves every line at once). `snapshotLoader` is
 // the request's own odds loader, so the snapshot is still read once.
+//
+// A past ET day (pastFetchDate, set by resolveOddsGame for a game that started on an earlier ET day): that day's row,
+// stamped with that row's own time, and never a fresh listing - a fresh listing holds only games that have not
+// started, so it could never price this game, and nothing is bought for it. Held per (sport, day).
 export function createPricingOddsLoader(snapshotLoader: OddsLoader, deps: FreshOddsDeps = defaultFreshOddsDeps): PricingOddsLoader {
   const held = new Map<string, Promise<PricingOdds>>();
+  // (sport, day) key -> event id -> when the data that priced it was read.
   const byEvent = new Map<string, Map<string, Date>>();
   const snapAts = new Map<string, Promise<Date | null>>();
-  const snapAt = (sportKey: string): Promise<Date | null> => {
-    let p = snapAts.get(sportKey);
+  const dayKey = (sportKey: string, pastFetchDate?: string) => (pastFetchDate === undefined ? sportKey : `${sportKey}|${pastFetchDate}`);
+  const snapAt = (sportKey: string, pastFetchDate?: string): Promise<Date | null> => {
+    const key = dayKey(sportKey, pastFetchDate);
+    let p = snapAts.get(key);
     if (!p) {
-      p = deps.readSnapshotAt(sportKey).catch(() => null);
-      snapAts.set(sportKey, p);
+      p = (pastFetchDate === undefined ? deps.readSnapshotAt(sportKey) : deps.readSnapshotAt(sportKey, pastFetchDate)).catch(() => null);
+      snapAts.set(key, p);
     }
     return p;
+  };
+
+  const buildPastDay = async (sportKey: string, pastFetchDate: string): Promise<PricingOdds> => {
+    const games = await snapshotLoader(sportKey, pastFetchDate);
+    const merged = mergeFreshOverSnapshot(games, await snapAt(sportKey, pastFetchDate), null);
+    byEvent.set(dayKey(sportKey, pastFetchDate), merged.capturedAt);
+    return merged;
   };
 
   const build = async (sportKey: string): Promise<PricingOdds> => {
@@ -129,18 +144,30 @@ export function createPricingOddsLoader(snapshotLoader: OddsLoader, deps: FreshO
   };
 
   return {
-    load: async (sportKey) => {
-      let p = held.get(sportKey);
+    load: async (sportKey, pastFetchDate) => {
+      const key = dayKey(sportKey, pastFetchDate);
+      let p = held.get(key);
       if (!p) {
-        p = build(sportKey);
-        held.set(sportKey, p);
+        p = pastFetchDate === undefined ? build(sportKey) : buildPastDay(sportKey, pastFetchDate);
+        held.set(key, p);
         p.catch(() => {
-          if (held.get(sportKey) === p) held.delete(sportKey);
+          if (held.get(key) === p) held.delete(key);
         });
       }
       return (await p).games;
     },
-    capturedAt: (sportKey, eventId) => byEvent.get(sportKey)?.get(eventId) ?? null,
+    // Event ids are unique across days, so an event is found in whichever (sport, day) read priced it.
+    capturedAt: (sportKey, eventId) => {
+      const today = byEvent.get(sportKey)?.get(eventId);
+      if (today) return today;
+      for (const [key, events] of byEvent) {
+        if (key.startsWith(`${sportKey}|`)) {
+          const at = events.get(eventId);
+          if (at) return at;
+        }
+      }
+      return null;
+    },
     snapshotAt: snapAt,
   };
 }
@@ -156,9 +183,9 @@ export function freshPurchaseAllowed(args: { level: ReturnType<typeof classifyCr
   return (args.callsToday + 1) * FRESH_CALL_CREDITS <= FRESH_DAILY_CREDIT_CAP;
 }
 
-async function readSnapshotAt(sportKey: string): Promise<Date | null> {
+async function readSnapshotAt(sportKey: string, pastFetchDate?: string): Promise<Date | null> {
   const row = await prisma.oddsSnapshot.findUnique({
-    where: { sportKey_fetchDate: { sportKey, fetchDate: easternDateKey(new Date()) } },
+    where: { sportKey_fetchDate: { sportKey, fetchDate: pastFetchDate ?? easternDateKey(new Date()) } },
     select: { createdAt: true },
   });
   return row?.createdAt ?? null;
