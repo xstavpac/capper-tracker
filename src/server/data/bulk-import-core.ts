@@ -410,10 +410,12 @@ export async function resolveGameAndOdds(
         // the price has to be for that exact number (see findMarketPrice).
         const line = extractLine(item.betType, item.description) ?? item.inferredLine ?? null;
         // Priced from the pricing loader: the same snapshot games, or - when that snapshot is older than the
-        // freshness window - one shared fresh listing (fresh-odds.ts). Game matching above stays on getOdds.
+        // freshness window - one shared fresh listing (fresh-odds.ts). A game that has already started is priced from
+        // the newest retained listing fetched before its tip when that is newer (pricing.forGame). Game matching
+        // above stays on getOdds.
         const point =
           side && item.betType !== "TEAM_TOTAL"
-            ? await findMarketPricePoint(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, pricing?.load ?? getOdds)
+            ? await findMarketPricePoint(liveSportKey, game, item.betType, side, { line, period: item.period ?? "UNKNOWN" }, pricing ? pricing.forGame(game) : getOdds)
             : null;
         if (point) pricedPoint = { book: point.book, eventId: point.eventId };
         let marketPrice: number | null = point?.price ?? null;
