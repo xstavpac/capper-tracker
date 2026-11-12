@@ -4,6 +4,7 @@ import { useEffect, useState, type Ref } from "react";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
+import { TeamMark } from "@/components/live/team-mark";
 import { TotalsSideList } from "@/components/live/totals-side-list";
 import { orderTeamSections, placeNonTeamSections, type GridLiveGamePanelData, type GridLiveTeamSideData } from "@/components/live/grid-live-team-panel-data";
 import { LiveProgressBar } from "@/components/live/live-progress-bar";
@@ -41,6 +42,7 @@ import { heavyBadgesForGame, type HeavyBadge, type HeavyConsensusRate } from "@/
 function TeamPickSection({
   teamLabel,
   teamColor,
+  teamLogoUrl,
   picks,
   tone,
   headerRef,
@@ -107,13 +109,19 @@ function TeamPickSection({
         tabIndex={-1}
         className="mb-2 flex scroll-mt-4 items-center gap-2 rounded-md px-1 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       >
-        <span
-          className={
-            "h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
-            (violet ? " bg-violet-500 dark:bg-violet-400" : "")
+        <TeamMark
+          logoUrl={teamLogoUrl}
+          sizeClass="h-6 w-6"
+          fallback={
+            <span
+              className={
+                "h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
+                (violet ? " bg-violet-500 dark:bg-violet-400" : "")
+              }
+              style={violet ? undefined : { backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
+              aria-hidden="true"
+            />
           }
-          style={violet ? undefined : { backgroundColor: teamColor ?? "rgb(var(--muted-foreground))" }}
-          aria-hidden="true"
         />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{teamLabel}</span>
         <span className="shrink-0 text-xs font-medium text-[#5B6275] dark:text-muted-foreground">
@@ -122,7 +130,10 @@ function TeamPickSection({
       </div>
 
       {picks.length === 0 ? (
-        <p className="py-4 text-center text-[13px] font-medium text-muted-foreground">No logged picks for {teamLabel}.</p>
+        <p className="py-4 text-center text-[13px] font-medium text-muted-foreground">
+          {teamLogoUrl && <TeamMark logoUrl={teamLogoUrl} fallback={null} sizeClass="mr-1.5 inline-block h-4 w-4 align-text-bottom" />}
+          No logged picks for {teamLabel}.
+        </p>
       ) : splitBySide ? (
         // Totals only: Over and Under as two labelled blocks in this one column.
         <TotalsSideList
@@ -195,7 +206,10 @@ export function GameDetailPanel({
     <section className={"rounded-[18px] border p-3.5 " + TINTS.neutral.card}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
-          {data.away.teamLabel} @ {data.home.teamLabel}
+          {data.away.teamLogoUrl && <TeamMark logoUrl={data.away.teamLogoUrl} fallback={null} sizeClass="mr-1.5 inline-block h-5 w-5 align-text-bottom" />}
+          {data.away.teamLabel} @{" "}
+          {data.home.teamLogoUrl && <TeamMark logoUrl={data.home.teamLogoUrl} fallback={null} sizeClass="mr-1.5 inline-block h-5 w-5 align-text-bottom" />}
+          {data.home.teamLabel}
         </h2>
         <p className="flex shrink-0 items-center gap-2 text-xs font-medium text-[#5B6275] dark:text-muted-foreground">
           <LocalGameTime date={commenceTime} options={{ month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }} />

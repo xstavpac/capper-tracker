@@ -11,6 +11,7 @@ import { memoizeWithTtl, resolveTtlSeconds } from "@/server/data/ttl-memo";
 import { espnFeedStatus, isUnplayed, mlbFeedStatus, resolveFeedStatus } from "@/lib/feed-game-status";
 import { cachedByTag } from "@/server/data/cached";
 import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
+import { mlbLogoUrl, normalizeEspnLogoUrl } from "@/lib/team-logo";
 import { getBoardGamesProjection, getYesterdayBoardGames } from "@/server/data/odds-projections";
 import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
 
@@ -135,6 +136,12 @@ export type ScoreGame = {
   // put its score on - toClientScores drops it before anything is sent to a
   // browser.
   fcsOnly?: true;
+  // Team logo image URLs (ESPN's logo CDN), for the Live page. ESPN-backed pro
+  // leagues read the scoreboard's own `team.logo`; MLB maps its Stats API team id
+  // to ESPN's abbreviation (lib/team-logo.ts). Absent/null when the feed gave none:
+  // the UI then keeps its team-color mark. Safe to send to browsers.
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
   // The feed sent no score for at least one side, and `scores` shows "0" in its
   // place for display. persistFinalScores never writes a result from such a
   // game. Server-only: toClientScores drops it.
@@ -1148,6 +1155,8 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
               { name: g.teams.away.team.name, score: String(g.teams.away.score ?? 0) },
             ],
       commenceTime: g.gameDate,
+      homeLogoUrl: mlbLogoUrl(g.teams.home.team.id),
+      awayLogoUrl: mlbLogoUrl(g.teams.away.team.id),
       inningHalf: status === "live" ? (g.linescore?.inningState ?? null) : null,
       inningOrdinal: status === "live" ? (g.linescore?.currentInningOrdinal ?? null) : null,
       // Already present on every game in this same response (confirmed live,
@@ -1171,7 +1180,10 @@ export async function getMlbLiveScores(): Promise<ScoreGame[]> {
 
 // Maps one ESPN scoreboard event to our ScoreGame shape - shared by every
 // per-date fetch getEspnScores fans out (see below).
-function espnEventToScoreGame(e: any, options: { teamDetail?: boolean; flagNoDivisionGames?: boolean } = {}): ScoreGame {
+function espnEventToScoreGame(
+  e: any,
+  options: { teamDetail?: boolean; flagNoDivisionGames?: boolean; logos?: boolean } = {}
+): ScoreGame {
   const competitors = e.competitions?.[0]?.competitors ?? [];
   const home = competitors.find((c: any) => c.homeAway === "home");
   const away = competitors.find((c: any) => c.homeAway === "away");
@@ -1190,6 +1202,9 @@ function espnEventToScoreGame(e: any, options: { teamDetail?: boolean; flagNoDiv
             { name: away?.team?.displayName ?? "", score: String(away?.score ?? 0) },
           ],
     commenceTime: e.date,
+    ...(options.logos
+      ? { homeLogoUrl: normalizeEspnLogoUrl(home?.team?.logo), awayLogoUrl: normalizeEspnLogoUrl(away?.team?.logo) }
+      : {}),
     inningHalf: null,
     inningOrdinal: null,
     innings: null,
@@ -1289,7 +1304,7 @@ async function getEspnScoresForDate(
 // no odds-feed fallback to hide behind.
 async function getEspnScores(
   sportPath: string,
-  options: { groups?: string; teamDetail?: boolean; flagNoDivisionGames?: boolean } = {}
+  options: { groups?: string; teamDetail?: boolean; flagNoDivisionGames?: boolean; logos?: boolean } = {}
 ): Promise<ScoreGame[]> {
   const fmt = (d: Date) => easternDateKey(d).replace(/-/g, "");
   const dateKeys = [
@@ -1334,15 +1349,15 @@ async function getEspnScores(
 }
 
 export function getNbaLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("basketball/nba");
+  return getEspnScores("basketball/nba", { logos: true });
 }
 
 export function getWnbaLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("basketball/wnba");
+  return getEspnScores("basketball/wnba", { logos: true });
 }
 
 export function getNflLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("football/nfl");
+  return getEspnScores("football/nfl", { logos: true });
 }
 
 // Same shared ESPN scoreboard helper as every other ESPN-backed sport above,
@@ -1472,7 +1487,7 @@ export async function getNcaafUpcomingFcsGames(): Promise<ScoreGame[]> {
 // catalog-import game resolution all reach this - but the NHL season gate
 // (SPORT_SEASON_CONFIG: 2026-10-07) keeps it inert until the season opens.
 export function getNhlLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("hockey/nhl");
+  return getEspnScores("hockey/nhl", { logos: true });
 }
 
 // How many days back The Odds API's /scores endpoint is asked to include

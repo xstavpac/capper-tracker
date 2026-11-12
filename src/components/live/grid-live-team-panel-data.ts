@@ -16,6 +16,8 @@ import { getTeamColor } from "@/lib/team-colors";
 export type GridLiveTeamSideData = {
   teamLabel: string;
   teamColor: string | null;
+  // The team's logo image URL; absent for Totals / Other and for a team with no logo (the header dot shows).
+  teamLogoUrl?: string | null;
   picks: ExpanderPick[];
   // Header accent for the non-team groups: undefined = the team color (or
   // neutral gray when teamColor is null), "violet" = the Other markets accent.
@@ -33,17 +35,20 @@ export function buildGridLiveGamePanelData(
   game: { homeTeam: string; awayTeam: string },
   sportKey: string,
   sportName: string,
-  picks: ExpanderPick[]
+  picks: ExpanderPick[],
+  logos?: { away: string | null; home: string | null }
 ): GridLiveGamePanelData {
   return {
     away: {
       teamLabel: shortTeamName(game.awayTeam, sportName),
       teamColor: getTeamColor(sportKey, game.awayTeam),
+      ...(logos?.away ? { teamLogoUrl: logos.away } : {}),
       picks: picks.filter((p) => p.teamGroup === "AWAY"),
     },
     home: {
       teamLabel: shortTeamName(game.homeTeam, sportName),
       teamColor: getTeamColor(sportKey, game.homeTeam),
+      ...(logos?.home ? { teamLogoUrl: logos.home } : {}),
       picks: picks.filter((p) => p.teamGroup === "HOME"),
     },
     // Not a real team - always the neutral-gray dot (teamColor: null), same

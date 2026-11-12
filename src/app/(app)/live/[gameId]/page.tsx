@@ -21,6 +21,8 @@ import { classifyPickTeamGroup, shortTeamName } from "@/lib/pick-team-group";
 import { getTeamColor } from "@/lib/team-colors";
 import { PickStatusButtons } from "@/components/dashboard/pick-status-buttons";
 import { GameHeadToHeadHeader, type HeadToHeadSide } from "@/components/live/game-head-to-head-header";
+import { TeamMark } from "@/components/live/team-mark";
+import { scoreLogos } from "@/lib/team-logo";
 import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-picks-expander";
 import { getHeavyConsensusRate } from "@/server/data/heavy-consensus";
 import { teamScore } from "@/components/live/live-scoreboard-ordering";
@@ -244,7 +246,9 @@ export default async function GameDetailPage({
   const overText = over ? `O/U ${over.point} (${formatOdds(over.price)})` : null;
   const isPregame = !isLive && !isFinal;
 
+  const logos = scoreLogos(score);
   const awaySide: HeadToHeadSide = {
+    logoUrl: logos.away,
     fullName: game.awayTeam,
     shortName: shortTeamName(game.awayTeam, sportMeta.label),
     sportKey: sportMeta.key,
@@ -253,6 +257,7 @@ export default async function GameDetailPage({
     score: teamScore(score, game.awayTeam, sportMeta.key),
   };
   const homeSide: HeadToHeadSide = {
+    logoUrl: logos.home,
     fullName: game.homeTeam,
     shortName: shortTeamName(game.homeTeam, sportMeta.label),
     sportKey: sportMeta.key,
@@ -320,7 +325,10 @@ export default async function GameDetailPage({
           <>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{game.awayTeam}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <TeamMark logoUrl={logos.away} fallback={null} />
+                  <span className="truncate text-sm font-medium">{game.awayTeam}</span>
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {teamScore(score, game.awayTeam, sportMeta.key) ?? ""}
                 </span>
@@ -331,7 +339,10 @@ export default async function GameDetailPage({
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">{game.homeTeam}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <TeamMark logoUrl={logos.home} fallback={null} />
+                  <span className="truncate text-sm font-medium">{game.homeTeam}</span>
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {teamScore(score, game.homeTeam, sportMeta.key) ?? ""}
                 </span>
@@ -362,7 +373,7 @@ export default async function GameDetailPage({
         // of a bare header.
         expanderPicks.length > 0 ? (
           <div className="mt-4 rounded-card bg-card p-4 shadow-soft">
-            <GamePicksExpander picks={expanderPicks} heavyRate={heavyRate} />
+            <GamePicksExpander picks={expanderPicks} heavyRate={heavyRate} teamLogos={logos} />
           </div>
         ) : (
           <div className="mt-4 rounded-card bg-card shadow-soft">

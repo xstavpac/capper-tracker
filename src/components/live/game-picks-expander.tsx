@@ -9,6 +9,7 @@ import type { PickOddsSource } from "@/lib/odds-source";
 import type { GameFeedStatus } from "@/lib/parlay/game-over";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
+import { TeamMark } from "@/components/live/team-mark";
 import { TotalsSideList } from "@/components/live/totals-side-list";
 import { HeavyConsensusBadge } from "@/components/live/heavy-consensus-badge";
 import { heavyBadgesForGame, type HeavyConsensusRate } from "@/lib/heavy-consensus";
@@ -120,7 +121,16 @@ export function ChevronIcon({ up }: { up: boolean }) {
 
 // `heavyRate` is the viewer's own Heavy Consensus hit rate (server/data/heavy-consensus.ts);
 // null / absent shows no Heavy Consensus pill at all.
-export function GamePicksExpander({ picks, heavyRate = null }: { picks: ExpanderPick[]; heavyRate?: HeavyConsensusRate | null }) {
+export function GamePicksExpander({
+  picks,
+  heavyRate = null,
+  teamLogos,
+}: {
+  picks: ExpanderPick[];
+  heavyRate?: HeavyConsensusRate | null;
+  // The game's two logo URLs (from its matched score row); a missing one keeps the color dot.
+  teamLogos?: { away: string | null; home: string | null };
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<CapperLeagueRecords | null>(null);
@@ -207,13 +217,19 @@ export function GamePicksExpander({ picks, heavyRate = null }: { picks: Expander
                       }
                 }
               >
-                <span
-                  className={
-                    "h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
-                    (group.violet ? " bg-violet-500 dark:bg-violet-400" : "")
+                <TeamMark
+                  logoUrl={group.teamGroup === "AWAY" ? teamLogos?.away : group.teamGroup === "HOME" ? teamLogos?.home : null}
+                  sizeClass="h-4 w-4"
+                  fallback={
+                    <span
+                      className={
+                        "h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ring-black/10 dark:ring-white/15" +
+                        (group.violet ? " bg-violet-500 dark:bg-violet-400" : "")
+                      }
+                      style={group.violet ? undefined : { backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
+                      aria-hidden="true"
+                    />
                   }
-                  style={group.violet ? undefined : { backgroundColor: group.dotColor ?? "rgb(var(--muted-foreground))" }}
-                  aria-hidden="true"
                 />
                 <span className="text-[12px] font-semibold text-foreground">{group.label}</span>
                 <span className="text-[11px] text-muted-foreground">

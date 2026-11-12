@@ -1,4 +1,5 @@
 import { getTeamColor } from "@/lib/team-colors";
+import { TeamMark } from "@/components/live/team-mark";
 
 // Head-to-head redesign of the game-detail header for MLB/NFL only (see
 // live/[gameId]/page.tsx - every other sport keeps the original stacked
@@ -31,6 +32,8 @@ function TeamCrest({ shortName, color, size = 40 }: { shortName: string; color: 
 }
 
 export type HeadToHeadSide = {
+  // ESPN logo URL; absent/null keeps the initials crest.
+  logoUrl?: string | null;
   fullName: string;
   shortName: string;
   sportKey: string;
@@ -45,7 +48,9 @@ export type HeadToHeadSide = {
 
 function TeamBlock({ side, align }: { side: HeadToHeadSide; align: "left" | "right" }) {
   const color = getTeamColor(side.sportKey, side.fullName);
-  const crest = <TeamCrest shortName={side.shortName} color={color} />;
+  const crest = (
+    <TeamMark logoUrl={side.logoUrl} sizeClass="h-10 w-10" fallback={<TeamCrest shortName={side.shortName} color={color} />} />
+  );
   const text = (
     <div className={"min-w-0 " + (align === "right" ? "text-right" : "")}>
       <div className="truncate text-sm font-semibold text-foreground">{side.shortName}</div>
