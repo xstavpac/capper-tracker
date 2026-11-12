@@ -12,6 +12,7 @@ import { resolveGridLiveSelection, type GridLiveSelection } from "@/lib/grid-liv
 import { buildGridLiveGamePanelData } from "@/components/live/grid-live-team-panel-data";
 import { GridLiveGameList } from "@/components/live/grid-live-game-list";
 import { GameDetailPanel } from "@/components/live/team-picks-panel";
+import { scoreLogos } from "@/lib/team-logo";
 import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
@@ -212,7 +213,13 @@ export function GridLiveBoard({
 
   const panelData =
     selectedEntry &&
-    buildGridLiveGamePanelData(selectedEntry.game, activeSport, sportLabel, matchedPicksByGame[selectedEntry.gameIndex] ?? []);
+    buildGridLiveGamePanelData(
+      selectedEntry.game,
+      activeSport,
+      sportLabel,
+      matchedPicksByGame[selectedEntry.gameIndex] ?? [],
+      scoreLogos(selectedEntry.score)
+    );
 
   // Selected game's live progress (see lib/live-game-progress.ts) - null for
   // a preview/final game or a sport/state this doesn't cover yet. Computed

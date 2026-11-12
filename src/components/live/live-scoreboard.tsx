@@ -14,6 +14,8 @@ import { GamePicksExpander, type ExpanderPick } from "@/components/live/game-pic
 import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import { TeamColorBar } from "@/components/live/team-color-bar";
+import { TeamMark } from "@/components/live/team-mark";
+import { scoreLogos } from "@/lib/team-logo";
 import { BoardPulsePanel } from "@/components/live/board-pulse-panel";
 import { useSharedLiveScores } from "@/components/live/use-live-scores";
 import { liveGameCardId, scrollToGameCard, useRegisterLiveGameJump } from "@/components/live/live-game-jump";
@@ -192,7 +194,7 @@ export function LiveScoreboard({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center justify-between">
                     <span className="flex min-w-0 items-center gap-2">
-                      <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
+                      <TeamMark logoUrl={scoreLogos(score).away} fallback={<TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />} />
                       <span className="truncate text-sm font-medium">{game.awayTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
@@ -206,7 +208,7 @@ export function LiveScoreboard({
 
                   <div className="flex items-center justify-between">
                     <span className="flex min-w-0 items-center gap-2">
-                      <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
+                      <TeamMark logoUrl={scoreLogos(score).home} fallback={<TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />} />
                       <span className="truncate text-sm font-medium">{game.homeTeam}</span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">
@@ -226,7 +228,7 @@ export function LiveScoreboard({
                 )}
               </Link>
 
-              <GamePicksExpander picks={matchedPicks} heavyRate={heavyRate} />
+              <GamePicksExpander picks={matchedPicks} heavyRate={heavyRate} teamLogos={scoreLogos(score)} />
             </div>
           );
         })}

@@ -2,6 +2,8 @@ import type { OddsGame, ScoreGame } from "@/server/data/odds";
 import { LocalGameTime } from "@/components/local-game-time";
 import { getTeamColor } from "@/lib/team-colors";
 import { TeamColorBar } from "@/components/live/team-color-bar";
+import { TeamMark } from "@/components/live/team-mark";
+import { scoreLogos } from "@/lib/team-logo";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
 import { teamScore } from "@/components/live/live-scoreboard-ordering";
@@ -142,7 +144,7 @@ export function GridLiveGameList({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />
+                    <TeamMark logoUrl={scoreLogos(score).away} fallback={<TeamColorBar color={getTeamColor(activeSport, game.awayTeam)} />} />
                     <span className="truncate text-[13px] font-semibold text-foreground">{game.awayTeam}</span>
                   </span>
                   <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
@@ -151,7 +153,7 @@ export function GridLiveGameList({
                 </div>
                 <div className="mt-1 flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />
+                    <TeamMark logoUrl={scoreLogos(score).home} fallback={<TeamColorBar color={getTeamColor(activeSport, game.homeTeam)} />} />
                     <span className="truncate text-[13px] font-semibold text-foreground">{game.homeTeam}</span>
                   </span>
                   <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">
