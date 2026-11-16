@@ -5,13 +5,13 @@
 // ML + spread merged into one team side, the easiest endorsed line as the anchor,
 // gated opposers only, hedged cappers on neither side, the markets left out,
 // and the record hierarchy / win-% lever / soft sample-size adjustment it reuses
-// from the generator, and (last section) the best-of-two raw-record gate and edge ordering
-// of scoring.ts (PR 8). Pure - no DB. Run with:
+// from the generator, and (last section) the gate and the order: scoring.ts's scorePick, exactly
+// Standard's gate (shrinkage, price-aware edge, long-shot rule), and its rankScore. Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/consensus-acceptance-test.ts
 import { buildConsensusPositions, HYBRID_MIN_SUPPORTERS, type ConsensusPosition } from "@/lib/parlay/consensus";
 import { optimizeHybrid } from "@/lib/parlay/hybrid";
 import { EVENTS, laddersOf, SLATE_10_27, SLATE_NOW, snapshotOfGames } from "@/lib/parlay/hybrid-scoring-frozen-cases";
-import { buildPlatformRates, EMPTY_PLATFORM_RATES, scorePick, scorePickBestOfTwo, type PickScore } from "@/lib/parlay/scoring";
+import { buildPlatformRates, EMPTY_PLATFORM_RATES, scorePick, type PlatformRates } from "@/lib/parlay/scoring";
 import { GENERATOR_Z, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { wilsonLowerBound } from "@/lib/wilson-lower-bound";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
@@ -219,7 +219,8 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
 {
   const base: Spec[] = [
     { id: "a", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: GOOD },
-    { id: "b", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
+    // 12-6, not 6-4: the gate is shrunk (scorePick), and 6-4 shrinks below 55.
+    { id: "b", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [12, 6] },
   ];
   const noOpp = find(build(base), "OVER")!;
   check("score is the strongest supporter's (8-2), not a sum", noOpp.score, Math.max(...noOpp.supporters.map((s) => s.score)));
@@ -294,12 +295,12 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
 
   // Over vs Under: the stronger single record wins, not the bigger crowd.
   const crowd = build([
-    { id: "o1", capper: "O1", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
-    { id: "o2", capper: "O2", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
-    { id: "o3", capper: "O3", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [6, 4] },
+    { id: "o1", capper: "O1", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [12, 6] },
+    { id: "o2", capper: "O2", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [12, 6] },
+    { id: "o3", capper: "O3", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [12, 6] },
     { id: "u1", capper: "U1", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [30, 10] },
   ]);
-  check("Over vs Under: one 30-10 Under beats three 6-4 Overs; the Over yields no position", crowd.map((p) => [p.direction, p.supporters.map((s) => s.capperId), p.opposers.map((o) => o.capperId)]), [["UNDER", ["U1"], ["O1", "O2", "O3"]]]);
+  check("Over vs Under: one 30-10 Under beats three 12-6 Overs; the Over yields no position", crowd.map((p) => [p.direction, p.supporters.map((s) => s.capperId), p.opposers.map((o) => o.capperId)]), [["UNDER", ["U1"], ["O1", "O2", "O3"]]]);
   // Equal score: the larger sample wins. 6-4 and 12-8 are both 60%, and 12-8 scores higher anyway - so use
   // equal records and decide on capper id.
   const tie = build([
@@ -315,11 +316,11 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
 
   // Opposing sides resolve the same way.
   const sides = build([
-    { id: "h1", capper: "H1", bet: { kind: "ML", team: "HOME" }, lg: [11, 9] },
-    { id: "h2", capper: "H2", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [11, 9] },
+    { id: "h1", capper: "H1", bet: { kind: "ML", team: "HOME" }, lg: [13, 7] },
+    { id: "h2", capper: "H2", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 7] },
     { id: "a1", capper: "A1", bet: { kind: "SPREAD", team: "AWAY", line: 3 }, lg: [40, 15] },
   ]);
-  check("opposing sides: one 40-15 road backer beats two 11-9 home backers", sides.map((p) => [p.direction, p.supporters.map((s) => s.capperId)]), [[AWAY, ["A1"]]]);
+  check("opposing sides: one 40-15 road backer beats two 13-7 home backers", sides.map((p) => [p.direction, p.supporters.map((s) => s.capperId)]), [[AWAY, ["A1"]]]);
   check("...the losing side's cappers are its opposers", sides[0].opposers.map((o) => o.capperId).sort(), ["H1", "H2"]);
 
   // Agreeing cappers are confidence: they never decide a direction, but they order equal positions.
@@ -368,17 +369,18 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
     [["A", "LEAGUE", 8, 0], ["B", "OVERALL", 60, 40]]
   );
   const tie = find(build([
-    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [6, 4] },
-    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4], all: [6, 4] },
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 6], all: [12, 6] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 6], all: [12, 6] },
   ]), HOME)!;
   check("a tie goes to the league record", tie.supporters.map((s) => s.record.source), ["LEAGUE", "LEAGUE"]);
-  // 50-40 in-league (55.6%) scores above 2-0 all time, so it is the record; at gate 60 it fails, and 2-0 is never tried.
+  // The record SHOWN is recordForGate's; the GATE is scorePick's. 50-40 in-league (55.6%) is the record shown, but
+  // scorePick shrinks it to 54.9%, so it fails 55 and passes 50; 7-3 (shrunk 58%) passes both.
   const gateSpecs: Spec[] = [
     { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [50, 40], all: [2, 0] },
     { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
   ];
-  check("gated on the chosen record: 50-40 passes 55", find(build(gateSpecs), HOME)?.supporters.map((s) => [s.capperId, s.record.source, s.record.wins]).sort(), [["A", "LEAGUE", 50], ["B", "LEAGUE", 7]]);
-  check("gated on the chosen record only: 50-40 fails 60, no fallback to 2-0", build(gateSpecs, { minWinPct: 60 }).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
+  check("the record shown is 50-40 in-league", find(build(gateSpecs, { minWinPct: 50 }), HOME)?.supporters.map((s) => [s.capperId, s.record.source, s.record.wins]).sort(), [["A", "LEAGUE", 50], ["B", "LEAGUE", 7]]);
+  check("...but the gate is the shrunk score: 50-40 (54.9%) fails 55 and passes 50", [55, 50].map((g) => build(gateSpecs, { minWinPct: g }).map((p) => p.supporters.map((s) => s.capperId).sort())), [[["B"]], [["A", "B"]]]);
   // The record's own market travels with it: A's best record is the moneyline (9-1), though the
   // hardest post (the endorsed line) is the spread, so recordMarket and postedMarket differ.
   const mixed = find(build([
@@ -404,17 +406,17 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
   check("no league win or loss falls back to the all-time record", overall.supporters.map((s) => [s.capperId, s.record.source]), [["A", "OVERALL"], ["B", "OVERALL"]]);
 }
 {
-  // A 6-4 (60%) and a 7-3 (70%) pair: the lever moves who qualifies.
+  // A 60-40 (shrunk 58.7%) and a 70-30 (shrunk 67.0%) pair: the lever moves who qualifies, on the shrunk score.
   const specs: Spec[] = [
-    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4] },
-    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [7, 3] },
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [60, 40] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [70, 30] },
   ];
-  check("default gate 55: both qualify", build(specs).length, 1);
-  check("gate 60 keeps a 60% record (>=)", build(specs, { minWinPct: 60 }).length, 1);
-  check("gate 65 drops the 60% capper: the 70% one alone carries it", build(specs, { minWinPct: 65 }).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
-  check("gate 75 drops both: no position", build(specs, { minWinPct: 75 }).length, 0);
-  check("gate 70 drops the 60%", build([specs[1], { ...specs[1], id: "c", capper: "C" }], { minWinPct: 70 }).length, 1);
-  check("an invalid lever is the 55 default", build(specs, { minWinPct: 63 }).length, 1);
+  const who = (gate?: number) => build(specs, gate === undefined ? {} : { minWinPct: gate }).map((p) => p.supporters.map((s) => s.capperId).sort());
+  check("default gate 55: both qualify", who(), [["A", "B"]]);
+  check("gate 60 drops 60-40 (shrunk 58.7%): the 70-30 one alone carries it", who(60), [["B"]]);
+  check("gate 65 keeps 70-30 (shrunk 67.0%)", who(65), [["B"]]);
+  check("gate 70 drops both: no position", who(70), []);
+  check("an invalid lever (80, above GATE_MAX) is the 55 default", who(80), [["A", "B"]]);
   check("gate 55 with a 52% record: not a supporter", build([specs[1], { id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }]).map((p) => p.supporters.map((s) => s.capperId)), [["B"]]);
   check("a below-gate capper alone never makes a position", build([{ id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }]).length, 0);
   check("gate 50 lets the 52% record in", build([specs[1], { id: "c", capper: "C", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [13, 12] }], { minWinPct: 50 }).length, 1);
@@ -425,8 +427,8 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
 // ============================================================================
 {
   const ps = build([
-    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4] },
-    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [6, 4] },
+    { id: "a", capper: "A", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 6] },
+    { id: "b", capper: "B", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [12, 6] },
     { id: "c", capper: "C", bet: { kind: "TOTAL", side: "Under", line: 40 }, lg: [30, 5] },
     { id: "d", capper: "D", bet: { kind: "TOTAL", side: "Under", line: 40 }, lg: [30, 5] },
   ]);
@@ -467,106 +469,116 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
 }
 
 // ============================================================================
-// The capper's ACTUAL record gates (PR 8), scoring.ts only orders.
+// The gate is Standard's (hyb-maingate-v3): scorePick's gate - the record shrunk toward the
+// capper's other leagues and the platform, the edge at the POSTED price, the long-shot rule on the
+// raw record. The order is that same scorePick's rankScore. The old raw either-half gate
+// (scorePickBestOfTwo) is gone: a small in-league sample no longer passes on its own.
 // ============================================================================
 {
-  const ctxOf = (snap: GeneratorSnapshot, gate: number) => ({ leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, platformRates: EMPTY_PLATFORM_RATES, minWinPct: gate });
+  const ctxOf = (snap: GeneratorSnapshot, gate: number, platformRates: PlatformRates = EMPTY_PLATFORM_RATES) => ({ leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, platformRates, minWinPct: gate });
   // Every lever setting (gate.ts: 0 to 75 in steps of 5).
   const GATES = Array.from({ length: 16 }, (_, i) => i * 5);
   const spread = (id: string, capper: string, lg?: [number, number], all?: [number, number]): Spec => ({ id, capper, bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg, all });
   const count = (specs: Spec[], gate: number) => build(specs, { minWinPct: gate }).length;
+  // One post, posted at `odds` (source: undefined = a pre-column pick, read by priceOf's rules).
+  const posted = (bet: Bet, lg: [number, number], all: [number, number], odds: number, source?: string, rates?: PlatformRates) => {
+    const snap = snapshotOf([{ id: "p", capper: "P", bet, lg, all }]);
+    const pick = snap.games[0].picks[0] as GeneratorPick & { oddsSource?: string };
+    pick.odds = odds;
+    if (source) (pick as { oddsSource?: string }).oddsSource = source;
+    return rates ? { ...snap, platformRates: rates } : snap;
+  };
+  const passes = (snap: GeneratorSnapshot, gate: number) => buildConsensusPositions(snap, { now: NOW, minWinPct: gate }).length === 1;
+  const passAt = (snap: GeneratorSnapshot) => GATES.filter((g) => passes(snap, g));
 
-  // The gate is the raw win %. With one record (in-league = all leagues) a post counts exactly when
-  // its win % reaches the lever, at every lever setting.
-  const records: [number, number][] = [[0, 1], [0, 5], [1, 0], [2, 0], [3, 2], [6, 4], [7, 3], [10, 10], [11, 9], [9, 11], [13, 12], [18, 4], [30, 10], [50, 40], [5, 9]];
+  // Parity with Standard: a post counts exactly when scorePick's gate passes - every bet, in-league /
+  // all-leagues pair, posted price (unknown, -110, a favourite, a dog, a long dog) and lever setting.
+  const pairs: [[number, number], [number, number]][] = [
+    [[0, 1], [0, 1]], [[1, 0], [1, 0]], [[1, 0], [64, 69]], [[8, 0], [20, 30]], [[2, 8], [30, 20]], [[10, 10], [10, 10]],
+    [[11, 9], [11, 9]], [[18, 4], [18, 4]], [[30, 10], [50, 40]], [[5, 9], [40, 20]], [[40, 15], [45, 20]], [[3, 0], [3, 0]],
+  ];
+  const prices: [number, string | undefined][] = [[-110, undefined], [-110, "STATED"], [-200, "STATED"], [150, "STATED"], [300, "MARKET"]];
   const bets: Bet[] = [{ kind: "SPREAD", team: "HOME", line: -3 }, { kind: "TOTAL", side: "Over", line: 44 }, { kind: "ML", team: "AWAY" }];
   const mismatches: string[] = [];
+  let parityPasses = 0;
   for (const bet of bets) {
-    for (const rec of records) {
-      const specs: Spec[] = [{ id: "p", capper: "P", bet, lg: rec, all: rec }];
-      for (const gate of GATES) {
-        const now = count(specs, gate);
-        const raw = (rec[0] / (rec[0] + rec[1])) * 100;
-        if (now !== (gate === 0 || raw >= gate ? 1 : 0)) mismatches.push(`${bet.kind} ${rec.join("-")} @ ${gate}: counted ${now}`);
+    for (const [lg, all] of pairs) {
+      for (const [odds, source] of prices) {
+        const snap = posted(bet, lg, all, odds, source);
+        for (const gate of GATES) {
+          const s = scorePick(snap.games[0].picks[0], ctxOf(snap, gate));
+          const standard = s.status === "SCORED" && s.gate.passes;
+          if (standard) parityPasses++;
+          if (passes(snap, gate) !== standard) mismatches.push(`${bet.kind} ${lg.join("-")}/${all.join("-")} @ ${odds}${source ?? ""} L${gate}`);
+        }
       }
     }
   }
-  check("raw-record gate: a post counts exactly when its win % reaches the lever (3 bets x 15 records x 16 gates)", mismatches, []);
-  check("no shrinkage in the gate: 1-0 passes at 75, 11-9 passes at 55 and 9-11 at 45 to the last bit", [count([spread("a", "A", [1, 0])], 75), count([spread("a", "A", [11, 9])], 55), count([spread("a", "A", [9, 11])], 45)], [1, 1, 1]);
-  check("...and 10-10 at -110 passes at 45 and 50, not 55", [45, 50, 55].map((g) => count([spread("e", "E", [10, 10])], g)), [1, 1, 0]);
-
-  // Either record clears: 30-20 overall with 2-8 in this league, and 8-0 in this league with 20-30 overall.
-  const wideSnap = snapshotOf([spread("w", "W", [2, 8], [30, 20])]);
-  const wide = scorePickBestOfTwo(wideSnap.games[0].picks[0], ctxOf(wideSnap, 55));
-  check("either record, all leagues: 30-20 overall (2-8 here) passes 55 and 60 on the all-leagues record, fails 65", [55, 60, 65].map((g) => count([spread("w", "W", [2, 8], [30, 20])], g)), [1, 1, 0]);
-  check("...it is the all-leagues half that cleared, and it is ranked", [wide.raw.inLeague?.clears, wide.raw.allLeagues?.clears, wide.chosenFrom], [false, true, "ALL_LEAGUES"]);
-  const localSnap = snapshotOf([spread("l", "L", [8, 0], [20, 30])]);
-  const local = scorePickBestOfTwo(localSnap.games[0].picks[0], ctxOf(localSnap, 55));
-  check("either record, in-league: 8-0 here with 20-30 overall passes EVERY lever setting (it is not dropped)", GATES.map((g) => count([spread("l", "L", [8, 0], [20, 30])], g)), Array(16).fill(1));
-  check("...it is the in-league half that cleared (all-leagues is 40%), and it is ranked", [local.raw.inLeague?.clears, local.raw.allLeagues?.clears, local.chosenFrom], [true, false, "IN_LEAGUE"]);
-  check("...the 8-0 / 20-30 capper at 55: the position carries the in-league score", build([spread("l", "L", [8, 0], [20, 30])], { minWinPct: 55 })[0].supporters[0].scoring?.from, "IN_LEAGUE");
+  check("Standard parity: a post counts exactly when scorePick's gate passes (3 bets x 12 records x 5 prices x 16 gates)", mismatches, []);
+  check("...and the parity grid is not trivially all-fail or all-pass", parityPasses > 0 && parityPasses < 3 * 12 * 5 * 16, true);
   check("a record with no decided pick is no record: 0-0 does not pass even at 0", count([{ id: "z", capper: "Z", bet: { kind: "SPREAD", team: "HOME", line: -3 }, lg: [0, 0] }], 0), 0);
-  const neitherSnap = snapshotOf([spread("n", "N", [3, 7], [10, 25])]);
-  const neither = scorePickBestOfTwo(neitherSnap.games[0].picks[0], ctxOf(neitherSnap, 55));
-  check("neither record clears: not a post, and nothing is chosen to rank", [neither.passes, neither.chosen, neither.chosenFrom], [false, null, null]);
 
-  // Ordering: the better rankScore among ONLY the records that cleared. 12-10 here (54.5%, fails 55) with
-  // 70-42 overall (62.5%, clears), priced history on both: scored alone the failed in-league half is the higher
-  // edge (11.9 vs 7.8) - it must not be the one that ranks.
+  // (a) A 1-0 in-league sample over a weak, large all-leagues record no longer passes on its own. 1-0 here and
+  // 64-69 overall (63-69 in other leagues, 47.7%): the old raw gate passed it at every lever (100% in-league); the
+  // shrunk probability is ~50.8% and the long-shot rule reads 64-69 (48.1%) against -110's 52.4% - it fails at 55.
+  const tiny = posted({ kind: "SPREAD", team: "HOME", line: -3 }, [1, 0], [64, 69], -110, "STATED");
+  const tinyScore = scorePick(tiny.games[0].picks[0], ctxOf(tiny, 55));
+  check("(a) 1-0 in-league / 64-69 all-leagues: no position at 55", passes(tiny, 55), false);
+  check("(a) ...its shrunk probability is pulled to the other leagues (~50.8%), and the raw 64-69 fails the long-shot bar", tinyScore.status === "SCORED" ? [+(tinyScore.shrunkWinProb * 100).toFixed(1), tinyScore.gate.raw?.clears] : null, [50.8, false]);
+  check("(a) ...it passes only where Standard would: up to 45 (bar = L / 100 there)", passAt(tiny), [0, 5, 10, 15, 20, 25, 30, 35, 40, 45]);
+  // The same shape with the old example's other cappers: 4-0 in-league over 9-17 overall, and 8-0 over 20-30.
+  check("(a) 4-0 in-league / 9-17 all-leagues fails at 46 and 55", [46, 55].map((g) => passes(posted({ kind: "TOTAL", side: "Under", line: 44 }, [4, 0], [9, 17], -112, "MARKET"), g)), [false, false]);
+  check("(a) 8-0 in-league / 20-30 all-leagues (40% overall) passes up to 40, not above: the raw record is the long-shot rule's", passAt(posted({ kind: "SPREAD", team: "HOME", line: -3 }, [8, 0], [20, 30], -110, "STATED")), [0, 5, 10, 15, 20, 25, 30, 35, 40]);
+  // ...and the other way round: 2-8 in-league over 30-20 overall is shrunk to ~49%, so it fails 55 (the old gate passed it).
+  check("(a) 2-8 in-league / 30-20 all-leagues: no position at 55 either", passes(posted({ kind: "SPREAD", team: "HOME", line: -3 }, [2, 8], [30, 20], -110, "STATED"), 55), false);
+
+  // (b) A strong, large in-league record passes: 40-15 here (72.7%) and 45-20 overall.
+  const strong = posted({ kind: "SPREAD", team: "HOME", line: -3 }, [40, 15], [45, 20], -110, "STATED");
+  check("(b) 40-15 in-league / 45-20 all-leagues passes 55, 60 and 65, not 70", [55, 60, 65, 70].map((g) => passes(strong, g)), [true, true, true, false]);
+  check("(b) ...an 18-4 capper with one record passes at 55 and 65", [55, 65].map((g) => passes(posted({ kind: "TOTAL", side: "Over", line: 44 }, [18, 4], [18, 4], -110, "STATED"), g)), [true, true]);
+
+  // (c) Price-aware: the edge must clear the POSTED price's break-even. The same 30-15 favourite record passes
+  // at -110 and fails at -250 (its ~62% does not reach -250's 71.4% plus the lever's edge).
+  const fav = (odds: number) => posted({ kind: "ML", team: "HOME" }, [30, 15], [30, 15], odds, "STATED");
+  check("(c) a 30-15 favourite passes 55 at -110, not at -250", [passes(fav(-110), 55), passes(fav(-250), 55)], [true, false]);
+  const favScore = scorePick(fav(-250).games[0].picks[0], ctxOf(fav(-250), 55));
+  check("(c) ...at -250 the gate compares against the pick's own break-even (71.4%)", favScore.status === "SCORED" ? +(favScore.gate.breakEven * 100).toFixed(1) : null, 71.4);
+  // And the other way: a 6-4 dog on a ~38% dog prior clears +150's 40% break-even, but the same record at -110 does not.
+  const DOG_RATES = buildPlatformRates([{ league: LEAGUE, betType: "MONEYLINE", key: "DOG_ML", wins: 380, losses: 620, impliedSum: 300, priced: 1000 }]);
+  const dog = (lg: [number, number], odds: number) => posted({ kind: "ML", team: "AWAY" }, lg, lg, odds, "STATED", DOG_RATES);
+  check("(c) a 6-4 dog passes 55 at +150 and fails at -110", [passes(dog([6, 4], 150), 55), passes(dog([6, 4], -110), 55)], [true, false]);
+  // The long-shot rule: a 0-3 dog at +300 scores a positive edge on the prior, but its raw record fails every gate above 0.
+  const zeroWin = dog([0, 3], 300);
+  const zs = scorePick(zeroWin.games[0].picks[0], ctxOf(zeroWin, 55, DOG_RATES));
+  check("(c) a 0-3 dog at +300 still scores a positive edge on the platform's dog prior", zs.status === "SCORED" && zs.rankScore > 0.0262, true);
+  check("(c) ...and the long-shot rule fails it at every gate above 0 (it passes at 0)", passAt(zeroWin), [0]);
+  check("0-for-N never passes above 0, at any price", [[0, 1], [0, 8], [0, 20]].flatMap(([w, l]) => [150, 300, 600].map((o) => passAt(dog([w, l], o)).join(","))), Array(9).fill("0"));
+  // Lowering L never removes a capper: at every price the gates a record passes are 0 up to some setting, with no gaps.
+  const POOL: [number, number][] = [[1, 0], [3, 7], [6, 14], [14, 16], [1, 4], [10, 10], [2, 6], [8, 0], [30, 20]];
+  const prefix = (gs: number[]) => gs.every((g, i) => g === GATES[i]);
+  check("lowering L never removes a capper: the passing gates are always 0..k, at every price", POOL.every((rec) => [-110, 150, 300, 600].every((o) => prefix(passAt(dog(rec, o))))), true);
+
+  // The order is the gate's own score: the position's score is scorePick's rankScore, and the supporter carries
+  // what scored it (decided picks, the model).
   const edgeSnap = snapshotOf([spread("p", "P", [12, 10], [70, 42])]);
   (edgeSnap.games[0].picks[0] as GeneratorPick & { oddsSource?: string }).oddsSource = "STATED";
   const card = edgeSnap.leagueRecords.records["P|" + LEAGUE + "|SPREAD_MINUS"] as unknown as { priced?: unknown };
   card.priced = { league: { wins: 12, losses: 10, impliedSum: 8.18 }, overall: { wins: 70, losses: 42, impliedSum: 59.82 } };
-  const edge = scorePickBestOfTwo(edgeSnap.games[0].picks[0], ctxOf(edgeSnap, 55));
-  const rank = (s: PickScore | null) => (s && s.status === "SCORED" ? s.rankScore : NaN);
-  check("ordering: the half that FAILED the gate scores higher than the one that cleared it", rank(edge.inLeague) > rank(edge.allLeagues), true);
-  check("...yet only the cleared half is ranked", [edge.raw.inLeague?.clears, edge.raw.allLeagues?.clears, edge.chosenFrom, rank(edge.chosen) === rank(edge.allLeagues)], [false, true, "ALL_LEAGUES", true]);
+  const edgeScore = scorePick(edgeSnap.games[0].picks[0], ctxOf(edgeSnap, 55));
   const edgePos = buildConsensusPositions(edgeSnap, { now: NOW, minWinPct: 55 })[0];
-  check("...and the position's score is the cleared half's, with the model that scored it", [edgePos.score === rank(edge.allLeagues), edgePos.supporters[0].scoring?.model, edgePos.supporters[0].scoring?.from], [true, "edge model", "ALL_LEAGUES"]);
-  // Both clear: the better rankScore, in-league on a tie.
-  const bothSnap = snapshotOf([spread("b", "B", [12, 5], [40, 20])]);
-  const both = scorePickBestOfTwo(bothSnap.games[0].picks[0], ctxOf(bothSnap, 55));
-  check("both records clear: the better rankScore ranks", [both.passes, rank(both.chosen) === Math.max(rank(both.inLeague), rank(both.allLeagues))], [true, true]);
+  check("the position's score is scorePick's rankScore, scored by the edge model", [edgeScore.status === "SCORED" && edgePos.score === edgeScore.rankScore, edgePos.supporters[0].scoring], [true, { decided: 112, model: "edge model" }]);
   const bothPos = build([spread("b", "B", [12, 5], [40, 20])], { minWinPct: 55 })[0];
-  check("the supporter carries what scored it (decided picks, which record, the model)", bothPos.supporters[0].scoring, { decided: 60, from: both.chosenFrom, model: "win-rate model" });
+  check("the supporter carries what scored it (decided picks, the model)", bothPos.supporters[0].scoring, { decided: 60, model: "win-rate model" });
   check("the record shown is still recordForGate's (40-20 all-time beats 12-5 by Wilson)", bothPos.supporters[0].record.source, "OVERALL");
-  check("the in-league half is exactly Standard's scorePick (Standard is untouched)", JSON.stringify(wide.inLeague), JSON.stringify(scorePick(wideSnap.games[0].picks[0], ctxOf(wideSnap, 55))));
-  check("the all-leagues half pools every league as one level", wide.allLeagues.status === "SCORED" ? [wide.allLeagues.levels.league, wide.allLeagues.levels.otherLeagues, wide.allLeagues.scope] : null, [{ wins: 30, losses: 20 }, { wins: 0, losses: 0 }, "ALL_LEAGUES"]);
 
   // Ordering by the shrunk score: 14-2 outranks 5-0. Equal scores: capper id.
   const ranked = build([{ id: "a", capper: "A", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [5, 0] }, { id: "b", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [14, 2] }], {})[0];
-  check("ordering: 14-2 shrunk outranks 5-0, though both pass on the raw record", ranked.supporters.map((s) => s.capperId), ["B", "A"]);
+  check("ordering: 14-2 shrunk outranks 5-0, though both pass", ranked.supporters.map((s) => s.capperId), ["B", "A"]);
   check("equal scores: capper id decides (A's Under)", build([{ id: "o", capper: "B", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [8, 2] }, { id: "u", capper: "A", bet: { kind: "TOTAL", side: "Under", line: 44 }, lg: [8, 2] }], {}).map((p) => p.direction), ["UNDER"]);
 
   // L = 0: any graded record passes, no record never does; a 0-5 capper is a position, with a negative score.
   const weak = build([{ id: "w", capper: "W", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [0, 5] }], { minWinPct: 0 });
   check("L = 0: a 0-5 capper is a position (negative edge, never 0), a 0-0 one is not", [weak.length, (weak[0].score ?? 0) < 0, count([{ id: "z", capper: "Z", bet: { kind: "TOTAL", side: "Over", line: 44 }, lg: [0, 0] }], 0)], [1, true, 0]);
-
-  // No rule C and no price in the gate: a dog ML at its posted price on a ~38% dog prior.
-  const DOG_RATES = buildPlatformRates([{ league: LEAGUE, betType: "MONEYLINE", key: "DOG_ML", wins: 380, losses: 620, impliedSum: 300, priced: 1000 }]);
-  const dog = (lg: [number, number], odds: number) => {
-    const snap = snapshotOf([{ id: "d", capper: "D", bet: { kind: "ML", team: "AWAY" }, lg, all: lg }]);
-    const pick = snap.games[0].picks[0] as GeneratorPick & { oddsSource?: string };
-    pick.odds = odds;
-    pick.oddsSource = "STATED";
-    return { ...snap, platformRates: DOG_RATES };
-  };
-  const passAt = (lg: [number, number], odds: number) => GATES.filter((g) => buildConsensusPositions(dog(lg, odds), { now: NOW, minWinPct: g }).length === 1);
-  const zeroWin = dog([0, 3], 300);
-  const zs = scorePickBestOfTwo(zeroWin.games[0].picks[0], { ...ctxOf(zeroWin, 55), platformRates: DOG_RATES });
-  check("a 0-3 dog at +300 still scores a positive edge on the platform's dog prior (so the gate must not be the score)", zs.inLeague.status === "SCORED" && zs.inLeague.rankScore > 0.0262, true);
-  check("the raw record fails it at every gate above 0 (and passes at 0)", passAt([0, 3], 300), [0]);
-  check("0-for-N never passes above 0, at any price", [[0, 1], [0, 8], [0, 20]].flatMap(([w, l]) => [150, 300, 600].map((o) => passAt([w, l], o).join(","))), Array(9).fill("0"));
-  // Lowering L never removes a capper: each record passes at every gate up to its win % and none above, at any price.
-  const POOL: [number, number][] = [[1, 0], [3, 7], [6, 14], [14, 16], [1, 4], [10, 10], [2, 6], [8, 0], [30, 20]];
-  const lowerKeeps = POOL.every((rec) =>
-    [-110, 150, 300, 600].every((o) => {
-      const cut = (rec[0] / (rec[0] + rec[1])) * 100;
-      return JSON.stringify(passAt(rec, o)) === JSON.stringify(GATES.filter((g) => g === 0 || cut >= g));
-    })
-  );
-  check("lowering L never removes a capper: each record passes exactly the gates up to its win %, at every price", lowerKeeps, true);
-  check("price plays no part in the gate: 14-16 passes up to 45 and fails from 50 whether posted at -110 or +400", [-110, 400].map((o) => passAt([14, 16], o).join(",")), Array(2).fill("0,5,10,15,20,25,30,35,40,45"));
 
   // The FanDuel ladder price never reaches scoring: consensus reads only the pick as posted. The same slate under
   // two different FanDuel boards gives the same positions and the same leg scores; moving the POSTED price does move it.
@@ -587,7 +599,7 @@ check("the supporter threshold is a named constant at 1: one strong capper is en
     pick.oddsSource = "STATED";
     return buildConsensusPositions(snap, { now: NOW, minWinPct: 0 })[0].score!;
   };
-  check("the capper's POSTED price does move the score (-110 vs -200) - ordering only; the gate above ignores it", postedAt(-200) < postedAt(-110), true);
+  check("the capper's POSTED price moves the score (-110 vs -200), the same edge the gate reads", postedAt(-200) < postedAt(-110), true);
 }
 if (failures > 0) {
   console.error(`\n${failures} FAILED`);

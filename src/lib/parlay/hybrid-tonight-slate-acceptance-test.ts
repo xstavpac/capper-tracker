@@ -2,9 +2,10 @@
 // 15 games with picks, the cappers' real records as the Live board showed them that
 // night (all-time and in-league, by bet category; hybrid-scoring-frozen-cases.ts SLATE_10_27).
 // Under the old two-cappers-agree rule only Brewers @ Rays formed a box.
-//   - Five games form a box (PR 8). The gate is the capper's actual record (either the
-//     in-league or the all-leagues record reaching 55), so Porter PICKS' 4-2 NHL Under (12-19 overall)
-//     passes; the shrunk score only orders, and puts O2's 5-4 Over ahead of it on Devils @ Stars.
+//   - Four games form a box (hyb-maingate-v3). The gate is Standard's (scorePick: the in-league record
+//     shrunk toward the other leagues, the edge at the posted price, the long-shot rule). Devils @ Stars,
+//     a box under v2's raw either-record gate, loses its total: Porter PICKS' 4-2 NHL Under (12-19 overall)
+//     and O2's 5-4 Over both fall short of 55 once sample size counts.
 // The others are skipped for the reason "Why only N games?" gives. Pure - no DB, no fetch.
 //   npx tsx src/lib/parlay/hybrid-tonight-slate-acceptance-test.ts            check
 //   npx tsx src/lib/parlay/hybrid-tonight-slate-acceptance-test.ts --digest   print the selection digest (SCORING)
@@ -46,33 +47,35 @@ if (process.argv.includes("--digest")) {
   process.exit(0);
 }
 
-const FIVE = ["Brewers @ Rays", "Devils @ Stars", "Kings @ Blackhawks", "Senators @ Golden Knights", "Trail Blazers @ Lakers"];
+const FOUR = ["Brewers @ Rays", "Kings @ Blackhawks", "Senators @ Golden Knights", "Trail Blazers @ Lakers"];
 
 // ============================================================================
-// SCORING (the default): the capper's actual record gates (either the in-league or the all-leagues
-// record reaching 55), the shrunk rankScore at the posted price orders
+// SCORING (the default): Standard's gate (scorePick), and its rankScore at the posted price orders
 // ============================================================================
 const s = run();
-check("five games form a box, Devils @ Stars keeps its total", s.boxes.map((b) => labelOf(b.eventId)).sort(), FIVE);
+check("four games form a box; Devils @ Stars no longer does (no total clears the shrunk gate)", s.boxes.map((b) => labelOf(b.eventId)).sort(), FOUR);
 check("Brewers @ Rays: Sharp Sheet on the Rays ML still beats BEEZOWINS on the Brewers; BEEZOWINS' Over drives the total", s.legOf("Brewers @ Rays"), { side: ["Sharp Sheet", EVENTS.MLB.home_team], total: ["BEEZOWINS", "OVER"] });
 check("Kings @ Blackhawks: KIMSPICKS 7-1 (19-9 all) now outranks SHARP 5-0 (15-8 all) - ordered by the shrunk score, so a 5-0 is no longer the stronger record; both still pass the gate", s.legOf("Kings @ Blackhawks"), { side: ["KIMSPICKS", EVENTS.NHL.home_team], total: ["BEEZOWINS", "OVER"] });
 check("Trail Blazers @ Lakers: Porter PICKS 47-23 on the road spread; BET LABS 7-3 alone on the Under", s.legOf("Trail Blazers @ Lakers"), { side: ["Porter PICKS", EVENTS.NBA.away_team], total: ["BET LABS", "UNDER"] });
 check("Senators @ Golden Knights: Duck 26-20 alone on the home ML, Pardon My Pick alone on the Over", s.legOf("Senators @ Golden Knights"), { side: ["Duck", EVENTS.NHL.home_team], total: ["Pardon My Pick", "OVER"] });
-check("Devils @ Stars: YDC 7-1 on the road ML; the total is O2's 5-4 Over (55.6% passes 55, shrunk +0.7) - Porter PICKS' 4-2 Under also passes, but its shrunk score (12-19 overall) is -5.5, so it is the opposer", [s.legOf("Devils @ Stars"), s.positions.find((p) => p.key === "NHL2|TOTAL|OVER")!.opposers.map((c) => c.capperName)], [{ side: ["YDC", EVENTS.NHL.away_team], total: ["O2", "OVER"] }, ["Porter PICKS"]]);
-check("Devils @ Stars: one side and one total position", s.onGame("NHL2"), ["SIDE:" + EVENTS.NHL.away_team, "TOTAL:OVER"]);
+check("Devils @ Stars: only YDC's 7-1 road ML stands; no total position", s.onGame("NHL2"), ["SIDE:" + EVENTS.NHL.away_team]);
 check("Brewers @ Rays: no Brewers position and no Under position", s.onGame("MLB1"), ["SIDE:" + EVENTS.MLB.home_team, "TOTAL:OVER"]);
 const rays = s.positions.find((p) => p.eventId === "MLB1" && p.family === "SIDE")!;
-check("the losing direction's gated cappers ride along as opposers (BEEZOWINS 28-18 and Proven winner 9-7 both pass 55 raw), without moving the score", [rays.opposers.map((c) => c.capperName), rays.score === rays.supporters[0].score], [["BEEZOWINS", "Proven winner"], true]);
+check("the losing direction's gated cappers ride along as opposers (BEEZOWINS 28-18 shrinks to 57.5% and clears; Proven winner 9-7 shrinks to 52.5% and does not), without moving the score", [rays.opposers.map((c) => c.capperName), rays.score === rays.supporters[0].score], [["BEEZOWINS"], true]);
 check("agreeing cappers are kept (confidence), the strongest first", rays.supporters.map((c) => c.capperName).slice(0, 2), ["Sharp Sheet", "R3"]);
-check("every supporter's score is an edge from scoring.ts, with the record that won the best of two", rays.supporters.every((c) => c.scoring !== undefined && c.score > 0 && c.score < 0.5), true);
-check("cap 15: a multi-box parlay of the five games, 10 of 15 legs", [s.result.primary?.structure, s.result.delivery.requestedLegs, s.result.delivery.deliveredLegs, s.result.delivery.boxes, s.result.delivery.qualifyingGames, s.result.delivery.shortOfGames], ["multi-box", 15, 10, 5, 5, true]);
+check("every supporter's score is scorePick's edge, with the model that scored it", rays.supporters.every((c) => c.scoring !== undefined && c.score > 0 && c.score < 0.5), true);
+check("cap 15: a multi-box parlay of the four games, 8 of 15 legs", [s.result.primary?.structure, s.result.delivery.requestedLegs, s.result.delivery.deliveredLegs, s.result.delivery.boxes, s.result.delivery.qualifyingGames, s.result.delivery.shortOfGames], ["multi-box", 15, 8, 4, 4, true]);
 check("cap 15: no box was lost to a missing line", s.report.noLine, []);
 
-check("ten games left out", s.d.skipped.length, 10);
-check("why: the side's best capper is below 55%", [s.why["Bruins @ Hurricanes"], s.why["Sabres @ Sharks"]], [`Best ${EVENTS.NHL.away_team} capper 47% (47-52), needs 55%`, `Best ${EVENTS.NHL.away_team} capper 52% (22-20), needs 55%`]);
-check("why: the total's best capper is below 55%", [s.why["Pistons @ Knicks"], s.why["Kings @ Spurs"], s.why["Wild @ Mammoth"]], ["Best Over capper 50% (27-27), needs 55%", "Best Over capper 42% (8-11), needs 55%", "Best Over capper 50% (8-8), needs 55%"]);
+check("eleven games left out", s.d.skipped.length, 11);
+// The text names what the gate read: the rating once sample size and the posted price count, or the long-shot rule's raw record.
+check("why: Devils @ Stars' best total capper rates under 55% once sample size counts", s.why["Devils @ Stars"], "Best Over capper 56% (5-4) rates 53.1% once sample size and price count, needs 55%");
+// Bruins @ Hurricanes: the best is now the post the gate scores highest (10-12, rated 48.6%), not the highest raw % (47-52).
+check("why: the side's best capper is below 55%", [s.why["Bruins @ Hurricanes"], s.why["Sabres @ Sharks"]], [`Best ${EVENTS.NHL.home_team} capper 45% (10-12) rates 48.6% once sample size and price count, needs 55%`, `Best ${EVENTS.NHL.away_team} capper 52% (22-20) rates 52.3% once sample size and price count, needs 55%`]);
+check("why: the total's best capper fails the long-shot rule at its price", [s.why["Pistons @ Knicks"], s.why["Kings @ Spurs"], s.why["Wild @ Mammoth"]], ["Best Over capper 50% (27-27): 27-27 across leagues is under the 52.4% its price needs", "Best Over capper 42% (8-11): 8-11 across leagues is under the 52.4% its price needs", "Best Over capper 50% (8-8): 8-8 across leagues is under the 52.4% its price needs"]);
 check("why: no total picks", [s.why["Panthers @ Jets"], s.why["Canadiens @ Blues"], s.why["Sam Houston State @ Missouri State"]], ["No full-game total picks", "No full-game total picks", "No full-game total picks"]);
 check("why: no side picks", [s.why["Islanders @ Predators"], s.why["Canucks @ Ducks"]], ["No full-game side picks (spread or moneyline)", "No full-game side picks (spread or moneyline)"]);
-check("no game is held back for too few cappers agreeing, or by a sample-size / price gate the text cannot explain", s.d.skipped.some((r) => r.reason === "not-enough-supporters" || r.text.includes("needs 2") || r.text.includes("once sample size")), false);
+check("no game is held back for too few cappers agreeing", s.d.skipped.some((r) => r.reason === "not-enough-supporters" || r.text.includes("needs 2")), false);
+check("every below-gate reason says what the gate read (sample size and price, or the long-shot record)", s.d.skipped.filter((r) => r.reason === "below-gate").every((r) => r.text.includes("once sample size and price count") || r.text.includes("its price needs")), true);
 console.log(failures > 0 ? `\n${failures} check(s) FAILED.` : "\nAll tonight-slate checks passed.");
 process.exit(failures > 0 ? 1 : 0);

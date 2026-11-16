@@ -117,8 +117,8 @@ check("a: outside the window, weekly league", textOf("S3"), "Not in this week's 
 check("b: props and period picks only", [reasonOf("G01"), textOf("G01")], ["no-eligible-picks", "No full-game spread, moneyline or total picks (2 other picks: props, periods or team totals)"]);
 check("c: a side but no total", [reasonOf("G02"), textOf("G02")], ["no-total-picks", "No full-game total picks"]);
 check("c: a total but no side", [reasonOf("G03"), textOf("G03")], ["no-side-picks", "No full-game side picks (spread or moneyline)"]);
-check("d: the best total capper is below 55%, with the record", [reasonOf("G04"), textOf("G04")], ["below-gate", "Best Over capper 50% (8-8), needs 55%"]);
-check("d: the side is checked before the total", [reasonOf("G05"), textOf("G05")], ["below-gate", "Best Denver Broncos capper 47% (47-52), needs 55%"]);
+check("d: the best total capper is below 55%, with the record and what the gate read (the long-shot rule at -110)", [reasonOf("G04"), textOf("G04")], ["below-gate", "Best Over capper 50% (8-8): 8-8 across leagues is under the 52.4% its price needs"]);
+check("d: the side is checked before the total", [reasonOf("G05"), textOf("G05")], ["below-gate", "Best Denver Broncos capper 47% (47-52): 47-52 across leagues is under the 52.4% its price needs"]);
 check("one capper at 55%+ on the total is enough now: the game is a box (here past the pricing limit)", reasonOf("G06"), "beyond-ladder-limit");
 check("\"needs 2\" never appears under the one-capper rule", d.skipped.some((r) => r.text.includes("needs 2")), false);
 // With a minimum of 2 (still supported), the agreement gate reads as before.

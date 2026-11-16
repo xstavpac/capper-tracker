@@ -352,10 +352,11 @@ export function standardScoringVersion(): string {
   return `standard/${SCORING_VERSION}/${SELECTION_VERSION}/${CONTRARIAN_VERSION}`;
 }
 
-// A Consensus Hybrid run: the raw-record gate over scoring.ts's best of two, ordered by
-// rankScore at the capper's posted price (consensus.ts).
-// hyb-rawgate-bo2-v2: v1 (hyb-posted-v1) gated on the shrunk, price-aware score and rule C.
-export const HYBRID_VERSION = "hyb-rawgate-bo2-v2";
+// A Consensus Hybrid run: scorePick's gate (Standard's: shrinkage, price-aware edge, long-shot
+// rule) and its rankScore at the capper's posted price (consensus.ts).
+// hyb-maingate-v3: v2 (hyb-rawgate-bo2-v2) gated on the raw win % of EITHER the in-league or the
+// all-leagues record (scorePickBestOfTwo, now removed), so a 1-0 in-league sample passed alone.
+export const HYBRID_VERSION = "hyb-maingate-v3";
 export function hybridScoringVersion(): string {
   return `hybrid/${SCORING_VERSION}/${HYBRID_VERSION}`;
 }

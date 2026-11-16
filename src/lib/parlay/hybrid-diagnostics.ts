@@ -148,7 +148,15 @@ function consensusGate(
     const gated = Object.values(f.gatedByDirection).reduce((a, b) => a + b, 0) + f.hedged;
     if (gated > 0) continue;
     if (!f.best) return { reason: "below-gate", text: gate === 0 ? `No ${noun} capper has a graded record in this bet yet` : `No ${noun} capper has a record in this bet yet (needs ${gate}%)` };
-    return { reason: "below-gate", text: `Best ${directionLabel(f.best.direction)} capper ${pct(f.best.winPct)} (${f.best.wins}-${f.best.losses}), needs ${gate}%` };
+    // The gate is scorePick's, so the text names what it read, not only the record shown: the long-shot rule's
+    // raw record when that failed, else the rating once sample size and the posted price are counted.
+    // One decimal for what the gate read, so a post just under the bar never rounds up to it (59.8%, not 60%).
+    const b = f.best;
+    const pct1 = (x: number) => `${x.toFixed(1)}%`;
+    const head = `Best ${directionLabel(b.direction)} capper ${pct(b.winPct)} (${b.wins}-${b.losses})`;
+    if (b.longShot) return { reason: "below-gate", text: `${head}: ${b.longShot.wins}-${b.longShot.decided - b.longShot.wins} across leagues is under the ${pct1(b.longShot.bar * 100)} its price needs` };
+    if (b.rated !== null) return { reason: "below-gate", text: `${head} rates ${pct1(b.rated)} once sample size and price count, needs ${gate}%` };
+    return { reason: "below-gate", text: `${head}, needs ${gate}%` };
   }
   for (const [noun, f] of families) {
     const entries = Object.entries(f.gatedByDirection).sort((a, b) => b[1] - a[1]);
