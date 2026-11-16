@@ -151,10 +151,11 @@ check("ordering score is z = 1.5", GENERATOR_Z, 1.5);
 
   const built = buildGeneratedParlay(snap, SETTINGS, null, NOW);
   const leg = built.legs.find((l) => l.pick.pickId === "tie")!;
-  check("the leg's suffix names the chosen record: MLB", recordText(leg.record, leg.basis, leg.pick), "60% (60–40) · MLB favorite moneyline");
+  // What a leg and a swap SHOW is shownRecord (PR C): the all-leagues record with the MLB slice, whichever half recordForGate picks.
+  check("the leg shows its combined record with the MLB slice", recordText(leg.record, leg.basis, leg.pick, undefined, leg.leagueSlice), "60% (60–40) · Favorite moneyline · MLB 60–40");
   const hedge = built.hedge.SUGGESTED.legs.find((l) => l.original.pick.pickId === "hedged")!;
-  check("Hedge alternate on its better record (all time 60-40 over 1-2 in MLB)", hedge.swap && { to: hedge.swap.pick.pickId, basis: hedge.swap.basis, record: `${hedge.swap.record.wins}-${hedge.swap.record.losses}` }, { to: "hedgeAlt", basis: "OVERALL", record: "60-40" });
-  check("swap suffix names the chosen record: all leagues", hedge.swap && recordText(hedge.swap.record, hedge.swap.basis ?? null, hedge.swap.pick), "60% (60–40) · all leagues over");
+  check("Hedge alternate shown on its all-time 60-40", hedge.swap && { to: hedge.swap.pick.pickId, basis: hedge.swap.basis, record: `${hedge.swap.record.wins}-${hedge.swap.record.losses}` }, { to: "hedgeAlt", basis: "OVERALL", record: "60-40" });
+  check("swap label: combined, category, MLB slice", hedge.swap && recordText(hedge.swap.record, hedge.swap.basis ?? null, hedge.swap.pick, undefined, hedge.swap.leagueSlice), "60% (60–40) · Over · MLB 1–2");
   const flip = built.contrarian.SUGGESTED.legs.find((l) => l.original.pick.pickId === "flipped")!;
   check("Contrarian alternate on its better record (all time 60-40 over 1-0 in MLB)", flip.swap && { to: flip.swap.pick.pickId, basis: flip.swap.basis }, { to: "flipAlt", basis: "OVERALL" });
 }
