@@ -298,7 +298,7 @@ export default async function PicksPage({
 
   return (
     <>
-    <PageBanner variant="picks" title="Picks" icon={PAGE_BANNER_ICONS.picks} />
+    <PageBanner variant="picks" title="Picks" icon={PAGE_BANNER_ICONS.picks} motto="EVERY PICK · EVERY RESULT" />
     <ThemedPage>
       <div>
         {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
