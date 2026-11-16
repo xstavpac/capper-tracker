@@ -250,6 +250,13 @@ const NHL_LINE_PROP_KEYS: Record<string, string> = {
   SAVES: "player_total_saves",
 };
 const NBA_SPORT_KEY = "basketball_nba";
+const NFL_SPORT_KEY = "americanfootball_nfl";
+// Player-prop alternate ladders are the main key plus "_alternate" (the Odds API's
+// betting-markets page lists every key mapped above that way; game lines use the
+// "alternate_" prefix instead). NCAAF isn't listed there, and an unknown key fails
+// the whole event request, so NCAAF props keep only their main market.
+const propAltMarketKey = (sportKey: string, marketKey: string): string | undefined =>
+  sportKey === NFL_SPORT_KEY || sportKey === NBA_SPORT_KEY || sportKey === NHL_SPORT_KEY ? marketKey + "_alternate" : undefined;
 const ANYTIME_TD_KEY = "player_anytime_td";
 const ANYTIME_GOAL_KEY = "player_goal_scorer_anytime";
 const HOCKEY_THREE_WAY_KEY = "h2h_3_way";
@@ -347,10 +354,12 @@ function playerPropTarget(leg: FanDuelLegInput): TargetResult {
   if (!lineInfo) return unsupported("This prop has no Over/Under line to match.");
   if (leg.line !== null && leg.line !== lineInfo.line) return unsupported("This prop's saved line and its text disagree.");
   const over = lineInfo.direction === "OVER";
+  const altMarketKey = propAltMarketKey(sportKey, marketKey);
   return {
     ok: true,
     target: {
       marketKey,
+      ...(altMarketKey ? { altMarketKey } : {}),
       outcome: { name: over ? "Over" : "Under" },
       player: prop.playerName,
       point: lineInfo.line,
