@@ -121,3 +121,12 @@ html {
 @keyframes bvChPop{0%,38%{transform:scale(0)}44%{transform:scale(1.2)}48%,85%{transform:scale(1)}93%,100%{transform:scale(0)}}
 .bv-chpop{transform-box:fill-box;transform-origin:center;animation:bvChPop 9s ease-out infinite both}
 @media (prefers-reduced-motion: reduce){.bv-drawl,.bv-area,.bv-chpop,.bv-draw,.bv-bar,.bv-donut,.bv-ping,.bv-crown,.bv-ring,.bv-star,.bv-drift,.bv-pop,.bv-pending,.bv-bob{animation:none}}
+
+/* Catalog Import banner: a scan line sweeps the slip, dashes flow along the arrow, rows slide in with checks; 7s loop */
+@keyframes bvScan{0%{transform:translateY(0);opacity:0}8%{opacity:.7}45%{transform:translateY(76px);opacity:.7}52%,100%{transform:translateY(76px);opacity:0}}
+.bv-scan{animation:bvScan 7s ease-in-out infinite}
+@keyframes bvFlow{to{stroke-dashoffset:-24}}
+.bv-flow{animation:bvFlow 1.2s linear infinite}
+@keyframes bvRowIn{0%,40%{opacity:0;transform:translateX(-14px)}50%,88%{opacity:1;transform:translateX(0)}96%,100%{opacity:0;transform:translateX(0)}}
+.bv-row{animation:bvRowIn 7s ease-out infinite both}
+@media (prefers-reduced-motion: reduce){.bv-scan,.bv-flow,.bv-row{animation:none}}

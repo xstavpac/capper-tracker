@@ -29,7 +29,7 @@ export default async function BulkImportPage() {
 
   return (
     <>
-    <PageBanner variant="import" title="Catalog Import" icon={PAGE_BANNER_ICONS.import} />
+    <PageBanner variant="import" title="Catalog Import" icon={PAGE_BANNER_ICONS.import} motto="PASTE · PARSE · TRACK" />
     <ThemedPage>
       {/* Header + manual single-pick entry: the same PickForm, opened from the header button. */}
       <ImportPageHeader cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports} atLimit={planStatus.atLimit} />

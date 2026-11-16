@@ -8,7 +8,6 @@ export type { BannerVariant };
 // The title is the page's one <h1>; `children` is the controls row under it (client components are
 // fine there). From 900px the card is 172px tall with the variant's SVG art on its right; below
 // that the art goes and the card grows to fit the controls, which wrap.
-// import shows the dashboard's art until it gets its own.
 // Motion is CSS only (keyframes in globals.css): everything loops except the dashboard, which plays once;
 // reduced motion leaves it still.
 
@@ -60,10 +59,9 @@ export const PAGE_BANNER_ICONS: Record<BannerVariant, ReactNode> = {
   ),
   import: (
     <svg {...SVG}>
-      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
-      <path d="M14 3v5h5" />
-      <path d="M12 11v6" />
-      <path d="m9.5 14.5 2.5 2.5 2.5-2.5" />
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
     </svg>
   ),
 };
