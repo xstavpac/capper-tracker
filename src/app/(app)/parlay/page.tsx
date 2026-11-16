@@ -16,11 +16,13 @@ export default async function ParlayPage() {
   const hasFavorites = (await getCapperRoster(user.id)).some((c) => c.isFavorite);
 
   return (
+    <>
+    <ParlayBanner />
     <ThemedPage>
       <div className="mx-auto max-w-5xl space-y-3.5">
-        <ParlayBanner />
         <ParlayWorkspace leagues={LIVE_SPORTS.map((s) => s.label)} hasFavorites={hasFavorites} />
       </div>
     </ThemedPage>
+    </>
   );
 }

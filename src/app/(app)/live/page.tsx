@@ -154,10 +154,11 @@ export default async function LivePage({
   );
 
   return (
+    <>
+    {/* The banner: league chips (links, like the view toggle - see isGrid above), the
+        Feed/Grid toggle and the Parlay slip control. */}
+    <LiveBanner activeSport={activeSport} isGrid={isGrid} />
     <ThemedPage>
-      {/* The banner: league chips (links, like the view toggle - see isGrid above), the
-          Feed/Grid toggle and the Parlay slip control. */}
-      <LiveBanner activeSport={activeSport} isGrid={isGrid} />
 
       {showGrid || showFeed ? (
         <LiveScoresProvider key={activeSport} activeSport={activeSport} initialScores={scores}>
@@ -204,6 +205,6 @@ export default async function LivePage({
         </>
       )}
     </ThemedPage>
+    </>
   );
 }
-

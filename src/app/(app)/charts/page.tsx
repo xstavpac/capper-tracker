@@ -5,6 +5,7 @@ import { UpgradeGate } from "@/components/billing/upgrade-gate";
 import { getCappersForUser } from "@/server/data/cappers";
 import { getSportsWithLeagues } from "@/server/data/picks";
 import { ThemedPage } from "@/components/dashboard/themed-page";
+import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
 
 export default async function ChartsPage() {
   const user = await requireUser();
@@ -22,12 +23,15 @@ export default async function ChartsPage() {
 
   const [cappers, sports] = await Promise.all([getCappersForUser(user.id), getSportsWithLeagues()]);
 
-  // The typeface, backdrop and width of /cappers, /dashboard and /picks. The banner is drawn in
-  // code by the workspace, which owns the filters it holds. The workspace reads an id and a name
-  // of each capper and sport, so only those are sent to the browser.
+  // The typeface, backdrop and width of /cappers, /dashboard and /picks, under the page banner. The workspace
+  // holds the filters, which sit directly below the banner. It reads an id and a name of each capper and
+  // sport, so only those are sent to the browser.
   return (
+    <>
+    <PageBanner variant="charts" title="Charts" icon={PAGE_BANNER_ICONS.charts} />
     <ThemedPage>
       <CapperComparisonWorkspace cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports.map((s) => ({ id: s.id, name: s.name }))} />
     </ThemedPage>
+    </>
   );
 }

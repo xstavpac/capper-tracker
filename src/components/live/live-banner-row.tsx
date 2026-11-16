@@ -1,78 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { LiveIcon } from "@/components/dashboard/cappers-icons";
-import { BANNER_CONTROLS, BANNER_ICON, BANNER_ROW, BannerBrand } from "@/components/ui/navy-banner";
-
-// The fade's width, and how far the row is padded so the last chip scrolls clear of it.
-const FADE = 28;
-
-// A segment's side padding and text size, in px, in the full row and in the compact one. The
-// classes below say the same (--seg-px, --seg-text); these are for measuring.
-const FULL = { px: 18, font: 14 };
-const COMPACT = { px: 12, font: 13 };
-
-// The banner's layout follows the card's width (a size container, see live-banner.tsx):
-//   under 640px      stacked, as on a phone: title, league chips, then the controls
-//   640px to 864px   two rows: title and controls, then the leagues at full width
-//   864px to 1110px  one compact row: narrower segments
-//   from 1110px      one full row
-// 864px and 1110px are where the compact and the full row fit with the Parlay slip at rest. Its
-// count, Confirm button and discard prompt make the controls wider, which only measuring can tell
-// (`tier` below), so each step down is written out twice, as literal classes Tailwind can see: once
-// for its own range of widths, and once for a wider card that has to take it anyway.
-const ROW = BANNER_ROW + " [@container_(min-width:640px)_and_(max-width:863.9px)]:flex-wrap";
-const ROW_TWO = " [@container_(min-width:640px)]:flex-wrap";
-const ROW_COMPACT = " [@container_(min-width:864px)_and_(max-width:1109.9px)]:[--seg-px:12px] [@container_(min-width:864px)_and_(max-width:1109.9px)]:[--seg-text:13px]";
-const ROW_COMPACT_WIDE = " [@container_(min-width:1110px)]:[--seg-px:12px] [@container_(min-width:1110px)]:[--seg-text:13px]";
-
-const LEAGUES =
-  "relative min-w-0 border-t border-[rgba(59,130,246,0.18)] [@container_(min-width:640px)]:border-t-0 " +
-  "[@container_(min-width:640px)_and_(max-width:863.9px)]:order-last [@container_(min-width:640px)_and_(max-width:863.9px)]:w-full [@container_(min-width:640px)_and_(max-width:863.9px)]:pb-4";
-const LEAGUES_TWO = " [@container_(min-width:640px)]:order-last [@container_(min-width:640px)]:w-full [@container_(min-width:640px)]:pb-4";
-
-// Under 640px: one row of separate chips that scrolls sideways. From there up: one segmented
-// group. Either way it scrolls rather than wraps.
-const NAV =
-  "flex gap-2 overflow-x-auto pb-2 pl-3 pr-7 pt-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
-  "[@container_(min-width:640px)]:gap-1 [@container_(min-width:640px)]:rounded-full [@container_(min-width:640px)]:border [@container_(min-width:640px)]:border-[rgba(96,140,255,0.2)] [@container_(min-width:640px)]:bg-[rgba(30,58,138,0.25)] [@container_(min-width:640px)]:p-1";
-const SIZE = "[@container_(min-width:640px)]:h-9 [@container_(min-width:640px)]:px-[var(--seg-px,18px)] [@container_(min-width:640px)]:text-[length:var(--seg-text,14px)] ";
-const CHIP =
-  "flex h-8 flex-none items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] transition [@container_(max-width:639.9px)]:border " +
-  SIZE +
-  "[@container_(min-width:640px)_and_(max-width:863.9px)]:flex-1 ";
-const CHIP_TWO = "[@container_(min-width:640px)]:flex-1 ";
-const ON = "bg-[#2563EB] font-semibold text-white shadow-[0_0_14px_rgba(37,99,235,0.6)] ";
-const OFF = "font-medium text-[#D3DEFA] hover:text-white ";
-const CHIP_ON = ON + "[@container_(max-width:639.9px)]:border-[#2563EB]";
-const CHIP_OFF = OFF + "[@container_(max-width:639.9px)]:border-[rgba(96,140,255,0.28)] [@container_(max-width:639.9px)]:bg-[rgba(30,58,138,0.35)]";
-
-const VIEWS = "flex flex-none rounded-full border border-[rgba(96,140,255,0.2)] bg-[rgba(30,58,138,0.25)] p-[3px] [@container_(min-width:640px)]:gap-1 [@container_(min-width:640px)]:p-1";
-const SEGMENT = "flex h-7 items-center whitespace-nowrap rounded-full px-3.5 text-[12.5px] transition " + SIZE;
+import { BANNER_GROUP, BANNER_SEG, BANNER_SEG_OFF, BANNER_SEG_ON } from "@/components/dashboard/page-banner";
 
 type Tab = { key: string; label: string; href: string };
-
-const num = (s: string) => parseFloat(s) || 0;
 
 // A click the router takes, not one the browser does (a new tab or window).
 const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-// The /live banner's content: the title (BannerBrand, shared with /parlay), the league chips, then the view toggle and the Parlay
-// slip (`children`). The leagues and the views are links: both are query params the page reads
-// on the server. They navigate client-side (next/link), so the layout above the page, and the
-// Parlay slip it holds (ParlayPoolProvider), stays mounted from one league to the next. Not
-// prefetched: each is a full per-user board.
+// The /live banner's controls, under the title: the league chips, the Feed/Grid toggle, then the
+// Parlay slip (`children`). One wrapping row: what does not fit beside the rest drops to the next
+// line, so no width measuring is needed (the old title-beside-controls row it measured is gone).
+// The leagues and the views are links: both are query params the page reads on the server. They
+// navigate client-side (next/link), so the layout above the page, and the Parlay slip it holds
+// (ParlayPoolProvider), stays mounted from one league to the next. Not prefetched: each is a full
+// per-user board.
 export function LiveBannerRow({ leagues, league, views, view, children }: { leagues: Tab[]; league: string; views: Tab[]; view: string; children: ReactNode }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const ringRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const navRef = useRef<HTMLElement>(null);
-  const activeRef = useRef<HTMLAnchorElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
-  const viewsRef = useRef<HTMLElement>(null);
-  // The widest row that fits, measured. Until then the classes go by the card's width alone.
-  const [tier, setTier] = useState<"full" | "compact" | "two" | null>(null);
   // The chip just clicked, lit at once: a client-side navigation shows nothing until the server
   // answers. Cleared when the page it asked for arrives.
   const [pendingLeague, setPendingLeague] = useState<string | null>(null);
@@ -84,132 +28,41 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   const shownLeague = pendingLeague ?? league;
   const shownView = pendingView ?? view;
 
-  useEffect(() => {
-    const row = rowRef.current;
-    const ring = ringRef.current;
-    const title = titleRef.current;
-    const nav = navRef.current;
-    const controls = controlsRef.current;
-    const viewsNav = viewsRef.current;
-    if (!row || !ring || !title || !nav || !controls || !viewsNav) return;
-
-    // A label's width per px of text size, kept so every tier measures the same whichever one is
-    // showing: the labels are drawn at the current tier's size.
-    const unit = new Map<Element, number>();
-    const groupWidth = (group: HTMLElement, size: { px: number; font: number }) => {
-      const g = getComputedStyle(group);
-      let width = num(g.paddingLeft) + num(g.paddingRight) + num(g.borderLeftWidth) + num(g.borderRightWidth) + (group.children.length - 1) * num(g.columnGap);
-      for (const segment of Array.from(group.children)) {
-        const label = segment.firstElementChild;
-        if (!label) continue;
-        let u = unit.get(label);
-        if (u === undefined) {
-          u = label.getBoundingClientRect().width / num(getComputedStyle(label).fontSize);
-          unit.set(label, u);
-        }
-        width += u * size.font + 2 * size.px;
-      }
-      return width;
-    };
-    const measure = () => {
-      const r = getComputedStyle(row);
-      const room = row.clientWidth - num(r.paddingLeft) - num(r.paddingRight) + 0.5;
-      const ringWidth = ring.getBoundingClientRect().width;
-      const titleWidth = title.getBoundingClientRect().width;
-      // Everything in the controls but the view toggle: the Parlay slip, whatever it is showing.
-      const rest = controls.getBoundingClientRect().width - viewsNav.getBoundingClientRect().width + 2 * num(r.columnGap);
-      const full = ringWidth + titleWidth + groupWidth(nav, FULL) + groupWidth(viewsNav, FULL) + rest;
-      const compact = ringWidth + titleWidth + groupWidth(nav, COMPACT) + groupWidth(viewsNav, COMPACT) + rest;
-      setTier(full <= room ? "full" : compact <= room ? "compact" : "two");
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(row);
-    observer.observe(controls);
-    // The page's typeface swaps in after the first paint, and is not as wide as the fallback.
-    let live = true;
-    document.fonts.ready.then(() => {
-      if (!live) return;
-      unit.clear();
-      measure();
-    });
-    return () => {
-      live = false;
-      observer.disconnect();
-    };
-  }, []);
-
-  // Keep the selected chip in view in the scrolling row. Only the row moves: scrollIntoView could
-  // also scroll the page.
-  useEffect(() => {
-    const nav = navRef.current;
-    const chip = activeRef.current;
-    if (!nav || !chip) return;
-    const n = nav.getBoundingClientRect();
-    const c = chip.getBoundingClientRect();
-    const left = n.left + parseFloat(getComputedStyle(nav).paddingLeft);
-    if (c.left < left) nav.scrollLeft += c.left - left;
-    else if (c.right > n.right - FADE) nav.scrollLeft += c.right - n.right + FADE;
-  }, [league]);
-
-  const two = tier === "two";
-  // A card in the compact row's range shows it unless measuring says two rows; a wider card only
-  // when measuring says compact.
-  const wide = tier === "compact";
-
   return (
-    <div ref={rowRef} className={ROW + (two ? ROW_TWO : "") + (two ? "" : ROW_COMPACT) + (wide ? ROW_COMPACT_WIDE : "")}>
-      <BannerBrand
-        icon={<LiveIcon className={BANNER_ICON} />}
-        badge={<span aria-hidden className="absolute -right-0.5 -top-0.5 h-[9px] w-[9px] rounded-full border-2 border-banner bg-[#EF4444] shadow-[0_0_7px_rgba(239,68,68,0.9)] [@container_(min-width:640px)]:h-[11px] [@container_(min-width:640px)]:w-[11px]" />}
-        title="Live"
-        ringRef={ringRef}
-        titleRef={titleRef}
-      />
-
-      <div className={LEAGUES + (two ? LEAGUES_TWO : "")}>
-        <nav ref={navRef} aria-label="League" className={NAV}>
-          {leagues.map((l) => {
-            const on = l.key === league;
-            return (
-              <Link
-                key={l.key}
-                ref={on ? activeRef : undefined}
-                href={l.href}
-                prefetch={false}
-                onClick={(e) => {
-                  if (plainClick(e)) setPendingLeague(l.key);
-                }}
-                aria-current={on ? "page" : undefined}
-                className={CHIP + (two ? CHIP_TWO : "") + (l.key === shownLeague ? CHIP_ON : CHIP_OFF)}
-              >
-                <span>{l.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-        {/* Hints that the row scrolls: fades into the banner's background. */}
-        <span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-7 bg-gradient-to-r from-transparent to-banner [@container_(min-width:640px)]:hidden" />
-      </div>
-
-      <div ref={controlsRef} className={BANNER_CONTROLS}>
-        <nav ref={viewsRef} aria-label="View" className={VIEWS}>
-          {views.map((v) => (
-            <Link
-              key={v.key}
-              href={v.href}
-              prefetch={false}
-              onClick={(e) => {
-                if (plainClick(e)) setPendingView(v.key);
-              }}
-              aria-current={v.key === view ? "page" : undefined}
-              className={SEGMENT + (v.key === shownView ? ON : OFF)}
-            >
-              <span>{v.label}</span>
-            </Link>
-          ))}
-        </nav>
-        {children}
-      </div>
+    <div className="flex flex-wrap items-center gap-2.5">
+      <nav aria-label="League" className={BANNER_GROUP}>
+        {leagues.map((l) => (
+          <Link
+            key={l.key}
+            href={l.href}
+            prefetch={false}
+            onClick={(e) => {
+              if (plainClick(e)) setPendingLeague(l.key);
+            }}
+            aria-current={l.key === league ? "page" : undefined}
+            className={BANNER_SEG + "px-[13px] " + (l.key === shownLeague ? BANNER_SEG_ON : BANNER_SEG_OFF)}
+          >
+            <span>{l.label}</span>
+          </Link>
+        ))}
+      </nav>
+      <nav aria-label="View" className={BANNER_GROUP}>
+        {views.map((v) => (
+          <Link
+            key={v.key}
+            href={v.href}
+            prefetch={false}
+            onClick={(e) => {
+              if (plainClick(e)) setPendingView(v.key);
+            }}
+            aria-current={v.key === view ? "page" : undefined}
+            className={BANNER_SEG + "px-[13px] " + (v.key === shownView ? BANNER_SEG_ON : BANNER_SEG_OFF)}
+          >
+            <span>{v.label}</span>
+          </Link>
+        ))}
+      </nav>
+      {children}
     </div>
   );
 }

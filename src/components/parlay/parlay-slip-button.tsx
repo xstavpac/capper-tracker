@@ -12,10 +12,10 @@ import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 
-// The navy /live banner's pills: 34px, or 44px where the banner is 640px wide or more.
-const BANNER_PILL = "flex h-[34px] items-center rounded-full border text-[12.5px] transition [@container_(min-width:640px)]:h-11 [@container_(min-width:640px)]:text-sm ";
-const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 [@container_(min-width:640px)]:px-[18px] ";
-const BANNER_IDLE = "border-[rgba(96,140,255,0.28)] bg-[rgba(30,58,138,0.35)] font-medium text-[#D3DEFA]";
+// The /live banner's pills (40px, as in design/page-banners-reference.html).
+const BANNER_PILL = "flex h-10 items-center rounded-full border text-[13px] transition ";
+const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 ";
+const BANNER_IDLE = "border-[#2A4A8A] bg-[rgba(4,11,38,0.7)] font-semibold text-[#E6EAF2]";
 
 export function ParlaySlipButton() {
   const { slipSize, targetedGames, slipMode, enterSlipMode, exitSlipMode, sendToGenerator, overCapBy, dismissOverCap } = useParlayPool();
@@ -23,9 +23,9 @@ export function ParlaySlipButton() {
 
   if (!slipMode) {
     return (
-      <div className="ml-auto flex items-center gap-2">
-        <button type="button" onClick={enterSlipMode} className={BANNER_BUTTON + "gap-2 [@container_(min-width:640px)]:gap-2.5 " + BANNER_IDLE + " hover:text-white"}>
-          <ClipboardIcon className="h-3.5 w-3.5 flex-none text-[#9AD8FF] [@container_(min-width:640px)]:h-4 [@container_(min-width:640px)]:w-4" />
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={enterSlipMode} className={BANNER_BUTTON + "gap-2 " + BANNER_IDLE + " hover:text-white"}>
+          <ClipboardIcon className="h-4 w-4 flex-none" />
           {"Parlay slip" + (slipSize > 0 ? " · " + slipSize : "")}
         </button>
       </div>
@@ -33,9 +33,9 @@ export function ParlaySlipButton() {
   }
 
   return (
-    <div role="toolbar" aria-label="Slip mode" className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
-      <span className={BANNER_PILL + "min-w-0 gap-2 border-[#2563EB] bg-[#2563EB] px-3.5 font-semibold text-white shadow-[0_0_14px_rgba(37,99,235,0.6)] [@container_(min-width:640px)]:px-[18px]"}>
-        <ClipboardIcon className="h-3.5 w-3.5 flex-none [@container_(min-width:640px)]:h-4 [@container_(min-width:640px)]:w-4" />
+    <div role="toolbar" aria-label="Slip mode" className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+      <span className={BANNER_PILL + "min-w-0 gap-2 border-[#2563EB] bg-[#2563EB] px-3.5 font-semibold text-white shadow-[0_0_14px_rgba(37,99,235,0.6)]"}>
+        <ClipboardIcon className="h-4 w-4 flex-none" />
         <span className="truncate">
           {slipSize} pick{slipSize === 1 ? "" : "s"} · {games} game{games === 1 ? "" : "s"} targeted
         </span>
