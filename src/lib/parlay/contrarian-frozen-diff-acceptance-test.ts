@@ -14,9 +14,11 @@ import { CONTRARIAN_MARKETS, contrarianMarketOf, isSoccer, YES_NO_PROP_MARKETS, 
 import { describeProp } from "@/lib/parlay/relationship-classifier";
 import { CONTRARIAN_CASES, nowOf, snapshotOf } from "@/lib/parlay/contrarian-frozen-cases";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { shaNoRecord } from "@/lib/parlay/frozen-shown-record";
 
 type Row = [string, string | null, string | null];
-type Before = { legs: string[]; restSha: string; contrarian: Record<SwapScope, Row[]> };
+// restShaNoRecord: restSha without the shown-record fields (frozen-shown-record.ts, PR C), which every leg's label changed.
+type Before = { legs: string[]; restSha: string; restShaNoRecord: string; contrarian: Record<SwapScope, Row[]> };
 const before = JSON.parse(readFileSync(join(__dirname, "contrarian-before-frozen.json"), "utf8")) as { capturedFrom: string; cases: Record<string, Before> };
 
 let failures = 0;
@@ -65,7 +67,7 @@ for (const c of CONTRARIAN_CASES) {
   const now = buildGeneratedParlay(snap, c.settings, null, nowOf(c), trace);
   const { contrarian, ...rest } = now;
   check(`${c.label} · Primary unchanged`, now.legs.map((l) => l.pick.pickId), was.legs);
-  check(`${c.label} · Primary, Hedge and notes byte-identical`, sha(rest), was.restSha);
+  check(`${c.label} · Primary, Hedge and notes byte-identical (shown record aside)`, shaNoRecord(rest), was.restShaNoRecord);
   // The Swap setting decides which legs are searched exactly as before.
   for (const scope of SWAP_SCOPES) {
     const outNow = contrarian[scope].legs.map((l) => l.unchangedReason === "OUT_OF_SCOPE");

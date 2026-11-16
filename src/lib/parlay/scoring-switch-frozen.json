@@ -66,7 +66,11 @@
             "n": 16,
             "winPct": 87.5
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 14,
+            "losses": 2
+          },
           "wilsonLowerBound": 0.7037788521171598,
           "score": 15.608465608465604,
           "sameGame": false
@@ -111,7 +115,11 @@
             "n": 20,
             "winPct": 50
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 10,
+            "losses": 10
+          },
           "wilsonLowerBound": 0.341000317999046,
           "score": 8.333333333333332,
           "sameGame": false
@@ -156,7 +164,11 @@
             "n": 50,
             "winPct": 60
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 30,
+            "losses": 20
+          },
           "wilsonLowerBound": 0.4939417688127429,
           "score": 5.442176870748295,
           "sameGame": false
@@ -201,7 +213,11 @@
             "n": 65,
             "winPct": 61.53846153846154
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 40,
+            "losses": 25
+          },
           "wilsonLowerBound": 0.5224524025673277,
           "score": 6.914117647058826,
           "sameGame": false
@@ -247,6 +263,10 @@
             "winPct": 80
           },
           "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 0,
+            "losses": 0
+          },
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
           "sameGame": false
@@ -291,7 +311,11 @@
             "n": 37,
             "winPct": 67.56756756756756
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 25,
+            "losses": 12
+          },
           "wilsonLowerBound": 0.5530730076473745,
           "score": 9.85797827903091,
           "sameGame": false
@@ -355,7 +379,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -398,7 +426,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -443,7 +475,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -492,7 +528,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -535,7 +575,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -580,7 +624,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -623,7 +671,11 @@
                 "winPct": 75
               },
               "wilsonLowerBound": 0.3850454583026496,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 3,
+                "losses": 1
+              }
             },
             "unchangedReason": null
           },
@@ -669,6 +721,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -717,7 +773,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -772,7 +832,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -821,7 +885,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -870,7 +938,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -919,7 +991,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -969,6 +1045,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -1017,7 +1097,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -1060,7 +1144,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0
@@ -1165,7 +1253,11 @@
             "n": 16,
             "winPct": 87.5
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 14,
+            "losses": 2
+          },
           "wilsonLowerBound": 0.7037788521171598,
           "score": 15.608465608465604,
           "sameGame": true
@@ -1210,7 +1302,11 @@
             "n": 22,
             "winPct": 81.81818181818183
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 18,
+            "losses": 4
+          },
           "wilsonLowerBound": 0.6675232806493855,
           "score": 15.41950113378685,
           "sameGame": true
@@ -1255,7 +1351,11 @@
             "n": 20,
             "winPct": 50
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 10,
+            "losses": 10
+          },
           "wilsonLowerBound": 0.341000317999046,
           "score": 8.333333333333332,
           "sameGame": false
@@ -1300,7 +1400,11 @@
             "n": 50,
             "winPct": 60
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 30,
+            "losses": 20
+          },
           "wilsonLowerBound": 0.4939417688127429,
           "score": 5.442176870748295,
           "sameGame": false
@@ -1345,7 +1449,11 @@
             "n": 65,
             "winPct": 61.53846153846154
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 40,
+            "losses": 25
+          },
           "wilsonLowerBound": 0.5224524025673277,
           "score": 6.914117647058826,
           "sameGame": false
@@ -1391,6 +1499,10 @@
             "winPct": 80
           },
           "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 0,
+            "losses": 0
+          },
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
           "sameGame": true
@@ -1435,7 +1547,11 @@
             "n": 30,
             "winPct": 66.66666666666666
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 20,
+            "losses": 10
+          },
           "wilsonLowerBound": 0.5299824356209172,
           "score": 7.906976744186045,
           "sameGame": true,
@@ -1481,7 +1597,11 @@
             "n": 37,
             "winPct": 67.56756756756756
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 25,
+            "losses": 12
+          },
           "wilsonLowerBound": 0.5530730076473745,
           "score": 9.85797827903091,
           "sameGame": false
@@ -1545,7 +1665,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": true
@@ -1594,7 +1718,11 @@
                 "n": 22,
                 "winPct": 81.81818181818183
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              },
               "wilsonLowerBound": 0.6675232806493855,
               "score": 15.41950113378685,
               "sameGame": true
@@ -1643,7 +1771,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -1692,7 +1824,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -1735,7 +1871,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -1780,7 +1920,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -1823,7 +1967,11 @@
                 "winPct": 75
               },
               "wilsonLowerBound": 0.3850454583026496,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 3,
+                "losses": 1
+              }
             },
             "unchangedReason": null
           },
@@ -1869,6 +2017,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": true
@@ -1917,7 +2069,11 @@
                 "n": 30,
                 "winPct": 66.66666666666666
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 20,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.5299824356209172,
               "score": 7.906976744186045,
               "sameGame": true,
@@ -1967,7 +2123,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -2022,7 +2182,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": true
@@ -2071,7 +2235,11 @@
                 "n": 22,
                 "winPct": 81.81818181818183
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              },
               "wilsonLowerBound": 0.6675232806493855,
               "score": 15.41950113378685,
               "sameGame": true
@@ -2120,7 +2288,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -2169,7 +2341,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -2218,7 +2394,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -2268,6 +2448,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": true
@@ -2316,7 +2500,11 @@
                 "n": 30,
                 "winPct": 66.66666666666666
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 20,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.5299824356209172,
               "score": 7.906976744186045,
               "sameGame": true,
@@ -2366,7 +2554,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -2409,7 +2601,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0
@@ -2506,7 +2702,11 @@
             "n": 16,
             "winPct": 87.5
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 14,
+            "losses": 2
+          },
           "wilsonLowerBound": 0.7037788521171598,
           "score": 15.608465608465604,
           "sameGame": false
@@ -2551,7 +2751,11 @@
             "n": 20,
             "winPct": 50
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 10,
+            "losses": 10
+          },
           "wilsonLowerBound": 0.341000317999046,
           "score": 8.333333333333332,
           "sameGame": false
@@ -2597,6 +2801,10 @@
             "winPct": 80
           },
           "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 0,
+            "losses": 0
+          },
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
           "sameGame": false
@@ -2641,7 +2849,11 @@
             "n": 37,
             "winPct": 67.56756756756756
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 25,
+            "losses": 12
+          },
           "wilsonLowerBound": 0.5530730076473745,
           "score": 9.85797827903091,
           "sameGame": false
@@ -2710,7 +2922,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -2753,7 +2969,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -2798,7 +3018,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -2848,6 +3072,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -2896,7 +3124,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -2951,7 +3183,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -3000,7 +3236,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -3050,6 +3290,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -3098,7 +3342,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -3141,7 +3389,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0
@@ -3236,7 +3488,11 @@
             "n": 16,
             "winPct": 87.5
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 14,
+            "losses": 2
+          },
           "wilsonLowerBound": 0.7037788521171598,
           "score": 15.608465608465604,
           "sameGame": false
@@ -3281,7 +3537,11 @@
             "n": 20,
             "winPct": 50
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 10,
+            "losses": 10
+          },
           "wilsonLowerBound": 0.341000317999046,
           "score": 8.333333333333332,
           "sameGame": false
@@ -3326,7 +3586,11 @@
             "n": 50,
             "winPct": 60
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 30,
+            "losses": 20
+          },
           "wilsonLowerBound": 0.4939417688127429,
           "score": 5.442176870748295,
           "sameGame": false
@@ -3371,7 +3635,11 @@
             "n": 65,
             "winPct": 61.53846153846154
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 40,
+            "losses": 25
+          },
           "wilsonLowerBound": 0.5224524025673277,
           "score": 6.914117647058826,
           "sameGame": false
@@ -3417,6 +3685,10 @@
             "winPct": 80
           },
           "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 0,
+            "losses": 0
+          },
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
           "sameGame": false
@@ -3461,7 +3733,11 @@
             "n": 37,
             "winPct": 67.56756756756756
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 25,
+            "losses": 12
+          },
           "wilsonLowerBound": 0.5530730076473745,
           "score": 9.85797827903091,
           "sameGame": false
@@ -3525,7 +3801,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -3568,7 +3848,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -3613,7 +3897,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -3662,7 +3950,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -3705,7 +3997,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -3750,7 +4046,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -3793,7 +4093,11 @@
                 "winPct": 75
               },
               "wilsonLowerBound": 0.3850454583026496,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 3,
+                "losses": 1
+              }
             },
             "unchangedReason": null
           },
@@ -3839,6 +4143,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -3887,7 +4195,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -3942,7 +4254,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -3991,7 +4307,11 @@
                 "n": 20,
                 "winPct": 50
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 10,
+                "losses": 10
+              },
               "wilsonLowerBound": 0.341000317999046,
               "score": 8.333333333333332,
               "sameGame": false
@@ -4040,7 +4360,11 @@
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              },
               "wilsonLowerBound": 0.4939417688127429,
               "score": 5.442176870748295,
               "sameGame": false
@@ -4089,7 +4413,11 @@
                 "n": 65,
                 "winPct": 61.53846153846154
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 40,
+                "losses": 25
+              },
               "wilsonLowerBound": 0.5224524025673277,
               "score": 6.914117647058826,
               "sameGame": false
@@ -4139,6 +4467,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -4187,7 +4519,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -4230,7 +4566,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0
@@ -4323,7 +4663,11 @@
             "n": 16,
             "winPct": 87.5
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 14,
+            "losses": 2
+          },
           "wilsonLowerBound": 0.7037788521171598,
           "score": 15.608465608465604,
           "sameGame": false
@@ -4362,15 +4706,19 @@
           "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
           "gameTime": "2026-11-08T19:00:00.000Z",
           "source": "SLIP",
+          "wilsonLowerBound": null,
+          "sameGame": false,
           "record": {
             "wins": 30,
             "losses": 20,
             "n": 50,
             "winPct": 60
           },
-          "basis": "LEAGUE",
-          "wilsonLowerBound": null,
-          "sameGame": false
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 30,
+            "losses": 20
+          }
         },
         {
           "pick": {
@@ -4413,6 +4761,10 @@
             "winPct": 80
           },
           "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 0,
+            "losses": 0
+          },
           "wilsonLowerBound": 0.6388955185981743,
           "score": 13.809523809523805,
           "sameGame": false
@@ -4457,7 +4809,11 @@
             "n": 37,
             "winPct": 67.56756756756756
           },
-          "basis": "LEAGUE",
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 25,
+            "losses": 12
+          },
           "wilsonLowerBound": 0.5530730076473745,
           "score": 9.85797827903091,
           "sameGame": false
@@ -4532,7 +4888,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -4575,7 +4935,11 @@
                 "winPct": 81.81818181818183
               },
               "wilsonLowerBound": 0.6675232806493855,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "unchangedReason": null
           },
@@ -4614,15 +4978,19 @@
               "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
               "gameTime": "2026-11-08T19:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 30,
                 "losses": 20,
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              }
             },
             "swap": null,
             "unchangedReason": "NO_ALTERNATE"
@@ -4669,6 +5037,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -4717,7 +5089,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -4772,7 +5148,11 @@
                 "n": 16,
                 "winPct": 87.5
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 14,
+                "losses": 2
+              },
               "wilsonLowerBound": 0.7037788521171598,
               "score": 15.608465608465604,
               "sameGame": false
@@ -4815,15 +5195,19 @@
               "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
               "gameTime": "2026-11-08T19:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 30,
                 "losses": 20,
                 "n": 50,
                 "winPct": 60
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              }
             },
             "swap": null,
             "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
@@ -4870,6 +5254,10 @@
                 "winPct": 80
               },
               "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 0,
+                "losses": 0
+              },
               "wilsonLowerBound": 0.6388955185981743,
               "score": 13.809523809523805,
               "sameGame": false
@@ -4918,7 +5306,11 @@
                 "n": 37,
                 "winPct": 67.56756756756756
               },
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "wilsonLowerBound": 0.5530730076473745,
               "score": 9.85797827903091,
               "sameGame": false
@@ -4961,7 +5353,11 @@
                 "winPct": 64.70588235294117
               },
               "wilsonLowerBound": 0.5185231788217299,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0
@@ -5036,15 +5432,19 @@
           "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
           "gameTime": "2026-11-08T19:00:00.000Z",
           "source": "SLIP",
+          "wilsonLowerBound": null,
+          "sameGame": false,
           "record": {
             "wins": 18,
             "losses": 4,
             "n": 22,
             "winPct": 81.81818181818183
           },
-          "basis": "LEAGUE",
-          "wilsonLowerBound": null,
-          "sameGame": false
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 18,
+            "losses": 4
+          }
         },
         {
           "pick": {
@@ -5080,15 +5480,19 @@
           "gameLabel": "Phoenix Suns @ Denver Nuggets",
           "gameTime": "2026-11-08T22:00:00.000Z",
           "source": "SLIP",
+          "wilsonLowerBound": null,
+          "sameGame": false,
           "record": {
             "wins": 22,
             "losses": 12,
             "n": 34,
             "winPct": 64.70588235294117
           },
-          "basis": "LEAGUE",
-          "wilsonLowerBound": null,
-          "sameGame": false
+          "basis": "OVERALL",
+          "leagueSlice": {
+            "wins": 22,
+            "losses": 12
+          }
         }
       ],
       "requested": 2,
@@ -5165,15 +5569,19 @@
               "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
               "gameTime": "2026-11-08T19:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 18,
                 "losses": 4,
                 "n": 22,
                 "winPct": 81.81818181818183
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "swap": {
               "pick": {
@@ -5213,7 +5621,11 @@
                 "winPct": 60
               },
               "wilsonLowerBound": 0.4939417688127429,
-              "basis": "LEAGUE"
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 30,
+                "losses": 20
+              }
             },
             "unchangedReason": null
           },
@@ -5252,15 +5664,19 @@
               "gameLabel": "Phoenix Suns @ Denver Nuggets",
               "gameTime": "2026-11-08T22:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 22,
                 "losses": 12,
                 "n": 34,
                 "winPct": 64.70588235294117
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              }
             },
             "swap": null,
             "unchangedReason": "NO_ALTERNATE"
@@ -5306,15 +5722,19 @@
               "gameLabel": "Dallas Cowboys @ Philadelphia Eagles",
               "gameTime": "2026-11-08T19:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 18,
                 "losses": 4,
                 "n": 22,
                 "winPct": 81.81818181818183
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 18,
+                "losses": 4
+              }
             },
             "swap": null,
             "unchangedReason": "NO_QUALIFYING_CONTRARIAN"
@@ -5354,15 +5774,19 @@
               "gameLabel": "Phoenix Suns @ Denver Nuggets",
               "gameTime": "2026-11-08T22:00:00.000Z",
               "source": "SLIP",
+              "wilsonLowerBound": null,
+              "sameGame": false,
               "record": {
                 "wins": 22,
                 "losses": 12,
                 "n": 34,
                 "winPct": 64.70588235294117
               },
-              "basis": "LEAGUE",
-              "wilsonLowerBound": null,
-              "sameGame": false
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 22,
+                "losses": 12
+              }
             },
             "swap": {
               "pick": {
@@ -5402,7 +5826,11 @@
                 "winPct": 67.56756756756756
               },
               "wilsonLowerBound": 0.5530730076473745,
-              "basis": "LEAGUE",
+              "basis": "OVERALL",
+              "leagueSlice": {
+                "wins": 25,
+                "losses": 12
+              },
               "contrarian": {
                 "market": "SPREAD",
                 "lineGap": 0

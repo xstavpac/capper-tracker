@@ -1945,7 +1945,8 @@
      "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
      "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
     ],
-    "coreSha": "5aaa677dfd584e7d"
+    "coreSha": "5aaa677dfd584e7d",
+    "coreShaNoRecord": "f450f7c3dfd196f0"
    },
    "SWITCH · 8 legs, 2 per game, default gate": {
     "legs": [
@@ -2037,7 +2038,8 @@
      "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3",
      "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5"
     ],
-    "coreSha": "3be9dcb650fb5ec1"
+    "coreSha": "3be9dcb650fb5ec1",
+    "coreShaNoRecord": "25484a375bc0e6f7"
    },
    "SWITCH · 6 legs, 60% gate": {
     "legs": [
@@ -2089,7 +2091,8 @@
      "g5|SPREAD|FULL_GAME||Denver Nuggets||-5",
      "g1|MONEYLINE|FULL_GAME||Miami Dolphins||"
     ],
-    "coreSha": "7aa673efbffcbf6c"
+    "coreSha": "7aa673efbffcbf6c",
+    "coreShaNoRecord": "d9f83fa7c00945f4"
    },
    "SWITCH · 6 legs, no gate": {
     "legs": [
@@ -2161,7 +2164,8 @@
      "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
      "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
     ],
-    "coreSha": "5aaa677dfd584e7d"
+    "coreSha": "5aaa677dfd584e7d",
+    "coreShaNoRecord": "f450f7c3dfd196f0"
    },
    "SWITCH · 12 legs, 5 per game, no gate": {
     "legs": [
@@ -2273,7 +2277,8 @@
      "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||",
      "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5"
     ],
-    "coreSha": "dc919ac0213c04c9"
+    "coreSha": "dc919ac0213c04c9",
+    "coreShaNoRecord": "d5e7ebdde922e0f3"
    },
    "SWITCH · slip competing on one game, 4 legs": {
     "legs": [
@@ -2329,7 +2334,8 @@
      "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
      "g5|SPREAD|FULL_GAME||Denver Nuggets||-5"
     ],
-    "coreSha": "03a16e95589c1bb1"
+    "coreSha": "03a16e95589c1bb1",
+    "coreShaNoRecord": "29b5d1c066885835"
    },
    "SWITCH · slip on two games, 6 legs, 2 per game": {
     "legs": [
@@ -2399,7 +2405,8 @@
      "g3|SPREAD|FULL_GAME||Detroit Lions||-7",
      "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5"
     ],
-    "coreSha": "6b171e6805bcabb9"
+    "coreSha": "6b171e6805bcabb9",
+    "coreShaNoRecord": "418778644a95a8a3"
    },
    "SWITCH · Totals + Props only, 6 legs, 3 per game": {
     "legs": [
@@ -2461,7 +2468,8 @@
      "g3|TOTAL|FULL_GAME|GAME|UNDER||50.5",
      "g4|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 27.5 points|27.5"
     ],
-    "coreSha": "5a7c4f4efdacf738"
+    "coreSha": "5a7c4f4efdacf738",
+    "coreShaNoRecord": "8c49f7cb59d82ae9"
    },
    "SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game": {
     "legs": [
@@ -2533,7 +2541,8 @@
      "g2|TOTAL|FULL_GAME|GAME|UNDER||47.5",
      "g0|SPREAD|FULL_GAME||Kansas City Chiefs||-3"
     ],
-    "coreSha": "f398bc31cfae4378"
+    "coreSha": "f398bc31cfae4378",
+    "coreShaNoRecord": "d527e6d91fcf4519"
    },
    "SWITCH · Your picks only, 2 of 5": {
     "legs": [
@@ -2578,7 +2587,8 @@
      "g5|SPREAD|FULL_GAME||Phoenix Suns||5",
      "g2|MONEYLINE|FULL_GAME||Philadelphia Eagles||"
     ],
-    "coreSha": "76b7b8da6c3df88a"
+    "coreSha": "76b7b8da6c3df88a",
+    "coreShaNoRecord": "39053de10e3df556"
    },
    "SWITCH · Your picks only, 4 of 8, 2 per game": {
     "legs": [
@@ -2647,7 +2657,8 @@
      "g1|MONEYLINE|FULL_GAME||Miami Dolphins||",
      "g3|MONEYLINE|FULL_GAME||Detroit Lions||"
     ],
-    "coreSha": "ba2f8b6fcc5a110b"
+    "coreSha": "ba2f8b6fcc5a110b",
+    "coreShaNoRecord": "1af2ff535f4bcb0c"
    },
    "NFL · 3 legs, best available": {
     "legs": [
@@ -2689,7 +2700,8 @@
      "g1|SPREAD|FULL_GAME||Buffalo Bills||-3",
      "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3"
     ],
-    "coreSha": "2ba2b2a98dc3186f"
+    "coreSha": "2ba2b2a98dc3186f",
+    "coreShaNoRecord": "c590beda3bac2b85"
    },
    "NFL · 4 legs, 2 per game, game lines": {
     "legs": [
@@ -2741,7 +2753,8 @@
      "g2|SPREAD|FULL_GAME||Philadelphia Eagles||-3",
      "g3|SPREAD|FULL_GAME||Detroit Lions||-3"
     ],
-    "coreSha": "8918fafc5a211e4e"
+    "coreSha": "8918fafc5a211e4e",
+    "coreShaNoRecord": "d59f7d11aa0879eb"
    },
    "NFL · 2 legs, totals only, 60% gate": {
     "legs": [],
@@ -2749,7 +2762,8 @@
     "hedge": [],
     "contrarian": [],
     "historyBetKeys": [],
-    "coreSha": "81644d8034f15c0b"
+    "coreSha": "81644d8034f15c0b",
+    "coreShaNoRecord": "81644d8034f15c0b"
    },
    "NFL · 6 legs, no gate": {
     "legs": [
@@ -2821,7 +2835,8 @@
      "g4|SPREAD|FULL_GAME||Baltimore Ravens||-3",
      "g5|SPREAD|FULL_GAME||San Francisco 49ers||-3"
     ],
-    "coreSha": "60eb845a2f7d5466"
+    "coreSha": "60eb845a2f7d5466",
+    "coreShaNoRecord": "af3145ae059ec608"
    },
    "NFL · Your picks: every favorite ML": {
     "legs": [
@@ -2886,7 +2901,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "0b14f21afdd4f995"
+    "coreSha": "0b14f21afdd4f995",
+    "coreShaNoRecord": "58acc3770494c836"
    },
    "MIXED · m0-yrfi alone": {
     "legs": [
@@ -2906,7 +2922,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "9374ba175cbcdbb7"
+    "coreSha": "9374ba175cbcdbb7",
+    "coreShaNoRecord": "804f1f1220c35930"
    },
    "MIXED · m0-nrfi alone": {
     "legs": [
@@ -2926,7 +2943,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "b3e8c83a33970f06"
+    "coreSha": "b3e8c83a33970f06",
+    "coreShaNoRecord": "0b0168c75c78c234"
    },
    "MIXED · m0-tt-over alone": {
     "legs": [
@@ -2946,7 +2964,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "784d1e6de459e7ed"
+    "coreSha": "784d1e6de459e7ed",
+    "coreShaNoRecord": "8b940bef6fadc19a"
    },
    "MIXED · m0-tt-under alone": {
     "legs": [
@@ -2966,7 +2985,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "8bc24c253bc18096"
+    "coreSha": "8bc24c253bc18096",
+    "coreShaNoRecord": "7c68549ff2b6c2a6"
    },
    "MIXED · m0-tt-under-far alone": {
     "legs": [
@@ -2986,7 +3006,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "7280d094e6975d97"
+    "coreSha": "7280d094e6975d97",
+    "coreShaNoRecord": "730d17afc25abfaf"
    },
    "MIXED · m0-over alone": {
     "legs": [
@@ -3006,7 +3027,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "114fa8140b626f78"
+    "coreSha": "114fa8140b626f78",
+    "coreShaNoRecord": "05bbddfdc21584e0"
    },
    "MIXED · m0-under alone": {
     "legs": [
@@ -3026,7 +3048,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "f47de4e5a7d8c395"
+    "coreSha": "f47de4e5a7d8c395",
+    "coreShaNoRecord": "435920807b1784f4"
    },
    "MIXED · m0-f5-under alone": {
     "legs": [
@@ -3046,7 +3069,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "e818b7c060680a11"
+    "coreSha": "e818b7c060680a11",
+    "coreShaNoRecord": "066d979304fb5f2a"
    },
    "MIXED · m0-rl-home alone": {
     "legs": [
@@ -3066,7 +3090,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "3f3327d182202e56"
+    "coreSha": "3f3327d182202e56",
+    "coreShaNoRecord": "42f19e9b8c361158"
    },
    "MIXED · m0-rl-away-alt alone": {
     "legs": [
@@ -3086,7 +3111,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "c986999571d88883"
+    "coreSha": "c986999571d88883",
+    "coreShaNoRecord": "8d9bb799e3387feb"
    },
    "MIXED · m0-ml-home alone": {
     "legs": [
@@ -3106,7 +3132,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "184418975131a710"
+    "coreSha": "184418975131a710",
+    "coreShaNoRecord": "02bf1dd7576ffc06"
    },
    "MIXED · m0-ml-away alone": {
     "legs": [
@@ -3126,7 +3153,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "4eaba6f17e5ee8dc"
+    "coreSha": "4eaba6f17e5ee8dc",
+    "coreShaNoRecord": "27d960962a0ce3b0"
    },
    "MIXED · n1-tatum-over alone": {
     "legs": [
@@ -3146,7 +3174,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "2ae3e42c21be7814"
+    "coreSha": "2ae3e42c21be7814",
+    "coreShaNoRecord": "74b5f364c7c3836d"
    },
    "MIXED · n1-tatum-under alone": {
     "legs": [
@@ -3166,7 +3195,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "ad267d3310598cdd"
+    "coreSha": "ad267d3310598cdd",
+    "coreShaNoRecord": "d7f6706c7cce5684"
    },
    "MIXED · n1-brown-reb-over alone": {
     "legs": [
@@ -3186,7 +3216,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "0f3171e7d424a256"
+    "coreSha": "0f3171e7d424a256",
+    "coreShaNoRecord": "80619f4f2fa5c629"
    },
    "MIXED · n1-brown-reb-under alone": {
     "legs": [
@@ -3206,7 +3237,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "efa5ba58f2bafdc9"
+    "coreSha": "efa5ba58f2bafdc9",
+    "coreShaNoRecord": "390ee89b4c8439f7"
    },
    "MIXED · n1-spread-home alone": {
     "legs": [
@@ -3226,7 +3258,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "47ec4be0b1d75066"
+    "coreSha": "47ec4be0b1d75066",
+    "coreShaNoRecord": "82e66c69299a5a95"
    },
    "MIXED · n1-spread-away-far alone": {
     "legs": [
@@ -3246,7 +3279,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "678330780c557e0e"
+    "coreSha": "678330780c557e0e",
+    "coreShaNoRecord": "70b878ddb2f2560a"
    },
    "MIXED · n1-1h-spread-away alone": {
     "legs": [
@@ -3266,7 +3300,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "9074763db6b7301d"
+    "coreSha": "9074763db6b7301d",
+    "coreShaNoRecord": "d1a4027ec8ff4d7d"
    },
    "MIXED · e2-ml-home alone": {
     "legs": [
@@ -3286,7 +3321,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "8283169a5f4bdb8d"
+    "coreSha": "8283169a5f4bdb8d",
+    "coreShaNoRecord": "f6f2a9c334af3086"
    },
    "MIXED · e2-ml-away alone": {
     "legs": [
@@ -3306,7 +3342,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "7dcf6f49db31f76a"
+    "coreSha": "7dcf6f49db31f76a",
+    "coreShaNoRecord": "291a8c4699e43069"
    },
    "MIXED · e2-over alone": {
     "legs": [
@@ -3326,7 +3363,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "70fd0cc3c3b813d3"
+    "coreSha": "70fd0cc3c3b813d3",
+    "coreShaNoRecord": "ae77462f1abece5e"
    },
    "MIXED · e2-under alone": {
     "legs": [
@@ -3346,7 +3384,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "8892ad577678b274"
+    "coreSha": "8892ad577678b274",
+    "coreShaNoRecord": "9940e9a7418696f6"
    },
    "MIXED · f3-td alone": {
     "legs": [
@@ -3366,7 +3405,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "58f197cd345781b2"
+    "coreSha": "58f197cd345781b2",
+    "coreShaNoRecord": "e2514ab59f723596"
    },
    "MIXED · f3-ml-home alone": {
     "legs": [
@@ -3386,7 +3426,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "1a83477e7b2e6e80"
+    "coreSha": "1a83477e7b2e6e80",
+    "coreShaNoRecord": "3e79d14529b2b3db"
    },
    "MIXED · f3-ml-away alone": {
     "legs": [
@@ -3406,7 +3447,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "9ade7e943c673551"
+    "coreSha": "9ade7e943c673551",
+    "coreShaNoRecord": "2317865733985df8"
    },
    "MIXED · f3-spread-home alone": {
     "legs": [
@@ -3426,7 +3468,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "060ca79c8c667556"
+    "coreSha": "060ca79c8c667556",
+    "coreShaNoRecord": "4744d9ab596d1326"
    },
    "MIXED · f3-spread-away alone": {
     "legs": [
@@ -3446,7 +3489,8 @@
      ]
     ],
     "historyBetKeys": [],
-    "coreSha": "84aef37e7ce57d04"
+    "coreSha": "84aef37e7ce57d04",
+    "coreShaNoRecord": "b20780b86b9ad7b0"
    },
    "NBA · 2 legs, 1 per game": {
     "legs": [
@@ -3478,7 +3522,8 @@
      "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 28.5 points|28.5",
      "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5"
     ],
-    "coreSha": "16b0850c6f2fed42"
+    "coreSha": "16b0850c6f2fed42",
+    "coreShaNoRecord": "00c9259d709e70a4"
    },
    "NBA · 6 legs, 3 per game": {
     "legs": [
@@ -3550,7 +3595,8 @@
      "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
      "g1|TOTAL|FULL_GAME|GAME|OVER||230.5"
     ],
-    "coreSha": "2c69e5d20c8cfa9f"
+    "coreSha": "2c69e5d20c8cfa9f",
+    "coreShaNoRecord": "9eec14b7bc5a4b90"
    },
    "NBA · 10 legs, 5 per game, no gate": {
     "legs": [
@@ -3662,7 +3708,8 @@
      "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5",
      "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5"
     ],
-    "coreSha": "a54b3ef061952e6e"
+    "coreSha": "a54b3ef061952e6e",
+    "coreShaNoRecord": "c35836bdc6fed40d"
    },
    "NBA · Props only, 6 legs, 4 per game": {
     "legs": [
@@ -3734,7 +3781,8 @@
      "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5",
      "g1|RAW|PLAYER_PROP|FULL_GAME|stephen curry over 4.5 threes|4.5"
     ],
-    "coreSha": "222c740730252ca6"
+    "coreSha": "222c740730252ca6",
+    "coreShaNoRecord": "fa53112584804c9a"
    },
    "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)": {
     "legs": [
@@ -3780,7 +3828,8 @@
      "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
      "g0|RAW|PLAYER_PROP|FULL_GAME|jayson tatum over 8.5 rebounds|8.5"
     ],
-    "coreSha": "e70e7add1c83faa7"
+    "coreSha": "e70e7add1c83faa7",
+    "coreShaNoRecord": "4a948ec153334302"
    },
    "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game": {
     "legs": [
@@ -3830,7 +3879,8 @@
      "g1|RAW|PLAYER_PROP|FULL_GAME|lebron james over 7.5 assists|7.5",
      "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||"
     ],
-    "coreSha": "837f0881de9a8cb7"
+    "coreSha": "837f0881de9a8cb7",
+    "coreShaNoRecord": "284bf92cd9384901"
    },
    "NBA · Your picks: 3 of 6": {
     "legs": [
@@ -3885,7 +3935,8 @@
      "g1|MONEYLINE|FULL_GAME||Los Angeles Lakers||",
      "g0|RAW|PLAYER_PROP|FULL_GAME|jalen brunson over 26.5 points|26.5"
     ],
-    "coreSha": "edfdab000ea35538"
+    "coreSha": "edfdab000ea35538",
+    "coreShaNoRecord": "e82ecee04f8eff1f"
    }
   },
   "betKeys": {
@@ -3908,5 +3959,6 @@
    "NBA:l-davis-blk": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis over 1.5 blocks|1.5",
    "NBA:l-davis-reb": "g1|RAW|PLAYER_PROP|FULL_GAME|anthony davis under 11.5 rebounds|11.5"
   }
- }
+ },
+ "noRecordNote": "*NoRecord: the same output with the shown-record fields left out (frozen-shown-record.ts), hashed on origin/main 922f086 for PR C"
 }

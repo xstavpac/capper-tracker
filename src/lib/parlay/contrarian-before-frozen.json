@@ -116,7 +116,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "da4ef02d934b5618"
   },
   "SWITCH · 8 legs, 2 per game, default gate": {
    "legs": [
@@ -257,7 +258,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "f4f80f92e3b5a572"
   },
   "SWITCH · 6 legs, 60% gate": {
    "legs": [
@@ -334,7 +336,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "77aaf3a9c174d935"
   },
   "SWITCH · 6 legs, no gate": {
    "legs": [
@@ -443,7 +446,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "da4ef02d934b5618"
   },
   "SWITCH · 12 legs, 5 per game, no gate": {
    "legs": [
@@ -616,7 +620,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "1bc1d36f9179103a"
   },
   "SWITCH · slip competing on one game, 4 legs": {
    "legs": [
@@ -693,7 +698,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "bd41f174802650c7"
   },
   "SWITCH · slip on two games, 6 legs, 2 per game": {
    "legs": [
@@ -802,7 +808,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "0af27879ecd26cbd"
   },
   "SWITCH · Totals + Props only, 6 legs, 3 per game": {
    "legs": [
@@ -895,7 +902,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "cb52ed4c5f1e83e8"
   },
   "SWITCH · Pick Mix 50/50 Spread / Totals, 6 legs, 2 per game": {
    "legs": [
@@ -1004,7 +1012,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "2d69094afeb66bfd"
   },
   "SWITCH · Your picks only, 2 of 5": {
    "legs": [
@@ -1049,7 +1058,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "28b69293a0e1d248"
   },
   "SWITCH · Your picks only, 4 of 8, 2 per game": {
    "legs": [
@@ -1126,7 +1136,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9c5399cd090eb713"
   },
   "NFL · 3 legs, best available": {
    "legs": [
@@ -1187,7 +1198,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "0df36d39b0130b1b"
   },
   "NFL · 4 legs, 2 per game, game lines": {
    "legs": [
@@ -1264,7 +1276,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9dd0cbd9298461fd"
   },
   "NFL · 2 legs, totals only, 60% gate": {
    "legs": [],
@@ -1273,7 +1286,8 @@
     "SUGGESTED": [],
     "YOUR_PICKS": [],
     "ALL": []
-   }
+   },
+   "restShaNoRecord": "b66f634ad2f4b96f"
   },
   "NFL · 6 legs, no gate": {
    "legs": [
@@ -1382,7 +1396,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "fbefe1fa6df0c324"
   },
   "NFL · Your picks: every favorite ML": {
    "legs": [
@@ -1491,7 +1506,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "f89ca186624e4609"
   },
   "MIXED · m0-yrfi alone": {
    "legs": [
@@ -1520,7 +1536,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "f6d0779026b1e8e0"
   },
   "MIXED · m0-nrfi alone": {
    "legs": [
@@ -1549,7 +1566,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "989612577e0cfb7b"
   },
   "MIXED · m0-tt-over alone": {
    "legs": [
@@ -1578,7 +1596,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "1372d3c4cfe983aa"
   },
   "MIXED · m0-tt-under alone": {
    "legs": [
@@ -1607,7 +1626,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "fe7a97c663c6a959"
   },
   "MIXED · m0-tt-under-far alone": {
    "legs": [
@@ -1636,7 +1656,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9c0bc580f97cf2a3"
   },
   "MIXED · m0-over alone": {
    "legs": [
@@ -1665,7 +1686,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "70adbffa5e26846a"
   },
   "MIXED · m0-under alone": {
    "legs": [
@@ -1694,7 +1716,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "fe5d1d1a068e2b41"
   },
   "MIXED · m0-f5-under alone": {
    "legs": [
@@ -1723,7 +1746,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "89b9436193a5732a"
   },
   "MIXED · m0-rl-home alone": {
    "legs": [
@@ -1752,7 +1776,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "0361b89ef798a558"
   },
   "MIXED · m0-rl-away-alt alone": {
    "legs": [
@@ -1781,7 +1806,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9deed1ce2d90175a"
   },
   "MIXED · m0-ml-home alone": {
    "legs": [
@@ -1810,7 +1836,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "b6775ff7f47452de"
   },
   "MIXED · m0-ml-away alone": {
    "legs": [
@@ -1839,7 +1866,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "92dc293c1b83b633"
   },
   "MIXED · n1-tatum-over alone": {
    "legs": [
@@ -1868,7 +1896,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "00be9d47ac98d5ec"
   },
   "MIXED · n1-tatum-under alone": {
    "legs": [
@@ -1897,7 +1926,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "26b3bd230bca814c"
   },
   "MIXED · n1-brown-reb-over alone": {
    "legs": [
@@ -1926,7 +1956,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "47959ab164f823ea"
   },
   "MIXED · n1-brown-reb-under alone": {
    "legs": [
@@ -1955,7 +1986,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "953d52dd2d08c7c0"
   },
   "MIXED · n1-spread-home alone": {
    "legs": [
@@ -1984,7 +2016,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "549e48a21e47c5a9"
   },
   "MIXED · n1-spread-away-far alone": {
    "legs": [
@@ -2013,7 +2046,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "fc99a7a3016aee67"
   },
   "MIXED · n1-1h-spread-away alone": {
    "legs": [
@@ -2042,7 +2076,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "ba6f27705ad4317f"
   },
   "MIXED · e2-ml-home alone": {
    "legs": [
@@ -2071,7 +2106,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9ef4846eda486072"
   },
   "MIXED · e2-ml-away alone": {
    "legs": [
@@ -2100,7 +2136,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "9101aab4bef63c7f"
   },
   "MIXED · e2-over alone": {
    "legs": [
@@ -2129,7 +2166,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "d03677b7256d1a4d"
   },
   "MIXED · e2-under alone": {
    "legs": [
@@ -2158,7 +2196,8 @@
       "R3"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "86a5d06472a67e2e"
   },
   "MIXED · f3-td alone": {
    "legs": [
@@ -2187,7 +2226,8 @@
       "NO_ALTERNATE"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "089de8d741eb4e2c"
   },
   "MIXED · f3-ml-home alone": {
    "legs": [
@@ -2216,7 +2256,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "2319f60fae41af34"
   },
   "MIXED · f3-ml-away alone": {
    "legs": [
@@ -2245,7 +2286,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "29d9c12bc328295b"
   },
   "MIXED · f3-spread-home alone": {
    "legs": [
@@ -2274,7 +2316,8 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "a142d89b833fb12c"
   },
   "MIXED · f3-spread-away alone": {
    "legs": [
@@ -2303,7 +2346,9 @@
       "R2"
      ]
     ]
-   }
+   },
+   "restShaNoRecord": "f77c8c1f07d17714"
   }
- }
+ },
+ "noRecordNote": "*NoRecord: the same output with the shown-record fields left out (frozen-shown-record.ts), hashed on origin/main 922f086 for PR C"
 }

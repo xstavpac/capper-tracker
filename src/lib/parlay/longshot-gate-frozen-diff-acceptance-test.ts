@@ -17,6 +17,7 @@ import { NBA_SAMEGAME_CASES, nowOf, snapshotOf, type NbaCase } from "@/lib/parla
 import { EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore } from "@/lib/parlay/scoring";
 import { SWAP_SCOPES } from "@/lib/parlay/swap-scope";
 import type { GeneratorPick } from "@/lib/parlay/auto-generate";
+import { shaNoRecord } from "@/lib/parlay/frozen-shown-record";
 
 export const LONGSHOT_GATES = [0, 45, 55, 60, 75] as const;
 
@@ -32,6 +33,8 @@ type Captured = {
   shortfall: string[];
   limited: GeneratedParlay["limited"];
   coreSha: string;
+  // coreSha without the shown-record fields (frozen-shown-record.ts, PR C): what "(other output fields changed)" compares.
+  coreShaNoRecord: string;
 };
 type Capture = { capturedFrom: string; cases: Record<string, Captured>; verdicts: Record<string, Record<string, boolean>> };
 
@@ -60,6 +63,7 @@ function capture(capturedFrom: string): Capture {
         shortfall: p.shortfall,
         limited: p.limited,
         coreSha: sha(p),
+        coreShaNoRecord: shaNoRecord(p),
       };
       const v = (out.verdicts[slateKey(c, gate)] ??= {});
       for (const pk of [...snap.games.flatMap((g) => g.picks), ...snap.slipPicks]) v[pk.pickId] = passesGate(score(pk), gate);
@@ -99,7 +103,7 @@ function caseDiff(a: Captured, b: Captured): string[] {
   }
   if (JSON.stringify(a.shortfall) !== JSON.stringify(b.shortfall)) out.push(`  shortfall: ${JSON.stringify(a.shortfall)} -> ${JSON.stringify(b.shortfall)}`);
   if (JSON.stringify(a.limited) !== JSON.stringify(b.limited)) out.push(`  limited: ${JSON.stringify(a.limited)} -> ${JSON.stringify(b.limited)}`);
-  if (out.length === 0 && a.coreSha !== b.coreSha) out.push("  (other output fields changed)");
+  if (out.length === 0 && a.coreShaNoRecord !== b.coreShaNoRecord) out.push("  (other output fields changed)");
   return out;
 }
 

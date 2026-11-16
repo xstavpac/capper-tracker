@@ -11,9 +11,12 @@ import { join } from "node:path";
 import { buildGeneratedParlay } from "@/lib/parlay/generator";
 import { betKeyOf } from "@/lib/parlay/selection";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf } from "@/lib/parlay/nba-samegame-frozen-cases";
+import { shaNoRecord } from "@/lib/parlay/frozen-shown-record";
 
 type Row = [string, string | null];
-type Captured = { legs: string[]; dropped: [string, string][]; hedge: Row[]; contrarian: Row[]; historyBetKeys: string[] | null; coreSha: string };
+// coreShaNoRecord (step 1 and now only): coreSha without the shown-record fields (frozen-shown-record.ts, PR C).
+// Section 1 compares two frozen captures on coreSha; section 2 compares step 1 with now on coreShaNoRecord.
+type Captured = { legs: string[]; dropped: [string, string][]; hedge: Row[]; contrarian: Row[]; historyBetKeys: string[] | null; coreSha: string; coreShaNoRecord?: string };
 type Capture = { cases: Record<string, Captured>; betKeys: Record<string, string> };
 const frozen = JSON.parse(readFileSync(join(__dirname, "nba-samegame-before-frozen.json"), "utf8")) as { capturedFrom: { before: string; step1: string }; before: Capture; step1: Capture };
 
@@ -33,7 +36,7 @@ for (const c of NBA_SAMEGAME_CASES) {
   const p = buildGeneratedParlay(snap, c.settings, null, nowOf(c));
   const { historyBetKeys, ...core } = p;
   const row = (s: typeof p.hedge.ALL): Row[] => s.legs.map((l) => [l.original.pick.pickId, l.swap?.pick.pickId ?? l.unchangedReason]);
-  now.cases[c.label] = { legs: p.legs.map((l) => l.pick.pickId), dropped: p.dropped.map((d) => [d.pickId, d.reason]), hedge: row(p.hedge.ALL), contrarian: row(p.contrarian.ALL), historyBetKeys: historyBetKeys ?? null, coreSha: sha(core) };
+  now.cases[c.label] = { legs: p.legs.map((l) => l.pick.pickId), dropped: p.dropped.map((d) => [d.pickId, d.reason]), hedge: row(p.hedge.ALL), contrarian: row(p.contrarian.ALL), historyBetKeys: historyBetKeys ?? null, coreSha: sha(core), coreShaNoRecord: shaNoRecord(core) };
 }
 
 const list = (ids: string[]) => ids.join(", ") || "(none)";
@@ -49,7 +52,8 @@ function caseDiff(label: string, a: Captured, b: Captured): string[] {
   if (JSON.stringify(a.dropped) !== JSON.stringify(b.dropped)) out.push(`  dropped: ${JSON.stringify(a.dropped)} -> ${JSON.stringify(b.dropped)}`);
   if (JSON.stringify(a.hedge) !== JSON.stringify(b.hedge)) out.push(`  hedge: ${swaps(a.hedge)}`, `      -> ${swaps(b.hedge)}`);
   if (JSON.stringify(a.contrarian) !== JSON.stringify(b.contrarian)) out.push(`  contrarian: ${swaps(a.contrarian)}`, `           -> ${swaps(b.contrarian)}`);
-  if (out.length === 0 && a.coreSha !== b.coreSha) out.push("  (other output fields changed)");
+  const shaKey = a.coreShaNoRecord !== undefined && b.coreShaNoRecord !== undefined ? "coreShaNoRecord" : "coreSha";
+  if (out.length === 0 && a[shaKey] !== b[shaKey]) out.push("  (other output fields changed)");
   return out.length ? [label, ...out] : [];
 }
 
