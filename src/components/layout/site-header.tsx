@@ -98,8 +98,10 @@ export function SiteHeader({
         <span className="whitespace-nowrap text-[20px] font-bold text-white lg:max-xl:hidden xl:max-[1479.9px]:text-[18px]">BettingView</span>
       </Link>
 
-      {/* From 1024px, in the header's single row (see TAB for the sizes per width). */}
-      <nav aria-label="Main" className={"hidden items-center lg:flex " + NAV_GAP}>
+      {/* From 1024px, in the header's single row (see TAB for the sizes per width). The nav takes all the width
+          between the logo and the right-hand buttons and spreads the tabs evenly over it; pr-2 plus the header's
+          16px gap keeps at least 24px between the last tab and Drop Catalog. */}
+      <nav aria-label="Main" className={"hidden items-center lg:flex lg:flex-1 lg:justify-evenly lg:pr-2 " + NAV_GAP}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActiveHref(pathname, item.href);

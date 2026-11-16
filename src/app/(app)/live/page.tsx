@@ -166,8 +166,7 @@ export default async function LivePage({
           <LiveGameJumpProvider>
           <LiveListScopeProvider key={activeSport} sportKey={activeSport} initialShowAll={initialScope.showAll}>
           {categoryPanel}
-          {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard keeps its own
-              max-w-5xl wrapper below. */}
+          {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard sits in the same full-width column. */}
           {showGrid && initialSelection && (
             <GridLiveBoard
               key={activeSport}
@@ -181,7 +180,7 @@ export default async function LivePage({
             />
           )}
           {showFeed && (
-            <div className="mx-auto max-w-5xl">
+            <div>
               <LiveScoreboard
                 key={activeSport}
                 activeSport={activeSport}

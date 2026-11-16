@@ -300,7 +300,7 @@ export default async function PicksPage({
     <>
     <PageBanner variant="picks" title="Picks" icon={PAGE_BANNER_ICONS.picks} />
     <ThemedPage>
-      <div className="mx-auto max-w-5xl">
+      <div>
         {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
         <div className="space-y-3.5">
           <DateNavigator
