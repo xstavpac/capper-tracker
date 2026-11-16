@@ -16,11 +16,12 @@
 // said once, quietly, by `removedLine` on the generator's Your Picks.
 //
 // The model and its stored format live in lib/parlay/slip-state.ts:
-//   - picks: every one goes into every generated parlay; at most MAX_PARLAY_LEGS.
+//   - picks: at most MAX_POOL_PICKS. Up to MAX_PARLAY_LEGS every one goes into every generated
+//     parlay; above that the generator draws the best MAX_PARLAY_LEGS of them (Your picks only).
 //   - targets: games targeted on purpose. A pick's game is in play too
 //     ("targeted via your picks") but isn't a target.
-//   - league scope: every league is on unless switched off; a league with a
-//     pick or a target in the slip can't be switched off, and adding one
+//   - league scope: every league is on unless switched off; switching off a league
+//     with picks or targets in the slip removes them (undoable), and adding one
 //     switches its league back on. Only the switched-off leagues are stored.
 //   - Live's slip mode: its checkboxes write straight into the slip (no
 //     Confirm). It lives in memory only - it survives a client-side nav, turns
@@ -29,12 +30,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
-import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { MAX_PARLAY_LEGS, MAX_POOL_PICKS } from "@/lib/parlay/leg-cap";
+import type { FillFrom } from "@/lib/parlay/generator";
+import type { IncludeSelection, PickMix } from "@/lib/parlay/include-picks";
 import { isGameOver } from "@/lib/parlay/game-over";
 import {
   addRemoved,
   clearedSlip,
   EMPTY_LEGACY,
+  leagueRemovedText,
+  restoreLeague,
+  switchLeagueOff,
   generatorTargets as toGeneratorTargets,
   migrateStoredSlip,
   serializeSlip,
@@ -42,6 +48,7 @@ import {
   targetedGames as toTargetedGames,
   toggleTarget as toggleTargetIn,
   togglePick as togglePickIn,
+  type LeagueRemoval,
   type RemovedLine,
   type SlipStateV2,
   type SlipTarget,
@@ -58,6 +65,12 @@ const REVALIDATE_MIN_INTERVAL_MS = 60_000;
 const UNDO_CLEAR_MS = 30_000;
 
 type ClearedSlip = { picks: PooledPick[]; targets: SlipGame[] };
+
+// The generator card's own settings. Held here, not in the card: the card is
+// unmounted by the trip to Live and back (Send to generator), and these must
+// outlive it. In memory only, like Live's slip mode.
+export type GeneratorFilters = { include: IncludeSelection; mix: PickMix | null; maxPerGame: number; fillFrom: FillFrom };
+export const DEFAULT_GENERATOR_FILTERS: GeneratorFilters = { include: "ALL", mix: null, maxPerGame: 1, fillFrom: "BEST_AVAILABLE" };
 
 type ParlayPoolContextValue = {
   // The signed-in user, for per-user preferences kept beside the slip.
@@ -88,9 +101,18 @@ type ParlayPoolContextValue = {
 
   // ---- League scope ----
   isLeagueInScope: (league: string) => boolean;
-  // A league a pick or a target is in can't be switched off.
+  // A league the slip has picks or games from. Switching it off is allowed: toggleLeague
+  // then removes them from the slip (leagueRemoved says so, undoLeagueRemoval brings them back).
   isLeagueLocked: (league: string) => boolean;
   toggleLeague: (league: string) => void;
+  // "Removed 3 NFL picks" until dismissed or undone, else null.
+  leagueRemoved: string | null;
+  undoLeagueRemoval: () => void;
+  dismissLeagueRemoved: () => void;
+
+  // ---- The generator's filters (Bet types, Pick Mix, Max legs per game, Fill from) ----
+  generatorFilters: GeneratorFilters;
+  patchGeneratorFilters: (patch: Partial<GeneratorFilters>) => void;
 
   // ---- The generator's leg count (1 to MAX_PARLAY_LEGS) ----
   legCount: number;
@@ -155,6 +177,9 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [overCapBy, setOverCapBy] = useState<number | null>(null);
   const [removed, setRemoved] = useState<RemovedLine | null>(null);
   const [cleared, setCleared] = useState<ClearedSlip | null>(null);
+  const [leagueRemoval, setLeagueRemoval] = useState<LeagueRemoval | null>(null);
+  const [generatorFilters, setGeneratorFilters] = useState<GeneratorFilters>(DEFAULT_GENERATOR_FILTERS);
+  const patchGeneratorFilters = useCallback((patch: Partial<GeneratorFilters>) => setGeneratorFilters((f) => ({ ...f, ...patch })), []);
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
   // empty initial state and immediately overwrites a real saved slip.
@@ -348,7 +373,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
 
   const togglePick = useCallback((pick: PooledPick) => {
     const inSlip = poolRef.current.some((p) => p.pickId === pick.pickId);
-    if (!inSlip && poolRef.current.length + uncheckedStoredRef.current.size >= MAX_PARLAY_LEGS) {
+    if (!inSlip && poolRef.current.length + uncheckedStoredRef.current.size >= MAX_POOL_PICKS) {
       setOverCapBy(1);
       return;
     }
@@ -383,13 +408,42 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const leaguesInSlip = useMemo(() => new Set([...pool.map((p) => p.leagueName), ...targets.map((t) => t.leagueName)]), [pool, targets]);
   const isLeagueInScope = useCallback((league: string) => leaguesInSlip.has(league) || !excludedLeagues.includes(league), [excludedLeagues, leaguesInSlip]);
   const isLeagueLocked = useCallback((league: string) => leaguesInSlip.has(league), [leaguesInSlip]);
+  // A league with picks or games in the slip can be switched off too: they leave the slip,
+  // said once with an Undo (the same shape as "Clear all picks").
   const toggleLeague = useCallback(
     (league: string) => {
-      if (leaguesInSlip.has(league)) return;
+      if (leaguesInSlip.has(league)) {
+        const change = switchLeagueOff({ ...modelState(), excludedLeagues }, league);
+        poolRef.current = change.state.picks;
+        targetsRef.current = change.state.targets;
+        setPool(change.state.picks);
+        setTargets(change.state.targets);
+        setExcludedLeagues(change.state.excludedLeagues);
+        setLeagueRemoval(change.removed);
+        return;
+      }
       setExcludedLeagues((prev) => (prev.includes(league) ? prev.filter((l) => l !== league) : [...prev, league]));
     },
-    [leaguesInSlip]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
+    [leaguesInSlip, excludedLeagues]
   );
+  const undoLeagueRemoval = useCallback(() => {
+    if (!leagueRemoval) return;
+    const next = restoreLeague({ ...modelState(), excludedLeagues }, leagueRemoval);
+    poolRef.current = next.picks;
+    targetsRef.current = next.targets;
+    setPool(next.picks);
+    setTargets(next.targets);
+    setExcludedLeagues(next.excludedLeagues);
+    setLeagueRemoval(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the refs, not render state
+  }, [leagueRemoval, excludedLeagues]);
+  const dismissLeagueRemoved = useCallback(() => setLeagueRemoval(null), []);
+  useEffect(() => {
+    if (!leagueRemoval) return;
+    const t = window.setTimeout(() => setLeagueRemoval(null), UNDO_CLEAR_MS);
+    return () => window.clearTimeout(t);
+  }, [leagueRemoval]);
 
   const setLegCount = useCallback((n: number) => setLegCountState(Math.max(1, Math.min(Math.floor(n) || 1, MAX_PARLAY_LEGS))), []);
 
@@ -426,7 +480,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const undoClear = useCallback(() => {
     if (!cleared) return;
     const havePicks = new Set(poolRef.current.map((p) => p.pickId));
-    const picks = [...poolRef.current, ...cleared.picks.filter((p) => !havePicks.has(p.pickId))].slice(0, MAX_PARLAY_LEGS);
+    const picks = [...poolRef.current, ...cleared.picks.filter((p) => !havePicks.has(p.pickId))].slice(0, MAX_POOL_PICKS);
     const haveTargets = new Set(targetsRef.current.map((t) => t.gameId));
     const targets = [...targetsRef.current, ...cleared.targets.filter((t) => !haveTargets.has(t.gameId))];
     poolRef.current = picks;
@@ -463,6 +517,11 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
     isLeagueInScope,
     isLeagueLocked,
     toggleLeague,
+    leagueRemoved: leagueRemoval ? leagueRemovedText(leagueRemoval) : null,
+    undoLeagueRemoval,
+    dismissLeagueRemoved,
+    generatorFilters,
+    patchGeneratorFilters,
     legCount,
     setLegCount,
     slipMode,

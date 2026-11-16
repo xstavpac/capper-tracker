@@ -33,13 +33,13 @@ import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/componen
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import { useBuildReveal } from "@/components/parlay/use-build-reveal";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
-import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
+import { reconcileMix, selectedCategories, toggleInclude, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, WIN_RATE_HELP, WIN_RATE_HELP_MORE, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
-import { legRange, legsNote, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
+import { effectiveFillFrom, floorHint, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import { readStoredMode, writeStoredMode } from "@/lib/parlay/reuse-history";
 import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selection";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
@@ -72,7 +72,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
 // `hasFavorites`: whether the user has favorited any capper (the page reads the cached roster).
 export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { leagues: string[]; hasFavorites?: boolean; onSummary?: (s: GeneratorSummary) => void }) {
   const slip = useParlayPool();
-  const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount, userId } = slip;
+  const { pool, targets, targetedGames, removed, isLeagueInScope, isLeagueLocked, toggleLeague, legCount, setLegCount, userId, generatorFilters, patchGeneratorFilters } = slip;
 
   // Standard (this card, as ever) or Hybrid (use-hybrid-generator.ts). Each keeps its own state.
   const [mode, setMode] = useState<Mode>("standard");
@@ -82,18 +82,20 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   );
   const hybrid = useHybridGenerator(hybridScope);
 
-  const [include, setInclude] = useState<IncludeSelection>("ALL");
+  // Bet types, Pick Mix, Max legs per game and Fill from live in the slip context, not here: this card is
+  // unmounted by the trip to Live and back, and the filters must survive it (and the Fill from toggle).
+  const { include, mix, maxPerGame, fillFrom: fillFromChoice } = generatorFilters;
   // Rows for the selected categories only; follows the selection (reconcileMix).
-  const [mix, setMix] = useState<PickMix | null>(null);
+  const setMix = (m: PickMix | null) => patchGeneratorFilters({ mix: m });
   const categories = selectedCategories(include);
   function onToggleInclude(key: "ALL" | BetCategory) {
     const next = toggleInclude(include, key);
-    setInclude(next);
-    setMix((m) => m && reconcileMix(m, selectedCategories(next)));
+    patchGeneratorFilters({ include: next, mix: mix && reconcileMix(mix, selectedCategories(next)) });
   }
-  const [maxPerGame, setMaxPerGame] = useState(1);
-  const [fillFromChoice, setFillFrom] = useState<FillFrom>("BEST_AVAILABLE");
-  const fillFrom: FillFrom = pool.length === 0 ? "BEST_AVAILABLE" : fillFromChoice;
+  const setMaxPerGame = (n: number) => patchGeneratorFilters({ maxPerGame: n });
+  const setFillFrom = (v: FillFrom) => patchGeneratorFilters({ fillFrom: v });
+  // More than MAX_PARLAY_LEGS picks can only be built as Your picks only (the engine draws the best 25).
+  const fillFrom: FillFrom = effectiveFillFrom(pool.length, fillFromChoice);
 
   // Remembered per user, apart from the slip. Read after mount so the server and
   // first client render agree.
@@ -120,6 +122,8 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   // The parlay as the last build made it, before any hand swap: what Reset all puts back.
   const [asBuilt, setAsBuilt] = useState<GeneratedParlay | null>(null);
   const [builtFor, setBuiltFor] = useState<string | null>(null);
+  // The settings the shown parlay was built under (all but Total legs): its capacity is only true for them.
+  const [builtCapKey, setBuiltCapKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set by a Regenerate that couldn't vary: why (subset-ui.ts). The parlay shown stays.
@@ -216,6 +220,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
       setParlay(res.parlay);
       setAsBuilt(res.parlay);
       setBuiltFor(key);
+      setBuiltCapKey(capKey);
       // Zero legs: the empty state as ever, no sequence.
       if (seq !== null && res.parlay.legs.length > 0) build.land(seq, res.parlay.legs.length);
       else build.cancel();
@@ -231,6 +236,8 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   // A different pool: the result no longer describes it. The same pool with
   // other settings: the best parlay for them, rebuilt here (no request).
   const settingsKey = JSON.stringify(settings);
+  // What the engine's capacity depends on: every setting but Total legs (it only chooses how many of the capacity are used).
+  const capKey = JSON.stringify({ ...settings, legCount: 0 });
   useEffect(() => {
     if (!parlay) return;
     if (builtFor !== key) {
@@ -268,6 +275,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
     setBusy(false);
     setParlay(null);
     setBuiltFor(null);
+    setBuiltCapKey(null);
     setError(null);
     setNoAlternative(null);
   }
@@ -278,12 +286,15 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   const yourPicksOnly = fillFrom === "YOUR_PICKS_ONLY";
   const built = parlay && builtFor === key ? parlay : null;
   const slipFloor = slipLegFloor(pool, maxPerGame);
-  const capacity = built ? built.capacity : MAX_PARLAY_LEGS;
+  // Recomputed from the current settings: a parlay built under other settings (Fill from, Bet types, ...) says nothing
+  // about what these can supply, so until the rebuild lands the ceiling is the cap, never a stale capacity.
+  const capacity = built && builtCapKey === capKey ? built.capacity : MAX_PARLAY_LEGS;
   const { min: minLegs, max: maxLegs } = legRange({ yourPicksOnly, slipFloor, capacity });
   useEffect(() => {
     if (!yourPicksOnly && legCount < minLegs) setLegCount(minLegs);
   }, [yourPicksOnly, legCount, minLegs, setLegCount]);
   const generatedLegs = Math.max(0, legCount - slipFloor);
+  const legsFloorHint = floorHint({ yourPicksOnly, slipFloor, legCount, minLegs });
 
   // Your picks, by game, in the order they were added.
   const byGame = useMemo(() => {
@@ -317,7 +328,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
     );
   }
 
-  const hasPicksBody = slip.clearedCount > 0 || pool.length > 0 || Boolean(removed) || targets.length > 0;
+  const hasPicksBody = slip.clearedCount > 0 || pool.length > 0 || Boolean(removed) || targets.length > 0 || slip.leagueRemoved !== null;
 
   return (
     <>
@@ -356,6 +367,14 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 <p className="text-xs font-medium text-muted-foreground">
                   Cleared {slip.clearedCount} pick{slip.clearedCount === 1 ? "" : "s"}.{" "}
                   <button type="button" onClick={slip.undoClear} className={LINK}>
+                    Undo
+                  </button>
+                </p>
+              )}
+              {slip.leagueRemoved && (
+                <p className="text-xs font-medium text-muted-foreground">
+                  {slip.leagueRemoved} ·{" "}
+                  <button type="button" onClick={slip.undoLeagueRemoval} className={LINK}>
                     Undo
                   </button>
                 </p>
@@ -477,7 +496,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                   onToggle={() => toggleLeague(league)}
                   ariaLabel={
                     isLeagueLocked(league)
-                      ? league + " is on: your slip has picks or games from it"
+                      ? "Leave out " + league + " games - removes your " + league + " picks from the slip"
                       : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
                   }
                 />
@@ -514,9 +533,14 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               <SettingRow
                 icon={<LayersIcon className="h-5 w-5" />}
                 label="Total legs"
-                note={legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
+                note={
+                  <>
+                    {legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
+                    {legsFloorHint && <span className="mt-0.5 block font-semibold text-amber-700 dark:text-amber-400">{legsFloorHint}</span>}
+                  </>
+                }
               >
-                <LegStepper value={legCount} max={maxLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
+                <LegStepper value={legCount} max={maxLegs} min={minLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
               </SettingRow>
               <SettingRow
                 icon={<GamepadIcon className="h-5 w-5" />}
@@ -548,9 +572,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               <SettingRow
                 icon={<DatabaseIcon className="h-5 w-5" />}
                 label="Fill from"
-                note={pool.length === 0 ? "Add picks to build from your picks only" : undefined}
+                note={pool.length === 0 ? "Add picks to build from your picks only" : pool.length > MAX_PARLAY_LEGS ? POOL_OVER_CAP_NOTE : undefined}
               >
-                <TextSegments label="Fill from" options={FILL_FROM_OPTIONS} value={fillFrom} onChange={(v) => setFillFrom(pool.length === 0 ? "BEST_AVAILABLE" : v)} />
+                <TextSegments label="Fill from" options={FILL_FROM_OPTIONS} value={fillFrom} disabled={pool.length > MAX_PARLAY_LEGS ? ["BEST_AVAILABLE"] : []} onChange={(v) => setFillFrom(effectiveFillFrom(pool.length, v))} />
               </SettingRow>
             </SettingsBlock>
           </div>

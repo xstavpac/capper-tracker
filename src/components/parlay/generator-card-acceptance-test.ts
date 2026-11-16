@@ -207,9 +207,14 @@ async function main() {
   check("source: both Live links (picks, games) carry onClick={slip.enterSlipMode}", liveLinks.length === 2 && liveLinks.every((l) => l.includes("onClick={slip.enterSlipMode}")), JSON.stringify(liveLinks));
 
   // ---- Filters ----
-  check("MLB has picks: its pill can't be switched off", el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') !== null);
-  await click(el.querySelector('[aria-label="MLB is on: your slip has picks or games from it"]') ?? undefined);
-  check("...clicking it changes nothing", ctx.isLeagueInScope("MLB"));
+  const mlbLabel = '[aria-label="Leave out MLB games - removes your MLB picks from the slip"]';
+  const picksBefore = ctx.pool.length;
+  check("MLB has picks: its pill says switching it off removes them", el.querySelector(mlbLabel) !== null);
+  await click(el.querySelector(mlbLabel) ?? undefined);
+  check("...clicking it switches MLB off and removes its picks from the slip", !ctx.isLeagueInScope("MLB") && ctx.pool.every((p) => p.leagueName !== "MLB") && ctx.pool.length < picksBefore, "pool=" + ctx.pool.length);
+  check("...and says so once, with an Undo", (el.textContent ?? "").includes("Removed " + (picksBefore - ctx.pool.length) + " MLB pick"));
+  await click(button("Undo"));
+  check("...Undo brings the picks and the league back", ctx.isLeagueInScope("MLB") && ctx.pool.length === picksBefore, "pool=" + ctx.pool.length);
   const more = () => button("More: Max legs per game") as HTMLButtonElement;
   for (let i = 0; i < 12; i++) await click(more());
   const shown = () => more().parentElement?.querySelector('[aria-live="polite"]')?.textContent;

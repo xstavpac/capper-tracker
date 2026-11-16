@@ -68,10 +68,13 @@ export function ScopeChip({
 export function LegStepper({
   value,
   max,
+  min = 1,
   onChange,
 }: {
   value: number;
   max: number;
+  // The fewest legs allowed (Best available: the picks sent). "-" is disabled at it.
+  min?: number;
   onChange: (n: number) => void;
 }) {
   // `max` is what the caller can supply right now (a pool's in-scope picks,
@@ -90,7 +93,7 @@ export function LegStepper({
             setOverCap(false);
             onChange(value - 1);
           }}
-          disabled={value <= 1}
+          disabled={value <= Math.max(1, min)}
           aria-label="Fewer legs"
           className={step}
         >
@@ -159,11 +162,14 @@ export function TextSegments<T extends string>({
   options,
   value,
   onChange,
+  disabled = [],
 }: {
   label: string;
   options: readonly { key: T; label: string }[];
   value: T;
   onChange: (key: T) => void;
+  // Options that can't be picked right now (shown, dimmed).
+  disabled?: readonly T[];
 }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
@@ -173,8 +179,9 @@ export function TextSegments<T extends string>({
           type="button"
           role="radio"
           aria-checked={o.key === value}
+          disabled={disabled.includes(o.key)}
           onClick={() => onChange(o.key)}
-          className={"flex h-10 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13.5px] font-semibold transition " + (o.key === value ? SEGMENT_ON : SEGMENT_OFF)}
+          className={"flex h-10 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13.5px] font-semibold transition disabled:opacity-40 disabled:hover:bg-transparent " + (o.key === value ? SEGMENT_ON : SEGMENT_OFF)}
         >
           {o.label}
         </button>

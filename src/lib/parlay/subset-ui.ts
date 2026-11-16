@@ -23,6 +23,24 @@ export function legRange({ yourPicksOnly, slipFloor, capacity }: { yourPicksOnly
   return { min, max };
 }
 
+// Fill from. A pool above MAX_PARLAY_LEGS can only be built as Your picks only (the
+// generator draws the best MAX_PARLAY_LEGS of it); no picks can only be Best available.
+export function effectiveFillFrom(poolSize: number, choice: "BEST_AVAILABLE" | "YOUR_PICKS_ONLY"): "BEST_AVAILABLE" | "YOUR_PICKS_ONLY" {
+  if (poolSize === 0) return "BEST_AVAILABLE";
+  if (poolSize > MAX_PARLAY_LEGS) return "YOUR_PICKS_ONLY";
+  return choice;
+}
+
+export const POOL_OVER_CAP_NOTE = `More than ${MAX_PARLAY_LEGS} picks — the generator picks the best ${MAX_PARLAY_LEGS} from your pool.`;
+
+// Best available never builds fewer legs than the picks sent, so "-" stops at that
+// floor. Said rather than left a silent no-op; null when not at the floor. Your picks
+// only has no floor but 1.
+export function floorHint({ yourPicksOnly, slipFloor, legCount, minLegs }: { yourPicksOnly: boolean; slipFloor: number; legCount: number; minLegs: number }): string | null {
+  if (yourPicksOnly || slipFloor < 2 || legCount > minLegs) return null;
+  return `Your ${slipFloor} sent picks are all included — switch to Your picks only to use fewer.`;
+}
+
 // The note under Total legs. Your picks only: "7 of your 20 picks" (all of them when the legs
 // reach the picks). Best available: the split between the picks and the cappers.
 export function legsNote({
