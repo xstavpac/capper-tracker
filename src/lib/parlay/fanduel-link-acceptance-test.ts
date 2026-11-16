@@ -273,8 +273,9 @@ check("total Over: a lower line is the easier way", target({ betType: "TOTAL", b
   maxLineMove: Infinity,
 });
 const propTarget = target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 244.5 Passing Yards" });
-check("passing-yards prop Over: no alternate market, line may move 10%", propTarget === "unsupported" ? propTarget : { ...propTarget, maxLineMove: Math.round(propTarget.maxLineMove! * 100) / 100 }, {
+check("passing-yards prop Over: its _alternate market, line may move", propTarget === "unsupported" ? propTarget : { ...propTarget, maxLineMove: Math.round(propTarget.maxLineMove! * 100) / 100 }, {
   marketKey: "player_pass_yds",
+  altMarketKey: "player_pass_yds_alternate",
   outcome: { name: "Over" },
   player: "Josh Allen",
   point: 244.5,
@@ -283,6 +284,7 @@ check("passing-yards prop Over: no alternate market, line may move 10%", propTar
 });
 check("passing touchdowns: exact line only", target({ betType: "PLAYER_PROP", betDetail: "Josh Allen Over 1.5 Passing TDs" }), {
   marketKey: "player_pass_tds",
+  altMarketKey: "player_pass_tds_alternate",
   outcome: { name: "Over" },
   player: "Josh Allen",
   point: 1.5,
