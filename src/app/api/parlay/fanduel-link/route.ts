@@ -3,6 +3,8 @@ import { getFanDuelLink } from "@/server/data/fanduel-link";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 
 export const dynamic = "force-dynamic";
+// The send's own deadline is 25 s (fanDuelFetchTuning.deadlineMs); this is the platform's ceiling above it.
+export const maxDuration = 30;
 
 const MAX_PICK_ID_LENGTH = 64;
 

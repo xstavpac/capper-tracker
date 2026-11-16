@@ -18,7 +18,9 @@ import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
 // leg without them is simply in no group.
 export type SendLeg = { pickId: string; betDetail: string; gameId?: string; gameLabel?: string };
 
-const formatOdds = (odds: number) => (odds > 0 ? "+" : "") + odds;
+const SEND_TIMEOUT_MS = 35_000;
+
+const formatOdds =(odds: number) => (odds > 0 ? "+" : "") + odds;
 
 // "Over 6.5" / "Under 3.5"; a spread's line carries its sign ("+7.5").
 const formatLine = (line: number, side: FanDuelSentLine["side"]) => (side ? side + " " + line : (line > 0 ? "+" : "") + line);
@@ -95,18 +97,24 @@ export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { le
   async function send() {
     setLoading(true);
     setError(null);
+    // The server ends a send by 25 s (route maxDuration 30); this makes the button resolve even if that never
+    // answers. The abort covers the body read too.
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), SEND_TIMEOUT_MS);
     try {
       const res = await fetch("/api/parlay/fanduel-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pickIds: legs.map((l) => l.pickId) }),
+        signal: ac.signal,
       });
       if (!res.ok) throw new Error("request failed");
       setResult((await res.json()) as FanDuelLinkResponse);
     } catch {
       setResult(null);
-      setError("Couldn't check FanDuel right now - try again.");
+      setError(ac.signal.aborted ? "FanDuel took too long to answer - try again." : "Couldn't check FanDuel right now - try again.");
     } finally {
+      clearTimeout(timer);
       setLoading(false);
     }
   }
