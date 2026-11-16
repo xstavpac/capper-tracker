@@ -183,9 +183,10 @@ async function main() {
       []
     );
     check(
-      "client view keys are exactly the pre-FCS ScoreGame shape",
+      // The pre-FCS shape plus the two logo URLs (Live team logos): a deliberate, browser-safe addition.
+      "client view keys are exactly the pre-FCS ScoreGame shape plus the logo URLs",
       Object.keys(clientView[0]),
-      ["id", "homeTeam", "awayTeam", "status", "scores", "commenceTime", "inningHalf", "inningOrdinal", "innings", "period", "clock"]
+      ["id", "homeTeam", "awayTeam", "status", "scores", "commenceTime", "homeLogoUrl", "awayLogoUrl", "inningHalf", "inningOrdinal", "innings", "period", "clock"]
     );
 
     // Fan-out: 25 concurrent readers (full feed and client view mixed), then

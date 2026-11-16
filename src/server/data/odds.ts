@@ -1384,8 +1384,8 @@ export function mergeScoreGamesById(...lists: ScoreGame[][]): ScoreGame[] {
 
 export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
   const [fbs, fcs] = await Promise.all([
-    getEspnScores("football/college-football", { groups: "80", teamDetail: true }),
-    getEspnScores("football/college-football", { groups: "81", teamDetail: true }).catch((err: unknown) => {
+    getEspnScores("football/college-football", { groups: "80", teamDetail: true, logos: true }),
+    getEspnScores("football/college-football", { groups: "81", teamDetail: true, logos: true }).catch((err: unknown) => {
       console.error("[getNcaafLiveScores] FCS fetch failed - serving FBS only", err instanceof Error ? err.message : err);
       return [] as ScoreGame[];
     }),
@@ -1404,7 +1404,12 @@ export async function getNcaafLiveScores(): Promise<ScoreGame[]> {
 // NCAAF, NO `limit` param. teamDetail carries the school / short name the
 // catalog import will derive team recognition from; toClientScores strips it.
 export function getNcaabLiveScores(): Promise<ScoreGame[]> {
-  return getEspnScores("basketball/mens-college-basketball", { groups: "50", teamDetail: true, flagNoDivisionGames: true });
+  return getEspnScores("basketball/mens-college-basketball", {
+    groups: "50",
+    teamDetail: true,
+    flagNoDivisionGames: true,
+    logos: true,
+  });
 }
 
 // The score feed as a browser should get it: no FCS-only games (see
