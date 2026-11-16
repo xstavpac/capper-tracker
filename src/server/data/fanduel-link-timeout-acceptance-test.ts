@@ -1,7 +1,11 @@
 // Send to FanDuel always ends (server/data/fanduel-link.ts): a 25-leg send resolves, an Odds API call that never
 // answers times out into a per-leg error instead of holding the send, a re-tap after a timeout does not reuse the
 // stuck promise, a game whose main-market call failed gets no alternate-market call, and a 14-leg send is unchanged.
-// Upstream is a stubbed fetch (a "hang" ignores the abort signal, the worst case); no DB. Run with:
+// Once a send's deadline has passed, no call queued behind it fires - even when the clock still reads 1 ms short of the
+// deadline as the timers due at it fire (Linux CI does that: timers run on the loop's monotonic clock, the deadline is
+// read from Date.now) - and one send's deadline never cuts another send's calls short.
+// Upstream is a stubbed fetch (a "hang" ignores the abort signal, the worst case); no DB. Answers are held until the
+// test releases them (drive below), never on a fixed delay. Run with:
 //   node --require ./scripts/server-only-stub.cjs --import tsx src/server/data/fanduel-link-timeout-acceptance-test.ts
 export {};
 process.env.ODDS_API_KEY = "test-key";
@@ -72,6 +76,10 @@ let hangOn = (_id: string) => false;
 let marketCalls: string[] = [];
 let live = 0;
 let peak = 0;
+// Answers the test holds and releases (drive), so nothing here waits on a fixed delay. A held call stays in flight -
+// holding its slot - until drive releases it, which is what makes the in-flight peak observable.
+let held: (() => void)[] = [];
+let wake: (() => void) | null = null;
 globalThis.fetch = (async (input: RequestInfo | URL) => {
   const url = String(input);
   const m = /\/events\/([^/]+)\/odds/.exec(url);
@@ -82,7 +90,10 @@ globalThis.fetch = (async (input: RequestInfo | URL) => {
   peak = Math.max(peak, live);
   try {
     if (hangOn(id)) return await new Promise<Response>(() => {}); // never answers, ignores the abort signal
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise<void>((release) => {
+      held.push(release);
+      wake?.();
+    });
     return json(oddsFor(id));
   } finally {
     live--;
@@ -93,17 +104,44 @@ console.log = ((orig) => (...a: unknown[]) => {
   if (/^(PASS|FAIL|all checks|\d+ check)/.test(line)) orig(line);
 })(console.log);
 console.warn = () => {};
+// Runs a send to its end, releasing every held answer as calls arrive. No polling: it sleeps until either a call
+// arrives (the stub wakes it) or the send settles.
+async function drive<T>(p: Promise<T>): Promise<T> {
+  let done = false;
+  const settled = p.then(
+    () => {
+      done = true;
+    },
+    () => {
+      done = true;
+    }
+  );
+  while (!done) {
+    if (held.length > 0) {
+      const batch = held;
+      held = [];
+      batch.forEach((release) => release());
+      await Promise.resolve();
+      continue;
+    }
+    await Promise.race([settled, new Promise<void>((r) => (wake = r))]);
+    wake = null;
+  }
+  return p;
+}
 console.error = () => {};
 
 async function main() {
   const { oddsApiDeps, fanDuelFetchTuning } = await import("@/server/data/fanduel-link");
   const { buildFanDuelLink } = await import("@/lib/parlay/fanduel-link");
   fanDuelFetchTuning.retryDelayMs = 0;
-  const send = async (s: ReturnType<typeof scenario>) => buildFanDuelLink(s.legs, oddsApiDeps(s.now, Date.now()));
+  const send = (s: ReturnType<typeof scenario>, startedAt = Date.now()) => drive(buildFanDuelLink(s.legs, oddsApiDeps(s.now, startedAt)));
+  const realClock = fanDuelFetchTuning.now;
   const reset = () => {
     marketCalls = [];
     peak = 0;
     hangOn = () => false;
+    fanDuelFetchTuning.now = realClock;
   };
 
   // ---- 25 legs resolve ----
@@ -160,6 +198,39 @@ async function main() {
   check("every call hangs: the send still resolves within the deadline", Date.now() - t < 1500, true);
   check("...all 25 legs are errors, none matched, no link", [r.legs.filter((l) => l.status === "error" && /too long/.test(l.reason ?? "")).length, r.url], [25, null]);
   check("...calls queued behind the stuck ones were never fired once the deadline passed", marketCalls.length <= 4, true);
+
+  // ---- the same, with the clock still 1 ms short of the deadline when the timers due at it fire ----
+  // The worst case Linux CI produced: the four stuck calls' timers fire, their slots go to the queued calls, and
+  // Date.now() still reads deadline - 1, so "time left" alone says 1 ms. Pinning the clock there makes it so on any
+  // machine (Windows timers fire late, which hid it locally); only the send's own "deadline passed" can stop them.
+  reset();
+  s = scenario(25);
+  events = s.events;
+  hangOn = () => true;
+  t = Date.now();
+  let deadlineAt = t + fanDuelFetchTuning.deadlineMs;
+  fanDuelFetchTuning.now = () => Math.min(Date.now(), deadlineAt - 1);
+  r = await send(s, t);
+  check("clock 1 ms short at the deadline: the send still resolves, all 25 legs too long", [Date.now() - t < 1500, r.legs.filter((l) => l.status === "error" && /too long/.test(l.reason ?? "")).length], [true, 25]);
+  check("...and no queued call was fired after the deadline (only the first 4)", marketCalls.length <= 4, true);
+
+  // ---- two sends at once: one send's deadline never cuts the other's calls ----
+  // Send A (25 legs, every call hangs, deadline 150 ms) holds all four slots; send B (1 leg, answers, deadline a
+  // second later) queues behind A's legs. When A's deadline passes, A's queued calls give up, and B's call - next in
+  // line - must still fire and match, because A's "deadline passed" is A's alone. Same pinned clock as above.
+  reset();
+  const A = scenario(25);
+  const bTime = new Date(Date.parse(A.events[24].commence_time) + DAY).toISOString();
+  const B = { ...A, legs: [{ ...A.legs[0], pickId: "b0", gameTime: bTime }] };
+  const bEvent = { id: "b" + A.prefix + "0", home_team: HOME, away_team: AWAY, commence_time: bTime };
+  events = [...A.events, bEvent];
+  hangOn = (id) => id.startsWith(A.prefix);
+  t = Date.now();
+  deadlineAt = t + fanDuelFetchTuning.deadlineMs;
+  fanDuelFetchTuning.now = () => Math.min(Date.now(), deadlineAt - 1);
+  const [ra, rb] = await Promise.all([send(A, t), send(B, t + 1000)]);
+  check("two sends: A's 25 legs are all too long, and A fired no call after its deadline", [ra.legs.filter((l) => l.status === "error" && /too long/.test(l.reason ?? "")).length, marketCalls.filter((id) => id.startsWith(A.prefix)).length <= 4], [25, true]);
+  check("...B's call still fired once A's deadline passed, and B's leg matched", [marketCalls.filter((id) => id === bEvent.id).length, rb.legs[0].status], [1, "matched"]);
 
   // ---- a failed main call asks for no alternate market ----
   fanDuelFetchTuning.deadlineMs = 25000;

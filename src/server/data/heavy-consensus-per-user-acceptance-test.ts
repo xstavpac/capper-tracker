@@ -141,6 +141,7 @@ async function main() {
 
     await resetLog();
     const rateA = await getHeavyConsensusRate(a.id);
+    await drainQueryLog(logged, queries);
     const rateASql = queries.slice();
     const rateARaw = raw.slice();
     await resetLog();
