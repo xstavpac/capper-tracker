@@ -256,7 +256,7 @@ async function main() {
   // The clicked chip lights before the server answers.
   holdNav = null;
   await follow(link("NFL"));
-  const lit = (label: string) => link(label).className.includes("bg-[#2563EB]");
+  const lit = (label: string) => link(label).className.includes("bg-[var(--bv-active)]");
   check("a clicked chip lights at once, before the new board arrives", lit("NFL") && !lit("MLB") && boardLeague() === "baseball_mlb", `board=${boardLeague()}`);
   const arrive = holdNav as (() => void) | null;
   holdNav = false;

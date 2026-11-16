@@ -35,6 +35,43 @@ html {
   --border-subtle: 31 41 55; /* gray-800 */
 }
 
+/* PageBanner palette (components/dashboard/page-banner.tsx + page-banner-art.tsx): one set of variables for
+   light (default) and one for dark (.dark is on the app wrapper, see ThemeProvider). Icy blue, not navy. */
+.pbanner{
+  --bv-strip:transparent;--bv-h1:#10243F;--bv-motto:#2F5A86;--bv-badge-icon:#1E3A5F;
+  --bv-shadow:0 6px 22px rgba(30,64,120,.10),inset 0 0 28px rgba(255,255,255,.55);
+  --bv-badge-shadow:0 4px 14px rgba(30,64,120,.15),inset 0 0 0 4px rgba(255,255,255,.6);
+  --bv-border:rgba(148,182,222,.9);
+  --bv-r1:rgba(255,255,255,.75);--bv-r1z:rgba(255,255,255,0);
+  --bv-r2:rgba(147,197,253,.35);--bv-r2z:rgba(147,197,253,0);
+  --bv-r3:rgba(186,230,253,.45);--bv-r3z:rgba(186,230,253,0);
+  --bv-base:linear-gradient(100deg,#F3F8FD 0%,#E2EEF9 55%,#D3E4F6 100%);
+  --bv-pill-bg:rgba(255,255,255,.8);--bv-pill-border:#C3D5EA;--bv-pill-off:#3B5675;--bv-btn-text:#1E3A5F;
+  --bv-active:#2563EB;--bv-badge-a:#FFFFFF;--bv-badge-b:#E3EEFA;
+  --bv-panel:#F7FAFE;--bv-inner:#EAF2FB;--bv-grid:#C9DAEE;--bv-grid-op:.15;
+  --bv-bright:#1D4ED8;--bv-c1:#4A74A8;--bv-c2:#7FA6D6;--bv-c3:#6E9BD6;--bv-c4:#9DB8DA;--bv-c5:#4F8FD9;--bv-c6:#3E7BD6;
+  --bv-bar-bot:#BFD7F2;--bv-bar-bot-op:.5;--bv-pod-top:#A9C9EE;--bv-pod-bot:#E4EEF9;--bv-pod-bot-op:.4;
+  --bv-leg-flash:#DBEAFE;--bv-ring-hi:#1D4ED8;--bv-ping:#1D4ED8;--bv-one:#10243F;--bv-crown-stroke:#EAB308;
+  --bv-swoosh:block;
+}
+.dark .pbanner{
+  --bv-strip:#0D1521;--bv-h1:#EEF4FA;--bv-motto:#9FC0DD;--bv-badge-icon:#D6E6F4;
+  --bv-shadow:0 6px 22px rgba(0,0,0,.35),inset 0 0 28px rgba(148,182,222,.06);
+  --bv-badge-shadow:0 4px 14px rgba(0,0,0,.35),inset 0 0 0 4px rgba(148,182,222,.08);
+  --bv-border:rgba(148,182,222,.35);
+  --bv-r1:rgba(148,182,222,.10);--bv-r1z:rgba(148,182,222,0);
+  --bv-r2:rgba(110,155,214,.14);--bv-r2z:rgba(110,155,214,0);
+  --bv-r3:rgba(186,220,245,.10);--bv-r3z:rgba(186,220,245,0);
+  --bv-base:linear-gradient(#142133,#142133);
+  --bv-pill-bg:rgba(10,18,30,.6);--bv-pill-border:#304A66;--bv-pill-off:#B6C6D8;--bv-btn-text:#E6EEF6;
+  --bv-active:#3E6E9E;--bv-badge-a:#22344B;--bv-badge-b:#172537;
+  --bv-panel:#18263A;--bv-inner:#1B2B40;--bv-grid:#2A3D55;--bv-grid-op:.35;
+  --bv-bright:#E6F1FA;--bv-c1:#B9D0E4;--bv-c2:#9DB8D4;--bv-c3:#7FA6D0;--bv-c4:#4E6E92;--bv-c5:#8DB6DC;--bv-c6:#A9C8E4;
+  --bv-bar-bot:#3A5573;--bv-bar-bot-op:.5;--bv-pod-top:#5E84AE;--bv-pod-bot:#1A2A3D;--bv-pod-bot-op:.3;
+  --bv-leg-flash:#2C4A6E;--bv-ring-hi:#FFFFFF;--bv-ping:#FFFFFF;--bv-one:#FFFFFF;--bv-crown-stroke:#FDE68A;
+  --bv-swoosh:none;
+}
+
 /* PageBanner art animations (components/dashboard/page-banner-art.tsx), copied from design/page-banners-reference.html.
    parlay + live loop; dashboard, cappers and picks play once and hold. Reduced motion: static. */
 @keyframes bvTrace{from{stroke-dashoffset:780}to{stroke-dashoffset:0}}
@@ -46,7 +83,7 @@ html {
 .bv-wave2{animation:bvWave 1.2s ease-in-out .25s infinite}
 @media (prefers-reduced-motion: reduce){.bv-trace,.bv-dot,.bv-wave1,.bv-wave2{animation:none}.bv-trace{stroke-dasharray:none;opacity:0}}
 @keyframes bvChain{from{stroke-dashoffset:720}to{stroke-dashoffset:0}}
-@keyframes bvLeg{0%,30%,100%{stroke:#60A5FA;fill:#0C2160}8%,18%{stroke:#E0F2FE;fill:#1D4ED8}}
+@keyframes bvLeg{0%,30%,100%{stroke:var(--bv-c3);fill:var(--bv-panel)}8%,18%{stroke:var(--bv-bright);fill:var(--bv-leg-flash)}}
 @keyframes bvBolt{0%,62%,100%{transform:scale(1)}70%{transform:scale(1.14)}80%{transform:scale(1)}}
 @keyframes bvBoltFill{0%,62%,100%{fill:#FACC15}70%,76%{fill:#FEF9C3}}
 .bv-chain{stroke-dasharray:60 660;animation:bvChain 3s linear infinite}
@@ -57,9 +94,9 @@ html {
 @media (prefers-reduced-motion: reduce){.bv-chain,.bv-leg,.bv-bolt,.bv-boltfill{animation:none}.bv-chain{opacity:0}}
 @keyframes bvPing{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes bvCrown{0%,100%{transform:translateY(0);fill:#FACC15}50%{transform:translateY(-3px);fill:#FEF08A}}
-@keyframes bvRing{0%,100%{stroke:#BFDBFE;stroke-width:2.5}50%{stroke:#FFFFFF;stroke-width:4}}
+@keyframes bvRing{0%,100%{stroke:var(--bv-c1);stroke-width:2.5}50%{stroke:var(--bv-ring-hi);stroke-width:4}}
 @keyframes bvDrift{to{stroke-dashoffset:-32}}
-@keyframes bvPending{0%,100%{stroke:#60A5FA;opacity:.6}50%{stroke:#BFDBFE;opacity:1}}
+@keyframes bvPending{0%,100%{stroke:var(--bv-c3);opacity:.6}50%{stroke:var(--bv-c1);opacity:1}}
 @keyframes bvBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @keyframes bvDrawOnce{from{stroke-dashoffset:170}to{stroke-dashoffset:0}}
 .bv-draw{stroke-dasharray:170;animation:bvDrawOnce 1.4s ease-out .5s both}
