@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/server/auth";
 import { SiteFooter } from "@/components/marketing/site-footer";
 
-// Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) and
+// Same logo-mark.png asset as the app header's LogoMark (site-header.tsx) and
 // the auth card's LogoMark (auth-card.tsx) - kept in sync visually rather
 // than introducing a fourth copy of the same badge. Full lockup (icon +
 // divider + "Bettingview" wordmark) now, so this is the hero's only

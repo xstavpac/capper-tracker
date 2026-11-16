@@ -85,7 +85,7 @@ const config: Config = {
           "0%, 100%": { opacity: "1", transform: "scale(1)" },
           "50%": { opacity: "0.55", transform: "scale(1.35)" },
         },
-        // The red dot on the sidebar Live nav badge (app-sidebar.tsx): a soft
+        // The red dot on the Live nav item (layout/nav-items.tsx LiveDot): a soft
         // ring expanding out of the dot and fading. Applied with
         // `motion-reduce:animate-none`, so the dot stays but the ring doesn't.
         "live-dot-ring": {

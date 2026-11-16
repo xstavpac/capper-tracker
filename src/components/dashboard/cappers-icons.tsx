@@ -1,5 +1,5 @@
 // Inline stroke icons for the /cappers page (the repo has no icon library; same convention as
-// layout/app-sidebar.tsx). All are decorative (aria-hidden) and take their color from currentColor.
+// layout/nav-items.tsx). All are decorative (aria-hidden) and take their color from currentColor.
 function svgProps(className?: string) {
   return {
     viewBox: "0 0 24 24",
