@@ -630,6 +630,9 @@ export type FanDuelDeps = {
   now: Date;
   getEvents: (sportKey: string) => Promise<FanDuelEvent[] | null>;
   getEventMarkets: (sportKey: string, eventId: string, marketKeys: string[]) => Promise<FanDuelMarket[] | null>;
+  // Optional: true when the null for that listing (no eventId) or event came from a call that timed out, so its
+  // legs say "took too long" and not "couldn't reach".
+  timedOut?: (sportKey: string, eventId?: string) => boolean;
 };
 
 // How far a leg's kickoff may sit from the feed's own for the same two teams.
@@ -640,6 +643,8 @@ export type FanDuelDeps = {
 export const EVENT_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 const FEED_DOWN = "Couldn't reach FanDuel's odds right now - try again.";
+const FEED_SLOW = "FanDuel's odds took too long to answer for this game - try again.";
+const feedProblem = (deps: FanDuelDeps, sportKey: string, eventId?: string) => (deps.timedOut?.(sportKey, eventId) ? FEED_SLOW : FEED_DOWN);
 
 type EventMatch = { event: FanDuelEvent } | { status: "not_found" | "ambiguous"; reason: string };
 
@@ -862,9 +867,10 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
   const byEvent = new Map<string, Wanted[]>();
   for (const { leg, target } of pending) {
     const otherKeys = slateLeagues.get(leg.pickId) ?? [];
-    if (otherKeys.some((k) => !listings.get(k))) {
+    const unreadKey = otherKeys.find((k) => !listings.get(k));
+    if (unreadKey !== undefined) {
       // Can't rule the other game out: not sent, and not called a mismatch either.
-      settle(leg, "error", FEED_DOWN);
+      settle(leg, "error", feedProblem(deps, unreadKey));
       continue;
     }
     const others = otherKeys.flatMap((k) => sameNameGamesToday(leg, k, listings.get(k)!.events, slate).map((e) => gameWords(LEAGUE_LABEL[k] ?? k, e)));
@@ -875,7 +881,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     }
     const listing = listings.get(leg.sportKey!);
     if (!listing) {
-      settle(leg, "error", FEED_DOWN);
+      settle(leg, "error", feedProblem(deps, leg.sportKey!));
       continue;
     }
     const match = eventForLeg(leg, listing.events);
@@ -941,7 +947,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       const missed: Wanted[] = [];
       for (const w of wanted) {
         if (!main) {
-          settle(w.leg, "error", FEED_DOWN);
+          settle(w.leg, "error", feedProblem(deps, sportKey, event.id));
           continue;
         }
         // With an alternate market still to ask, only the pick's own line
@@ -956,7 +962,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       const altKeys = Array.from(new Set(missed.map((w) => w.target.altMarketKey!))).sort();
       const alternates = await deps.getEventMarkets(sportKey, event.id, altKeys);
       for (const w of missed) {
-        if (!alternates) settle(w.leg, "error", FEED_DOWN);
+        if (!alternates) settle(w.leg, "error", feedProblem(deps, sportKey, event.id));
         else finish(w, matchFanDuelOutcome(query(w, [w.target.marketKey, w.target.altMarketKey!], true), [...main, ...alternates]));
       }
     })
