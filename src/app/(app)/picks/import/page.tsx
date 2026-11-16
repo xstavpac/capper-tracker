@@ -7,6 +7,7 @@ import { ReviewQueue } from "@/components/import/review-queue";
 import { BulkImportForm } from "@/components/dashboard/bulk-import-form";
 import { ImportPageHeader } from "@/components/import/import-page-header";
 import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
+import { ThemedPage } from "@/components/dashboard/themed-page";
 import { SupportedFormatsSection, WherePicksLandCard } from "@/components/import/supported-formats";
 
 // Applies to this page's server actions too (the catalog import and its
@@ -29,14 +30,14 @@ export default async function BulkImportPage() {
   return (
     <>
     <PageBanner variant="import" title="Catalog Import" icon={PAGE_BANNER_ICONS.import} />
-    <div className="mx-auto mt-4 max-w-[1200px] md:mt-6">
+    <ThemedPage>
       {/* Header + manual single-pick entry: the same PickForm, opened from the header button. */}
       <ImportPageHeader cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports} atLimit={planStatus.atLimit} />
       <ReviewQueue initialCards={reviewCards} />
       <BulkImportForm existingCapperNames={cappers.map((c) => c.name)} nameDecisions={nameDecisions} />
       <WherePicksLandCard />
       <SupportedFormatsSection />
-    </div>
+    </ThemedPage>
     </>
   );
 }

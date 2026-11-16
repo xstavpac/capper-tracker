@@ -106,7 +106,7 @@ function Segment({ game }: { game: TickerGame }) {
   const isLive = game.status === "live";
   return (
     <div
-      className="flex shrink-0 items-center gap-2 border-l-4 bg-white/5 px-3 py-2"
+      className="flex shrink-0 items-center gap-2 h-8 border-l-4 bg-white/5 px-3"
       style={{ borderColor: game.accentColor }}
     >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-300">{game.sportLabel}</span>
@@ -159,7 +159,7 @@ export function LiveTicker({ initialGames }: { initialGames: TickerGame[] }) {
   const scrollDurationSeconds = Math.max(45, games.length * 6);
 
   return (
-    <div className="w-full overflow-hidden bg-brand-900 py-1" aria-label="Live scores across today's games">
+    <div className="w-full overflow-hidden bg-brand-900" aria-label="Live scores across today's games">
       <div
         className="flex w-max animate-ticker-scroll motion-reduce:animate-none"
         style={{ animationDuration: `${scrollDurationSeconds}s` }}

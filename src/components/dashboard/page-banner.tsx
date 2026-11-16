@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { SHELL_CONTAINER } from "@/components/layout/shell";
 import { BannerArt, type BannerVariant } from "@/components/dashboard/page-banner-art";
 
 export type { BannerVariant };
@@ -82,10 +83,12 @@ export function PageBanner({
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const grid = "pbgrid-" + uid;
   return (
-    // The strip is full width: it cancels <main>'s padding (p-4, md:p-8) so it meets the header.
-    <div className="-mx-4 -mt-4 bg-[#0A1530] px-6 py-[14px] [font-family:Inter,system-ui,sans-serif] md:-mx-8 md:-mt-8">
+    // The strip is full width: it cancels <main>'s padding (p-4, md:p-8) so it meets the header. The card sits in
+    // the shared shell container, so its edges are the header's and the page content's.
+    <div className="-mx-4 -mt-4 bg-[#0A1530] py-3 [font-family:Inter,system-ui,sans-serif] md:-mx-8 md:-mt-8">
+     <div className={SHELL_CONTAINER}>
       <section
-        className="relative overflow-hidden rounded-[28px] min-[900px]:h-[172px]"
+        className="relative overflow-hidden rounded-[20px] min-[900px]:h-[128px]"
         style={{
           border: "1.5px solid rgba(96, 165, 250, 0.85)",
           boxShadow: "0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22)",
@@ -121,14 +124,15 @@ export function PageBanner({
         </svg>
 
         {/* the variant's art, right side */}
-        <div className="absolute bottom-0 right-0 hidden h-[180px] min-[900px]:block" aria-hidden="true">
+        {/* The art is drawn on a 560x180 viewBox; fitted to the card's 128px height (about 398px wide). */}
+        <div className="absolute bottom-0 right-0 hidden h-[128px] min-[900px]:block [&>svg]:h-full [&>svg]:w-auto" aria-hidden="true">
           <BannerArt variant={variant} uid={uid} />
         </div>
 
         {/* badge, divider, title, motto and controls */}
         <div className="relative mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-[22px] gap-y-3 px-6 py-5 min-[900px]:h-full min-[900px]:flex-nowrap min-[900px]:py-0">
           <span
-            className="flex h-[78px] w-[78px] flex-none items-center justify-center rounded-full text-[#BFDBFE]"
+            className="flex h-14 w-14 flex-none items-center justify-center rounded-full text-[#BFDBFE] [&>svg]:h-[26px] [&>svg]:w-[26px]"
             style={{
               background: "radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%)",
               border: "2px solid #3B82F6",
@@ -138,14 +142,14 @@ export function PageBanner({
           >
             {icon}
           </span>
-          <span className="hidden h-[70px] w-px flex-none bg-[#3B82F6] opacity-70 min-[500px]:block" aria-hidden="true" />
-          <div className="flex min-w-0 flex-col gap-2.5">
+          <span className="hidden h-12 w-px flex-none bg-[#3B82F6] opacity-70 min-[500px]:block" aria-hidden="true" />
+          <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
-              <h1 className="m-0 text-[34px] font-extrabold leading-none tracking-[-0.02em] text-white [text-shadow:0_0_20px_rgba(56,189,248,0.6)] min-[900px]:text-[46px]">{title}</h1>
+              <h1 className="m-0 text-[34px] font-extrabold leading-none tracking-[-0.02em] text-white [text-shadow:0_0_20px_rgba(56,189,248,0.6)]">{title}</h1>
               {motto && (
                 <span className="flex items-center gap-4">
                   <span className="h-[30px] w-0.5 rounded-sm bg-[#3B82F6] shadow-[0_0_8px_rgba(59,130,246,0.8)]" aria-hidden="true" />
-                  <span className="text-sm font-bold tracking-[0.24em] text-[#7DD3FC]">{motto}</span>
+                  <span className="text-xs font-bold tracking-[0.24em] text-[#7DD3FC]">{motto}</span>
                 </span>
               )}
             </div>
@@ -153,13 +157,14 @@ export function PageBanner({
           </div>
         </div>
       </section>
+     </div>
     </div>
   );
 }
 
 // Shared look of the controls the pages put in the banner (from the reference).
-export const BANNER_GROUP = "flex flex-wrap gap-1 self-start rounded-full border border-[#2A4A8A] bg-[rgba(4,11,38,0.7)] p-1";
-export const BANNER_SEG = "flex h-8 flex-none items-center whitespace-nowrap rounded-full border-0 px-[14px] text-[13px] font-bold transition ";
+export const BANNER_GROUP = "flex flex-wrap gap-1 self-start rounded-full border border-[#2A4A8A] bg-[rgba(4,11,38,0.7)] p-0.5";
+export const BANNER_SEG = "flex h-6 flex-none items-center whitespace-nowrap rounded-full border-0 px-[14px] text-[13px] font-bold transition ";
 export const BANNER_SEG_ON = "bg-[#2563EB] text-white";
 export const BANNER_SEG_OFF = "bg-transparent text-[#C9D3E6] hover:text-white";
-export const BANNER_PILL = "flex h-[38px] flex-none items-center gap-2 self-start whitespace-nowrap rounded-full border border-[#2A4A8A] bg-[rgba(4,11,38,0.7)] px-4 text-[13px] font-semibold text-[#E6EAF2] transition";
+export const BANNER_PILL = "flex h-[30px] flex-none items-center gap-2 self-start whitespace-nowrap rounded-full border border-[#2A4A8A] bg-[rgba(4,11,38,0.7)] px-4 text-[13px] font-semibold text-[#E6EAF2] transition";
