@@ -118,6 +118,7 @@ import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { hasKickedOff, isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
+import { classifySwapCandidate } from "@/lib/parlay/swap-classify";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
 import { conflictSub, noRecordReason, pickRef, traceScoring, traceSelection, traceSlip, traceSwapLeg } from "@/lib/parlay/generator-trace";
 
@@ -885,16 +886,16 @@ export function buildGeneratedParlay(
 }
 
 // ---------------------------------------------------------------------------
-// Swap one leg by hand (the leg's swap tray)
+// Swap one leg by hand (the leg's Swap modal)
 // ---------------------------------------------------------------------------
-// Every other leg stays exactly as it is. The tray's two tabs:
-//   THIS_GAME   - other picks on the swapped leg's game. Max legs per game and
-//                 the same-game rules hold against the game's other legs (the
-//                 swapped leg itself doesn't count).
-//   OTHER_GAMES - games with no leg in the parlay, one row each: the game's
-//                 best-ranked eligible pick, games in that pick's ranking order.
-//                 Choosing one takes the swapped leg's game out (unless another
-//                 leg is on it).
+// Every other leg stays exactly as it is. legAlternatives finds every pick the
+// leg could become, in two groups:
+//   thisGame   - other picks on the swapped leg's game. Max legs per game and
+//                the same-game rules hold against the game's other legs (the
+//                swapped leg itself doesn't count).
+//   otherGames - every eligible pick on a game with no leg in the parlay, in
+//                ranking order (several per game). Choosing one takes the
+//                swapped leg's game out (unless another leg is on it).
 // Best available: the build's own candidates (qualifyPick - Include Picks, the
 // star, a record, the win-rate gate), never a pick already in the parlay or in
 // the slip, ordered by the build's ranking (byRank). Your picks only: the slip
@@ -903,7 +904,7 @@ export function buildGeneratedParlay(
 // doesn't shape a hand swap. Live games follow the build's rule with no
 // refetch: a game that has kicked off since the snapshot is only offered when
 // it's targeted or holds a slip pick. Runs on the held snapshot: no request.
-export type SwapTab = "THIS_GAME" | "OTHER_GAMES";
+// legSwapOptions sorts them into the modal's four tabs (swap-classify.ts).
 export type LegAlternatives = { thisGame: EngineLeg[]; otherGames: EngineLeg[] };
 
 export function legAlternatives(
@@ -921,15 +922,10 @@ export function legAlternatives(
   const inParlay = new Set(legs.map((l) => l.pick.pickId));
   const parlayGames = new Set(legs.map((l) => l.gameId));
   const legsOn = (gameId: string) => others.filter((l) => l.gameId === gameId).map((l) => l.pick);
-  const tabOf = (gameId: string): SwapTab | null => (gameId === swapped.gameId ? "THIS_GAME" : parlayGames.has(gameId) ? null : "OTHER_GAMES");
-  // Picks arrive best first, so the first one on a game is its best: Other games keeps only that one.
-  const otherGameIds = new Set<string>();
-  const add = (tab: SwapTab, leg: EngineLeg) => {
-    if (tab === "THIS_GAME") return void out.thisGame.push(leg);
-    if (otherGameIds.has(leg.gameId)) return;
-    otherGameIds.add(leg.gameId);
-    out.otherGames.push(leg);
-  };
+  type Group = "THIS_GAME" | "OTHER_GAMES";
+  const tabOf = (gameId: string): Group | null => (gameId === swapped.gameId ? "THIS_GAME" : parlayGames.has(gameId) ? null : "OTHER_GAMES");
+  // Picks arrive best first; every one is kept (the modal lists them all).
+  const add = (tab: Group, leg: EngineLeg) => void (tab === "THIS_GAME" ? out.thisGame : out.otherGames).push(leg);
   const gate = effectiveGate(settings);
   const scoreOf = scorerFor(snapshot, gate);
 
@@ -954,7 +950,7 @@ export function legAlternatives(
   const inPlay = (g: GeneratorGame) => !hasKickedOff(g.gameTime, now) || kept.has(g.gameId);
   // With targets, generated legs come only from the targeted games and your picks' games (rule 2).
   const allowed = (g: GeneratorGame) => !targeted || kept.has(g.gameId) || g.gameId === swapped.gameId;
-  const found: { tab: SwapTab; c: Candidate }[] = [];
+  const found: { tab: Group; c: Candidate }[] = [];
   for (const game of snapshot.games) {
     if (isGameOver(game, now)) continue;
     const tab = tabOf(game.gameId);
@@ -974,11 +970,32 @@ export function legAlternatives(
   return out;
 }
 
-// The tray opens on This game when it has anything, else Other games.
-export const defaultSwapTab = (alts: LegAlternatives): SwapTab => (alts.thisGame.length > 0 ? "THIS_GAME" : "OTHER_GAMES");
+// The Swap modal's four tabs for one leg. Every alternative above lands in at most
+// one tab: its game's picks by classifySwapCandidate against the leg (a same-game
+// pick it can't place - the other side past contrarian's tolerance, R6, an
+// unreadable description - is in none), and every Other-games pick in Other
+// games. The leg itself leads Primary, marked `current`. Each tab keeps the
+// build's ranking order. A Hedge row may carry a both-can-win note.
+export type SwapTabKey = "PRIMARY" | "HEDGE" | "CONTRARIAN" | "OTHER_GAMES";
+export const SWAP_TAB_KEYS: readonly SwapTabKey[] = ["PRIMARY", "HEDGE", "CONTRARIAN", "OTHER_GAMES"];
+export type SwapOption = EngineLeg & { current?: true; note?: string };
+export type LegSwapOptions = Record<SwapTabKey, SwapOption[]>;
 
-// "Auto-pick next best": the active tab's top row, or null when it's empty.
-export const autoPickNext = (alts: LegAlternatives, tab: SwapTab): EngineLeg | null => (tab === "THIS_GAME" ? alts.thisGame : alts.otherGames)[0] ?? null;
+export function legSwapOptions(snapshot: GeneratorSnapshot, settings: GeneratorSettings, legs: readonly EngineLeg[], legIndex: number, now: Date): LegSwapOptions {
+  const out: LegSwapOptions = { PRIMARY: [], HEDGE: [], CONTRARIAN: [], OTHER_GAMES: [] };
+  const leg = legs[legIndex];
+  if (!leg) return out;
+  out.PRIMARY.push({ ...leg, current: true });
+  const alts = legAlternatives(snapshot, settings, legs, legIndex, now);
+  const legC = asCandidate(leg.pick);
+  for (const a of alts.thisGame) {
+    const cls = classifySwapCandidate(legC, asCandidate(a.pick));
+    if (cls.tab === null) continue;
+    out[cls.tab].push(cls.note ? { ...a, note: cls.note } : a);
+  }
+  out.OTHER_GAMES = alts.otherGames;
+  return out;
+}
 
 function slipLegOf(p: GeneratorPick, records: CapperLeagueRecords): EngineLeg {
   const r = bestAvailableRecord(p, records);
@@ -1011,52 +1028,31 @@ function generatedLegOf(c: Candidate): EngineLeg {
   };
 }
 
-// Hedge and Contrarian for every Swap setting, rebuilt for these legs - after a
-// hand swap, so they describe the parlay shown. `variation`: the seed and mode
-// of the Regenerate that built the parlay (null for Generate), so a leg the
-// swap didn't touch keeps its draw.
-export function rebuildSwaps(
-  snapshot: GeneratorSnapshot,
-  settings: GeneratorSettings,
-  legs: EngineLeg[],
-  now: Date,
-  variation: Pick<Variation, "seed" | "mode"> | null
-): Pick<GeneratedParlay, "hedge" | "contrarian"> {
-  const gate = effectiveGate(settings);
-  const scoreOf = scorerFor(snapshot, gate);
-  const include = toIncludeSelection(settings.include);
-  const favoritesOnly = settings.favoritesOnly === true;
-  const gameById = new Map(snapshot.games.filter((g) => !isGameOver(g, now)).map((g) => [g.gameId, g]));
-  const beta = SELECTION_BETA[variation?.mode ?? DEFAULT_SELECTION_MODE];
-  const select = (salt: string): HedgeSelect => ({ draw: variation ? { seed: deriveSeed(variation.seed, salt), beta } : null, picked: [] });
-  const hedgeSelect = select("hedge");
-  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, undefined, hedgeSelect));
-  const contrarianSelect = select("contrarian");
-  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, undefined, contrarianSelect));
-  return { hedge, contrarian };
-}
-
 // The parlay with leg `legIndex` replaced, in place, by `pickId` - which must be
-// one of the leg's alternatives right now (null when it isn't). The new leg is
-// handSwapped. Everything that follows from the leg set is worked out again: SGP
-// flags, games used, same-game games, the slip counts, the picks left unused,
-// and Hedge / Contrarian. The leg count, the build's notes and the Regenerate
-// history (historyIds, generatedKey) stay: a hand-swapped combination is not one
-// Regenerate counts as shown.
+// in one of the leg's Swap tabs right now, other than the leg itself (null when
+// it isn't). The new leg is handSwapped. Everything that follows from the leg set
+// is worked out again: SGP flags, games used, same-game games, the slip counts and
+// the picks left unused. The leg count, the build's notes, the Regenerate history
+// (historyIds, generatedKey) and the whole-parlay Hedge / Contrarian (`hedge` /
+// `contrarian`, which the run log reads and no screen shows any more) stay the
+// build's: a hand-swapped combination is not one Regenerate counts as shown.
 export function applyLegSwap(
   snapshot: GeneratorSnapshot,
   settings: GeneratorSettings,
   parlay: GeneratedParlay,
   legIndex: number,
   pickId: string,
-  now: Date,
-  variation: Pick<Variation, "seed" | "mode"> | null
+  now: Date
 ): GeneratedParlay | null {
-  const alts = legAlternatives(snapshot, settings, parlay.legs, legIndex, now);
-  const chosen = [...alts.thisGame, ...alts.otherGames].find((l) => l.pick.pickId === pickId);
+  const options = legSwapOptions(snapshot, settings, parlay.legs, legIndex, now);
+  const chosen = SWAP_TAB_KEYS.flatMap((t) => options[t]).find((l) => !l.current && l.pick.pickId === pickId);
   if (!chosen) return null;
   const out = parlay.legs[legIndex];
-  const legs: EngineLeg[] = parlay.legs.map((l, i) => (i === legIndex ? { ...chosen, handSwapped: true as const } : { ...l }));
+  // The leg as the engine builds it: the modal's own fields (note, current) don't travel.
+  const picked: SwapOption = { ...chosen };
+  delete picked.note;
+  delete picked.current;
+  const legs: EngineLeg[] = parlay.legs.map((l, i) => (i === legIndex ? { ...picked, handSwapped: true as const } : { ...l }));
   const perGame = new Map<string, number>();
   for (const l of legs) perGame.set(l.gameId, (perGame.get(l.gameId) ?? 0) + 1);
   for (const l of legs) l.sameGame = (perGame.get(l.gameId) ?? 0) > 1;
@@ -1073,7 +1069,6 @@ export function applyLegSwap(
     gamesUsed: perGame.size,
     sameGameGames: Array.from(perGame.values()).filter((n) => n > 1).length,
     dropped,
-    ...rebuildSwaps(snapshot, settings, legs, now, variation),
   };
 }
 

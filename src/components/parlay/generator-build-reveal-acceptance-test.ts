@@ -202,11 +202,11 @@ async function main() {
   check("complete: the price moved leg by leg (from each combined value to the next)", oddsSeen.length >= 2, oddsSeen.join(" → "));
   check("complete: counter back to 'N legs', bar full, dot still", counter() === `${legs} legs` && progress() === legs && !card()?.querySelector('[role="status"] .animate-pulse'));
   check("complete: scan line gone", !card()?.querySelector(".animate-build-scan"));
-  check("complete: Regenerate, mode picker, tabs back", Boolean(button("Regenerate")) && Boolean(el.querySelector('[aria-label="Regenerate mode"]')) && el.querySelectorAll('[role="tab"]').length === 3);
+  check("complete: Regenerate, mode picker, a Swap on every leg (no variant tabs)", Boolean(button("Regenerate")) && Boolean(el.querySelector('[aria-label="Regenerate mode"]')) && el.querySelectorAll('[role="tab"]').length === 0 && card()!.querySelectorAll("[data-swap-button]").length === legs);
   const banner = card()?.querySelector("[data-parlay-complete]");
-  check("complete: PARLAY COMPLETE under the odds row, Send to FanDuel inside it", Boolean(banner) && (banner?.textContent ?? "").includes(completeText(legs, legs)) && Boolean(Array.from(banner?.querySelectorAll("button") ?? []).find((b) => b.textContent === "Send to FanDuel")));
-  const order = Array.from(card()?.querySelectorAll("ol, [data-parlay-complete], dl") ?? []).map((n) => n.tagName.toLowerCase() === "ol" ? "legs" : n.tagName.toLowerCase() === "dl" ? "odds" : "banner");
-  check("order: leg list, then the odds row, then the banner", order.join() === "legs,odds,banner", order.join());
+  check("complete: the bottom bar holds the combined odds, Reset all and Send to FanDuel", Boolean(banner) && Boolean(banner?.querySelector("dl")) && Boolean(Array.from(banner?.querySelectorAll("button") ?? []).find((b) => b.textContent === "Send to FanDuel")) && Boolean(Array.from(banner?.querySelectorAll("button") ?? []).find((b) => b.textContent === "Reset all")));
+  const order = Array.from(card()?.querySelectorAll("ol, [data-parlay-complete]") ?? []).map((n) => (n.tagName.toLowerCase() === "ol" ? "legs" : "bar"));
+  check("order: leg list, then the bottom bar", order.join() === "legs,bar", order.join());
   check("only one request for the Generate", requests.length === 1, `requests=${requests.length}`);
 
   // ---- Regenerate runs the sequence too (no request) ----

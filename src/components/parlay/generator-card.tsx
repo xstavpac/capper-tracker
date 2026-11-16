@@ -38,7 +38,6 @@ import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
-import { readStoredSwapScope, SWAP_SCOPE_DEFAULT, writeStoredSwapScope, type SwapScope } from "@/lib/parlay/swap-scope";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { legRange, legsNote, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import { readStoredMode, writeStoredMode } from "@/lib/parlay/reuse-history";
@@ -117,18 +116,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
     setFavoritesOnlyState(next);
     writeStoredFavoritesOnly(userId, next);
   }
-  // Which legs Hedge and Contrarian swap - remembered the same way. Every scope
-  // comes with each build, so changing it never rebuilds the parlay.
-  const [swapScope, setSwapScopeState] = useState<SwapScope>(SWAP_SCOPE_DEFAULT);
-  useEffect(() => {
-    setSwapScopeState(readStoredSwapScope(userId));
-  }, [userId]);
-  function setSwapScope(next: SwapScope) {
-    setSwapScopeState(next);
-    writeStoredSwapScope(userId, next);
-  }
-
   const [parlay, setParlay] = useState<GeneratedParlay | null>(null);
+  // The parlay as the last build made it, before any hand swap: what Reset all puts back.
+  const [asBuilt, setAsBuilt] = useState<GeneratedParlay | null>(null);
   const [builtFor, setBuiltFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -224,6 +214,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
       if (animate && kind === "regenerate") seq = build.start();
       setNoAlternative(null);
       setParlay(res.parlay);
+      setAsBuilt(res.parlay);
       setBuiltFor(key);
       // Zero legs: the empty state as ever, no sequence.
       if (seq !== null && res.parlay.legs.length > 0) build.land(seq, res.parlay.legs.length);
@@ -592,8 +583,6 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           busy={busy}
           noAlternative={noAlternative}
           unavailableTargetLabels={(parlay?.unavailableTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
-          swapScope={swapScope}
-          onSwapScope={setSwapScope}
           onRegenerate={() => void run("regenerate", true)}
           selectionMode={selectionMode}
           onSelectionMode={setSelectionMode}
@@ -603,7 +592,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           }}
           // Swap one leg by hand: on the session's snapshot, never a request.
           legSwap={{
-            alternatives: (i) => (parlay ? session.current.alternatives(parlay, i, settings) : { thisGame: [], otherGames: [] }),
+            options: (i) => (parlay ? session.current.swapOptions(parlay, i, settings) : { PRIMARY: [], HEDGE: [], CONTRARIAN: [], OTHER_GAMES: [] }),
             apply: (i, pickId) => {
               const next = parlay && session.current.swapLeg(parlay, i, pickId, settings);
               if (!next) return false;
@@ -611,6 +600,8 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               return true;
             },
           }}
+          // Every swapped leg back: the parlay as built (no request, no rebuild).
+          onResetAll={() => asBuilt && setParlay(asBuilt)}
         />
       )}
       {!build.reveal && parlay && builtFor === key && parlay.legs.length === 0 && (
