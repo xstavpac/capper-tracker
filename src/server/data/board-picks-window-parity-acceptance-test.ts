@@ -31,11 +31,20 @@
 // (ESPN, memoized per process, so both sides see the same scores); the fixture's
 // team names are made up so no real game pairs with a card.
 //
+// The ESPN scoreboard is NOT the real one: global fetch is stubbed for ESPN with a
+// fixed fixture (FINAL, live and scheduled games, none pairing with a card). The
+// legacy path never passes a game's feed status to toExpanderPick; the new path
+// does (gameStatusFor), so ANY real event that pairs with a fixture card - the
+// fuzzy card uses real Jaguars/Titans names - makes 1e and 2b differ by
+// design. Against the real feed that made both checks depend on the calendar
+// (they failed from 2026-11-15 on, once real FINAL games sat in the +-1 day window).
+//
 // DB-backed and WRITING: every id is prefixed `__BoardWindow__` and deleted by
 // exact id at the end. Refuses to run unless DATABASE_URL points at localhost,
 // and skips if a real NFL odds snapshot for today or yesterday already exists.
 //   npx tsx src/server/data/board-picks-window-parity-acceptance-test.ts
 import { prisma } from "@/lib/prisma";
+import { gameStatusFor } from "@/server/data/expander-pick";
 import type { Prisma } from "@prisma/client";
 import { pickCategory, chipSetForLeague, PICK_CATEGORY_VERSION, type PickCategoryKey } from "@/server/data/stats";
 import { getLiveBoardData, type LiveBoardData } from "@/server/data/live-board-picks";
@@ -102,6 +111,42 @@ const SPORT = "NFL";
 const H = 3600000;
 const DRIFT = MAX_GAME_TIME_DRIFT_MS;
 const NOW = Date.now();
+
+// ---- ESPN scoreboard stub: same event shape the real feed returns, fixed content ----
+// Real-looking team names on purpose (the scoreboard really carries these), but none
+// is a card's pair: the cards are the made-up "Egr ..." teams plus Jacksonville @
+// Tennessee, which no event below pairs with.
+const espnEvent = (id: string, home: string, away: string, state: "pre" | "in" | "post", hs: string, as: string) => ({
+  id,
+  date: new Date(NOW + (state === "pre" ? 30 : -3) * H).toISOString(),
+  status: {
+    type: { name: state === "pre" ? "STATUS_SCHEDULED" : state === "in" ? "STATUS_IN_PROGRESS" : "STATUS_FINAL", state, completed: state === "post" },
+    period: state === "pre" ? 0 : state === "in" ? 3 : 4,
+    displayClock: state === "in" ? "7:12" : "0:00",
+  },
+  competitions: [
+    {
+      competitors: [
+        { homeAway: "home", team: { displayName: home }, score: hs },
+        { homeAway: "away", team: { displayName: away }, score: as },
+      ],
+    },
+  ],
+});
+const ESPN_FIXTURE = {
+  events: [
+    espnEvent("espn-final-1", "Detroit Lions", "New England Patriots", "post", "27", "20"),
+    espnEvent("espn-final-2", "Cincinnati Bengals", "Pittsburgh Steelers", "post", "17", "24"),
+    espnEvent("espn-live-1", "Dallas Cowboys", "San Francisco 49ers", "in", "14", "10"),
+    espnEvent("espn-pre-1", "Baltimore Ravens", "Los Angeles Chargers", "pre", "0", "0"),
+  ],
+};
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (hostOf(url) === "site.api.espn.com") return { ok: true, status: 200, json: async () => ESPN_FIXTURE } as unknown as Response;
+  return realFetch(input, init);
+}) as typeof fetch;
 
 const created = { users: [] as string[], cappers: [] as string[], picks: [] as string[], snapshots: [] as string[], sports: [] as string[] };
 
@@ -315,6 +360,12 @@ async function main() {
   check("1a. same games on the board, same order", same(oldBoard.odds.map((g) => g.id), newBoard.odds.map((g) => g.id)), json(newBoard.odds.map((g) => g.id)));
   check("1b. the board includes yesterday's carried-over cards", yesterday.every((y) => newBoard.odds.some((g) => g.id === y.id)));
   check("1c. same scores", same(oldBoard.scores, newBoard.scores));
+  // The fixed feed has FINAL, live and scheduled games and none pairs with a card, so both
+  // paths carry gameStatus null for every pick and 1e / 2b stay strict byte-for-byte checks.
+  const feedStates = new Set(newBoard.scores.map((s) => s.status));
+  check("1s. the stubbed feed is in use and covers final, live and preview games", ["final", "live", "preview"].every((st) => feedStates.has(st as never)) && newBoard.scores.length === 4, json(newBoard.scores.map((s) => s.status)));
+  check("1s'. no card pairs with a feed game (so no pick carries a gameStatus on either path)", newBoard.odds.every((g) => gameStatusFor(newBoard.scores, g, SPORT_KEY) === null));
+  check("1t. the cause, pinned: a card WITH a feed game carries its status on the new path", gameStatusFor(newBoard.scores, { id: "x", homeTeam: "Detroit Lions", awayTeam: "New England Patriots", commenceTime: new Date(NOW).toISOString() }, SPORT_KEY) === "final");
   check("1d. every card has the same SET of picks", same(ids(oldBoard), ids(newBoard)), json(ids(newBoard)));
   const byId = (b: LiveBoardData) => new Map(b.expanderPicksByGame.flat().map((p) => [p.pickId, p]));
   const oldById = byId(oldBoard);
