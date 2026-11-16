@@ -1,12 +1,13 @@
-// Proof for swapping one leg by hand (legAlternatives / applyLegSwap / rebuildSwaps in
-// generator.ts, and the session's alternatives / swapLeg). Pinned:
+// Proof for swapping one leg by hand (legAlternatives / legSwapOptions / applyLegSwap in
+// generator.ts, and the session's swapOptions / swapLeg). The modal's tabs have their own
+// proof (swap-modal-acceptance-test.ts). Pinned:
 //   - This game: only picks on the swapped leg's game; Other games: never a game already in the parlay;
 //   - no alternative is in the parlay or the slip, opposes a same-game leg, or breaks max legs per game;
 //   - every alternative clears the win-rate gate and the star; ordered by the build's ranking;
-//   - the default tab and Auto-pick (the active tab's top row);
 //   - repeated swaps (the same leg, other legs) stay valid against the current legs;
 //   - SGP / no-odds states follow the legs (an Other-games swap that breaks a pair), priced by combineOdds;
-//   - Hedge / Contrarian are rebuilt; Swap = Suggested leaves a hand-swapped leg alone, Your picks / All may change it;
+//   - Other games lists every eligible pick (several per game), in ranking order;
+//   - Hedge / Contrarian (the run log's) stay the build's after a swap;
 //   - Your picks only: unused slip picks only, ungated;
 //   - a game that started since the snapshot: only as a target or a slip pick's game;
 //   - the session: no request for a swap (even when stale), Regenerate clears handSwapped.
@@ -14,10 +15,11 @@
 //   node --require ./scripts/server-only-stub.cjs --import tsx src/lib/parlay/leg-swap-acceptance-test.ts
 import {
   applyLegSwap,
-  autoPickNext,
   buildGeneratedParlay,
-  defaultSwapTab,
   legAlternatives,
+  legSwapOptions,
+  SWAP_TAB_KEYS,
+  type LegSwapOptions,
   type EngineLeg,
   type GeneratedParlay,
   type GeneratorSettings,
@@ -78,6 +80,7 @@ const base: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: ["ALL
 const ids = (ls: EngineLeg[]) => ls.map((l) => l.pick.pickId);
 const asC = (p: GeneratorPick) => toParlayCandidate(toParlayLeg(p));
 const all = (a: { thisGame: EngineLeg[]; otherGames: EngineLeg[] }) => [...a.thisGame, ...a.otherGames];
+const optionIds = (o: LegSwapOptions) => SWAP_TAB_KEYS.flatMap((t) => o[t]).filter((x) => !x.current).map((x) => x.pick.pickId);
 const scoreOrdered = (ls: EngineLeg[]) => ls.every((l, i) => i === 0 || (ls[i - 1].score ?? 0) >= (l.score ?? 0));
 
 // Every rule, against the legs the alternatives were asked for.
@@ -110,9 +113,8 @@ async function main() {
   check("This game: only picks on the swapped leg's game", a0.thisGame.length > 0 && a0.thisGame.every((l) => l.gameId === p0.legs[0].gameId), ids(a0.thisGame).join(","));
   check("Other games: never a game already in the parlay", a0.otherGames.length > 0 && a0.otherGames.every((l) => !p0.legs.some((x) => x.gameId === l.gameId)), ids(a0.otherGames).join(","));
   const otherGameIds = a0.otherGames.map((l) => l.gameId);
-  check("Other games: one row per game - no two rows share a gameId", otherGameIds.length > 1 && new Set(otherGameIds).size === otherGameIds.length, otherGameIds.join(","));
-  // Each row is its game's best-ranked eligible pick (the home ML has the best record on every fixture game).
-  check("Other games: each row is the best pick on its game", a0.otherGames.every((row) => row.pick.pickId === "g" + row.gameId.slice(1) + "h"), ids(a0.otherGames).join(","));
+  check("Other games: every eligible pick, several per game (no one-row-per-game cut)", new Set(otherGameIds).size < otherGameIds.length, otherGameIds.join(","));
+  check("Other games: each game's best pick (the home ML) is among them", Array.from(new Set(otherGameIds)).every((gid) => a0.otherGames.some((row) => row.pick.pickId === "g" + gid.slice(1) + "h")), ids(a0.otherGames).join(","));
   check("every rule holds (in parlay, slip, conflicts, max per game, gate)", validAgainst(snap, base, p0.legs, 0, a0).length === 0, validAgainst(snap, base, p0.legs, 0, a0).join("; "));
   check("the win-rate gate: no below-gate pick is offered", !all(a0).some((l) => l.pick.pickId.endsWith("low")));
   check("each tab is in the engine's ranking order (score, best first)", scoreOrdered(a0.thisGame) && scoreOrdered(a0.otherGames));
@@ -120,11 +122,11 @@ async function main() {
   const strict = legAlternatives(snap, { ...base, minWinPct: 70 }, p0.legs, 0, NOW);
   check("a higher gate offers fewer, each clearing it", all(strict).length < all(a0).length && all(strict).every((l) => (l.record?.winPct ?? 0) >= 70), ids(all(strict)).join(","));
 
-  // ---- Default tab and Auto-pick ----
-  check("default tab: This game when it has alternatives", defaultSwapTab(a0) === "THIS_GAME");
-  check("default tab: Other games when This game is empty", defaultSwapTab({ thisGame: [], otherGames: a0.otherGames }) === "OTHER_GAMES");
-  check("Auto-pick: the active tab's top row", autoPickNext(a0, "THIS_GAME")?.pick.pickId === a0.thisGame[0].pick.pickId && autoPickNext(a0, "OTHER_GAMES")?.pick.pickId === a0.otherGames[0].pick.pickId);
-  check("Auto-pick: null on an empty tab", autoPickNext({ thisGame: [], otherGames: [] }, "THIS_GAME") === null);
+  // ---- The modal's tabs are these alternatives, sorted ----
+  const o0 = legSwapOptions(snap, base, p0.legs, 0, NOW);
+  check("swap options: Other games is exactly the alternatives' Other games", ids(o0.OTHER_GAMES).join() === ids(a0.otherGames).join());
+  check("swap options: every same-game tab row is a This-game alternative", ["PRIMARY", "HEDGE", "CONTRARIAN"].every((t) => o0[t as "PRIMARY"].filter((x) => !x.current).every((x) => a0.thisGame.some((l) => l.pick.pickId === x.pick.pickId))));
+  check("swap options: the opposing ML is Contrarian, the totals Hedge (an ML leg)", ids(o0.CONTRARIAN).join() === "g" + p0.legs[0].gameId.slice(1) + "a" && o0.HEDGE.length === 2, JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(o0[t])]))));
 
   // ---- The star ----
   const fav: GeneratorSettings = { ...base, favoritesOnly: true };
@@ -150,7 +152,7 @@ async function main() {
   // ---- Repeated swaps ----
   let cur: GeneratedParlay = p0;
   const firstLeg = cur.legs[0].pick.pickId;
-  const s1 = applyLegSwap(snap, base, cur, 0, a0.thisGame[0].pick.pickId, NOW, null)!;
+  const s1 = applyLegSwap(snap, base, cur, 0, a0.thisGame[0].pick.pickId, NOW)!;
   check("swap: the leg is replaced in place, others unchanged", s1.legs[0].pick.pickId === a0.thisGame[0].pick.pickId && ids(s1.legs).slice(1).join() === ids(cur.legs).slice(1).join());
   check("swap: the new leg is handSwapped, the others aren't", s1.legs[0].handSwapped === true && s1.legs.slice(1).every((l) => !l.handSwapped));
   const r1 = legAlternatives(snap, base, s1.legs, 0, NOW);
@@ -158,12 +160,12 @@ async function main() {
   check("swap again (same leg): every rule holds against the current legs", validAgainst(snap, base, s1.legs, 0, r1).length === 0, validAgainst(snap, base, s1.legs, 0, r1).join("; "));
   const a1 = legAlternatives(snap, base, s1.legs, 1, NOW);
   check("another leg: alternatives are valid against the swapped legs", validAgainst(snap, base, s1.legs, 1, a1).length === 0, validAgainst(snap, base, s1.legs, 1, a1).join("; "));
-  const s2 = applyLegSwap(snap, base, s1, 1, a1.otherGames[0].pick.pickId, NOW, null)!;
+  const s2 = applyLegSwap(snap, base, s1, 1, a1.otherGames[0].pick.pickId, NOW)!;
   check("Other games swap: leg 2's game leaves, the new game comes in", !s2.legs.some((l) => l.gameId === s1.legs[1].gameId) && s2.legs[1].gameId === a1.otherGames[0].gameId);
-  const s3 = applyLegSwap(snap, base, s2, 0, r1.thisGame[0].pick.pickId, NOW, null)!;
+  const s3 = applyLegSwap(snap, base, s2, 0, r1.thisGame[0].pick.pickId, NOW)!;
   const a3 = legAlternatives(snap, base, s3.legs, 2, NOW);
   check("three swaps in: alternatives still valid", validAgainst(snap, base, s3.legs, 2, a3).length === 0, validAgainst(snap, base, s3.legs, 2, a3).join("; "));
-  check("a pick that isn't an alternative is refused", applyLegSwap(snap, base, s3, 0, s3.legs[1].pick.pickId, NOW, null) === null && applyLegSwap(snap, base, s3, 0, "g0low", NOW, null) === null);
+  check("a pick that isn't an alternative is refused", applyLegSwap(snap, base, s3, 0, s3.legs[1].pick.pickId, NOW) === null && applyLegSwap(snap, base, s3, 0, "g0low", NOW) === null);
   check("the Regenerate history is untouched by a swap", s3.generatedKey === p0.generatedKey && s3.historyIds.join() === p0.historyIds.join());
 
   // ---- Combined price, SGP and no-odds ----
@@ -176,7 +178,7 @@ async function main() {
   const pp = buildGeneratedParlay(pairSnap, sgp4, null, NOW);
   const pi = pp.legs.findIndex((l) => l.pick.pickId === "g0o");
   const pa = legAlternatives(pairSnap, sgp4, pp.legs, pi, NOW);
-  const pb = applyLegSwap(pairSnap, sgp4, pp, pi, pa.otherGames[0].pick.pickId, NOW, null)!;
+  const pb = applyLegSwap(pairSnap, sgp4, pp, pi, pa.otherGames[0].pick.pickId, NOW)!;
   check("a slip pair on G0: Priced at FanDuel before (sameGameGames 1), priced after an Other-games swap (0)", pp.sameGameGames === 1 && pb.sameGameGames === 0 && price(pb).status === "AVAILABLE");
   check("a swapped-out slip pick is listed as not used; slip counts follow", pb.fromSlip === 1 && pb.slipUsed === 1 && pb.generated === 3 && pb.dropped.some((d) => d.pickId === "g0o" && d.reason === "not_selected"));
   // No odds: a pick with no usable price swapped in makes the price Unavailable, swapped back out, priced again.
@@ -188,20 +190,15 @@ async function main() {
   const withNo = an.otherGames.find((l) => l.pick.pickId === "g4h");
   check("fixture: the no-odds pick is an Other-games alternative", Boolean(withNo), ids(an.otherGames).join(","));
   if (withNo) {
-    const sn = applyLegSwap(snapNo, base, pn, iNo, "g4h", NOW, null)!;
+    const sn = applyLegSwap(snapNo, base, pn, iNo, "g4h", NOW)!;
     check("no-odds swap in: Unavailable", combineOdds(sn.legs.map((l) => l.pick)).status === "UNAVAILABLE");
     const back = legAlternatives(snapNo, base, sn.legs, iNo, NOW).thisGame.concat(legAlternatives(snapNo, base, sn.legs, iNo, NOW).otherGames).find((l) => l.pick.odds !== 0)!;
-    const sb = applyLegSwap(snapNo, base, sn, iNo, back.pick.pickId, NOW, null)!;
+    const sb = applyLegSwap(snapNo, base, sn, iNo, back.pick.pickId, NOW)!;
     check("no-odds swap out: priced again", combineOdds(sb.legs.map((l) => l.pick)).status === "AVAILABLE");
   }
 
-  // ---- Hedge / Contrarian rebuilt; Swap scope and handSwapped ----
-  check("Hedge/Contrarian rebuilt for the new legs", (["SUGGESTED", "YOUR_PICKS", "ALL"] as const).every((s) => s1.hedge[s].legs[0].original.pick.pickId === s1.legs[0].pick.pickId && s1.contrarian[s].legs[0].original.pick.pickId === s1.legs[0].pick.pickId));
-  check("Swap = Suggested leaves the hand-swapped leg alone", s1.hedge.SUGGESTED.legs[0].unchangedReason === "OUT_OF_SCOPE" && s1.contrarian.SUGGESTED.legs[0].unchangedReason === "OUT_OF_SCOPE");
-  check("Swap = Suggested still swaps the other generated legs", s1.hedge.SUGGESTED.legs.slice(1).every((l) => l.unchangedReason !== "OUT_OF_SCOPE"));
-  check("Swap = Your picks / All may change the hand-swapped leg", s1.hedge.YOUR_PICKS.legs[0].unchangedReason !== "OUT_OF_SCOPE" && s1.hedge.ALL.legs[0].unchangedReason !== "OUT_OF_SCOPE");
-  check("Swap = Your picks leaves untouched generated legs alone", s1.hedge.YOUR_PICKS.legs.slice(1).every((l) => l.unchangedReason === "OUT_OF_SCOPE"));
-  check("Hedge's swapped-in picks aren't hand-swapped legs (only the original keeps the flag)", s1.hedge.ALL.legs.every((l, i) => (l.original.handSwapped === true) === (i === 0)));
+  // ---- Hedge / Contrarian: the build's, never rebuilt by a swap ----
+  check("Hedge / Contrarian after swaps are the build's", JSON.stringify(s3.hedge) === JSON.stringify(p0.hedge) && JSON.stringify(s3.contrarian) === JSON.stringify(p0.contrarian));
   check("before any swap, Hedge is the build's own", JSON.stringify(p0.hedge) === JSON.stringify(buildGeneratedParlay(snap, base, null, NOW).hedge));
 
   // ---- Your picks only ----
@@ -212,10 +209,9 @@ async function main() {
   const ay = legAlternatives(ys, yset, py.legs, 0, NOW);
   check("Your picks only: alternatives are unused slip picks only", all(ay).length > 0 && all(ay).every((l) => slipIds.includes(l.pick.pickId) && !py.legs.some((x) => x.pick.pickId === l.pick.pickId)), ids(all(ay)).join(","));
   check("Your picks only: ungated (the below-gate slip pick is offered)", !py.legs.some((l) => l.pick.pickId === "g4low") && all(ay).some((l) => l.pick.pickId === "g4low"));
-  check("Your picks only: Other games is one row per game too", new Set(ay.otherGames.map((l) => l.gameId)).size === ay.otherGames.length);
   check("Your picks only: split by game the same way", validAgainst(ys, yset, py.legs, 0, ay).length === 0, validAgainst(ys, yset, py.legs, 0, ay).join("; "));
   const yIn = ay.otherGames[0];
-  const sy = applyLegSwap(ys, yset, py, 0, yIn.pick.pickId, NOW, null)!;
+  const sy = applyLegSwap(ys, yset, py, 0, yIn.pick.pickId, NOW)!;
   check("Your picks only: the swap moves the pick out of 'not used', the old one in", sy.legs[0].source === "SLIP" && sy.legs[0].handSwapped === true && !sy.dropped.some((d) => d.pickId === yIn.pick.pickId) && sy.dropped.some((d) => d.pickId === py.legs[0].pick.pickId && d.reason === "not_selected"));
 
   // ---- A game that started since the snapshot ----
@@ -252,17 +248,16 @@ async function main() {
   const g = await session.generate(inputs, base);
   if ("error" in g) throw new Error(g.error);
   clock = new Date(NOW.getTime() + 10 * 60 * 1000); // stale: older than SNAPSHOT_MAX_AGE_MS
-  const sa = session.alternatives(g.parlay, 0, base);
-  const swapped = session.swapLeg(g.parlay, 0, sa.thisGame[0].pick.pickId, base);
+  const sa = session.swapOptions(g.parlay, 0, base);
+  const swapped = session.swapLeg(g.parlay, 0, optionIds(sa)[0], base);
   check("session: a swap on a stale snapshot makes no request", requests === 1 && swapped !== null && swapped.legs[0].handSwapped === true, `requests=${requests}`);
   const rg = await session.regenerate(inputs, base);
   if ("error" in rg) throw new Error(rg.error);
   check("session: Regenerate rebuilds with no handSwapped leg", rg.parlay.legs.every((l) => !l.handSwapped));
   if (rg.parlay.variety !== "NO_ALTERNATIVE") {
-    const ra = session.alternatives(rg.parlay, 0, base);
-    const rs = session.swapLeg(rg.parlay, 0, all(ra)[0].pick.pickId, base)!;
-    // The legs the swap didn't touch keep Regenerate's own Hedge draws.
-    check("session: after a Regenerate, a swap keeps the other legs' Hedge picks", rs.hedge.ALL.legs.slice(1).every((l, i) => (l.swap?.pick.pickId ?? null) === (rg.parlay.hedge.ALL.legs[i + 1].swap?.pick.pickId ?? null)) || rs.legs.length < 3);
+    const ra = session.swapOptions(rg.parlay, 0, base);
+    const rs = session.swapLeg(rg.parlay, 0, optionIds(ra)[0], base)!;
+    check("session: after a Regenerate, a swap changes only that leg", rs.legs.slice(1).every((l, i) => l.pick.pickId === rg.parlay.legs[i + 1].pick.pickId) && rs.legs[0].handSwapped === true);
   }
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);

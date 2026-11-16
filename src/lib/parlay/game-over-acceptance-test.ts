@@ -51,12 +51,12 @@ const live = (odds: number) => ({ odds, gameTime: LIVE_TIME, gameStatus: "live" 
 const pre = (odds: number) => ({ odds, gameTime: FUTURE_TIME, gameId: "g-pre" });
 
 const priced = html([live(-110), pre(+150)]);
-check("a live leg with a price: the total is shown, labelled as posted", [priced.includes("Combined odds (as posted)"), priced.includes("Payout"), priced.includes("+")], [true, true, true]);
+check("a live leg with a price: the total is shown, labelled as posted", [priced.includes("Combined odds (as posted)"), priced.includes("$10 pays"), priced.includes("+")], [true, true, true]);
 check("...with the live note", priced.includes(LIVE_NOTE), true);
 const plain = html([pre(-110), pre(+150)]);
 check("no live leg: no note and the plain label", [plain.includes(LIVE_NOTE), plain.includes("as posted"), plain.includes("Combined odds")], [false, false, true]);
 const unpriced = html([live(0), pre(+150)]);
-check("a live leg with no usable price: Unavailable, says the live leg has no price and to check FanDuel", [unpriced.includes("Unavailable"), unpriced.includes("A live leg has no price"), unpriced.includes("check FanDuel"), unpriced.includes("Payout")], [true, true, true, false]);
+check("a live leg with no usable price: Unavailable, says the live leg has no price and to check FanDuel", [unpriced.includes("Unavailable"), unpriced.includes("A live leg has no price"), unpriced.includes("check FanDuel"), unpriced.includes("$10 pays")], [true, true, true, false]);
 check("...no partial total from the other legs", unpriced.includes("+150"), false);
 const unpricedPre = html([pre(0), pre(+150)]);
 check("a pre-game leg with no price keeps the existing wording", [unpricedPre.includes("1 leg has no price, so this parlay can&#x27;t be priced."), unpricedPre.includes("live")], [true, false]);
