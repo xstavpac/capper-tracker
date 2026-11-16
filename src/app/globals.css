@@ -38,7 +38,7 @@ html {
 /* PageBanner palette (components/dashboard/page-banner.tsx + page-banner-art.tsx): one set of variables for
    light (default) and one for dark (.dark is on the app wrapper, see ThemeProvider). Icy blue, not navy. */
 .pbanner{
-  --bv-strip:transparent;--bv-h1:#10243F;--bv-motto:#2F5A86;--bv-badge-icon:#1E3A5F;
+  --bv-strip:#F5F6FA;--bv-h1:#10243F;--bv-motto:#2F5A86;--bv-badge-icon:#1E3A5F;
   --bv-shadow:0 6px 22px rgba(30,64,120,.10),inset 0 0 28px rgba(255,255,255,.55);
   --bv-badge-shadow:0 4px 14px rgba(30,64,120,.15),inset 0 0 0 4px rgba(255,255,255,.6);
   --bv-border:rgba(148,182,222,.9);
@@ -105,13 +105,19 @@ html {
 @keyframes bvDonutOnce{from{stroke-dasharray:0 176}to{stroke-dasharray:110 66}}
 .bv-donut{animation:bvDonutOnce 1.4s ease-out .4s both}
 .bv-ping{animation:bvPing 1.6s ease-in-out 1.8s 1}
-.bv-crown{transform-box:fill-box;transform-origin:center;animation:bvCrown 2.4s ease-in-out 1}
-.bv-ring{animation:bvRing 2.4s ease-in-out 1}
+.bv-crown{transform-box:fill-box;transform-origin:center;animation:bvCrown 3s ease-in-out infinite}
+.bv-ring{animation:bvRing 3s ease-in-out infinite}
 @keyframes bvTwinkleOnce{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.15)}}
-.bv-star{transform-box:fill-box;transform-origin:center;animation:bvTwinkleOnce 2s ease-in-out 1}
-.bv-drift{animation:bvDrift 1.6s linear 1}
-@keyframes bvPopOnce{0%{transform:scale(0)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
-.bv-pop{transform-box:fill-box;transform-origin:center;animation:bvPopOnce .6s ease-out both}
-.bv-pending{animation:bvPending 1.4s ease-in-out 1.3s 1}
-.bv-bob{transform-box:fill-box;transform-origin:center;animation:bvBob 2.6s ease-in-out 1}
-@media (prefers-reduced-motion: reduce){.bv-draw,.bv-bar,.bv-donut,.bv-ping,.bv-crown,.bv-ring,.bv-star,.bv-drift,.bv-pop,.bv-pending,.bv-bob{animation:none}}
+.bv-star{transform-box:fill-box;transform-origin:center;animation:bvTwinkleOnce 2.6s ease-in-out infinite}
+.bv-drift{animation:bvDrift 2.2s linear infinite}
+@keyframes bvPopLoop{0%{transform:scale(0)}8%{transform:scale(1.25)}12%,85%{transform:scale(1)}93%,100%{transform:scale(0)}}
+.bv-pop{transform-box:fill-box;transform-origin:center;animation:bvPopLoop 5s ease-out infinite both}
+.bv-pending{animation:bvPending 1.8s ease-in-out 1.3s infinite}
+.bv-bob{transform-box:fill-box;transform-origin:center;animation:bvBob 3.2s ease-in-out infinite}
+@keyframes bvChLine{0%{stroke-dashoffset:420;opacity:1}30%,85%{stroke-dashoffset:0;opacity:1}95%{stroke-dashoffset:0;opacity:0}100%{stroke-dashoffset:420;opacity:0}}
+.bv-drawl{stroke-dasharray:420;animation:bvChLine 9s ease-out infinite both}
+@keyframes bvChArea{0%,22%{opacity:0}40%,85%{opacity:1}95%,100%{opacity:0}}
+.bv-area{animation:bvChArea 9s ease-out infinite both}
+@keyframes bvChPop{0%,38%{transform:scale(0)}44%{transform:scale(1.2)}48%,85%{transform:scale(1)}93%,100%{transform:scale(0)}}
+.bv-chpop{transform-box:fill-box;transform-origin:center;animation:bvChPop 9s ease-out infinite both}
+@media (prefers-reduced-motion: reduce){.bv-drawl,.bv-area,.bv-chpop,.bv-draw,.bv-bar,.bv-donut,.bv-ping,.bv-crown,.bv-ring,.bv-star,.bv-drift,.bv-pop,.bv-pending,.bv-bob{animation:none}}

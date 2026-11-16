@@ -28,7 +28,7 @@ export default async function ChartsPage() {
   // sport, so only those are sent to the browser.
   return (
     <>
-    <PageBanner variant="charts" title="Charts" icon={PAGE_BANNER_ICONS.charts} />
+    <PageBanner variant="charts" title="Charts" icon={PAGE_BANNER_ICONS.charts} motto="PLOT · SPOT · TREND" />
     <ThemedPage>
       <CapperComparisonWorkspace cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports.map((s) => ({ id: s.id, name: s.name }))} />
     </ThemedPage>

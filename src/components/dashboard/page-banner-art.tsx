@@ -219,7 +219,45 @@ function LiveArt({ uid }: { uid: string }) {
   );
 }
 
-// charts and import reuse the dashboard art until they get their own.
+function ChartsArt({ uid }: { uid: string }) {
+  const f = "pbgc-" + uid;
+  const g = "carea-" + uid;
+  return (
+    <svg width="560" height="180" viewBox="0 0 560 180">
+      <defs>
+        {BLUR(f)}
+        <linearGradient id={g} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--bv-c3)" stopOpacity="0.45" />
+          <stop offset="1" stopColor="var(--bv-c3)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <g filter={`url(#${f})`}>
+        <rect x="170" y="22" width="340" height="146" rx="14" fill="var(--bv-panel)" stroke="var(--bv-c2)" strokeWidth="2" />
+        <g stroke="var(--bv-grid)" strokeWidth="1">
+          <path d="M190 60H490M190 92H490M190 124H490" />
+        </g>
+        <path className="bv-area" d="M190 140L230 118L270 126L310 96L350 104L390 74L430 82L470 56L490 52V152H190Z" fill={`url(#${g})`} />
+        <polyline className="bv-drawl" points="190,140 230,118 270,126 310,96 350,104 390,74 430,82 470,56 490,52" fill="none" stroke="var(--bv-bright)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <polyline className="bv-drawl" style={{ animationDelay: "0.8s" }} points="190,128 230,134 270,112 310,120 350,92 390,100 430,96 470,84 490,88" fill="none" stroke="#7C3AED" strokeWidth="2" strokeDasharray="4 4" strokeLinejoin="round" opacity="0.8" />
+        <path className="bv-chpop" d="M390 36V152" stroke="var(--bv-c1)" strokeWidth="1.5" strokeDasharray="3 4" />
+        <circle className="bv-chpop" cx="390" cy="74" r="6" fill="var(--bv-badge-a)" stroke="var(--bv-bright)" strokeWidth="2.5" />
+        <g className="bv-chpop" style={{ animationDelay: "0.25s" }}>
+          <rect x="402" y="32" width="86" height="34" rx="8" fill="#10243F" />
+          <rect x="412" y="41" width="40" height="5" rx="2.5" fill="#BFD7F2" />
+          <rect x="412" y="51" width="26" height="5" rx="2.5" fill="#22C55E" />
+        </g>
+      </g>
+      <polyline points="80,150 120,124 150,132" fill="none" stroke="var(--bv-c5)" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.8" />
+      <polyline points="520,120 540,80 560,50" fill="none" stroke="var(--bv-c5)" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.8" />
+      <g fill="var(--bv-c2)">
+        <circle cx="120" cy="124" r="3" />
+        <circle cx="540" cy="80" r="3.5" />
+      </g>
+    </svg>
+  );
+}
+
+// import reuses the dashboard art until it gets its own.
 export function BannerArt({ variant, uid }: { variant: BannerVariant; uid: string }) {
   switch (variant) {
     case "cappers":
@@ -228,6 +266,8 @@ export function BannerArt({ variant, uid }: { variant: BannerVariant; uid: strin
       return <PicksArt uid={uid} />;
     case "parlay":
       return <ParlayArt uid={uid} />;
+    case "charts":
+      return <ChartsArt uid={uid} />;
     case "live":
       return <LiveArt uid={uid} />;
     default:

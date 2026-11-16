@@ -8,9 +8,9 @@ export type { BannerVariant };
 // The title is the page's one <h1>; `children` is the controls row under it (client components are
 // fine there). From 900px the card is 172px tall with the variant's SVG art on its right; below
 // that the art goes and the card grows to fit the controls, which wrap.
-// charts and import show the dashboard's art until they get their own.
-// Motion is CSS only (keyframes in globals.css): parlay and live loop, dashboard, cappers and picks
-// play once, and reduced motion leaves it still.
+// import shows the dashboard's art until it gets its own.
+// Motion is CSS only (keyframes in globals.css): everything loops except the dashboard, which plays once;
+// reduced motion leaves it still.
 
 const CARD_BG =
   "radial-gradient(ellipse at 12% 50%, var(--bv-r1) 0%, var(--bv-r1z) 45%), radial-gradient(ellipse at 80% 60%, var(--bv-r2) 0%, var(--bv-r2z) 50%), radial-gradient(ellipse at 50% 120%, var(--bv-r3) 0%, var(--bv-r3z) 40%), var(--bv-base)";
@@ -53,7 +53,9 @@ export const PAGE_BANNER_ICONS: Record<BannerVariant, ReactNode> = {
   ),
   charts: (
     <svg {...SVG}>
-      <path d="M4 20V11M10 20V5M16 20v-7M22 20H2" />
+      <path d="M3 3v18h18" />
+      <path d="M7 15l4-5 3 3 5-6" />
+      <circle cx="19" cy="7" r="1.5" />
     </svg>
   ),
   import: (
