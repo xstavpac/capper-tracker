@@ -34,3 +34,47 @@ html {
   --border: 55 65 81; /* gray-700 */
   --border-subtle: 31 41 55; /* gray-800 */
 }
+
+/* PageBanner art animations (components/dashboard/page-banner-art.tsx), copied from design/page-banners-reference.html.
+   parlay + live loop; dashboard, cappers and picks play once and hold. Reduced motion: static. */
+@keyframes bvTrace{from{stroke-dashoffset:780}to{stroke-dashoffset:0}}
+@keyframes bvBeat{0%,100%{transform:scale(1);opacity:1}15%{transform:scale(1.25);opacity:1}30%{transform:scale(1);opacity:.85}}
+@keyframes bvWave{0%,100%{opacity:.15}40%{opacity:.95}}
+.bv-trace{stroke-dasharray:70 710;animation:bvTrace 2.4s linear infinite}
+.bv-dot{transform-box:fill-box;transform-origin:center;animation:bvBeat 1.2s ease-in-out infinite}
+.bv-wave1{animation:bvWave 1.2s ease-in-out infinite}
+.bv-wave2{animation:bvWave 1.2s ease-in-out .25s infinite}
+@media (prefers-reduced-motion: reduce){.bv-trace,.bv-dot,.bv-wave1,.bv-wave2{animation:none}.bv-trace{stroke-dasharray:none;opacity:0}}
+@keyframes bvChain{from{stroke-dashoffset:720}to{stroke-dashoffset:0}}
+@keyframes bvLeg{0%,30%,100%{stroke:#60A5FA;fill:#0C2160}8%,18%{stroke:#E0F2FE;fill:#1D4ED8}}
+@keyframes bvBolt{0%,62%,100%{transform:scale(1)}70%{transform:scale(1.14)}80%{transform:scale(1)}}
+@keyframes bvBoltFill{0%,62%,100%{fill:#FACC15}70%,76%{fill:#FEF9C3}}
+.bv-chain{stroke-dasharray:60 660;animation:bvChain 3s linear infinite}
+.bv-leg{animation:bvLeg 3s ease-in-out infinite}
+.bv-leg1{animation-delay:.15s}.bv-leg2{animation-delay:.9s}.bv-leg3{animation-delay:1.55s}
+.bv-bolt{transform-box:fill-box;transform-origin:center;animation:bvBolt 3s ease-in-out infinite}
+.bv-boltfill{animation:bvBoltFill 3s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.bv-chain,.bv-leg,.bv-bolt,.bv-boltfill{animation:none}.bv-chain{opacity:0}}
+@keyframes bvPing{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes bvCrown{0%,100%{transform:translateY(0);fill:#FACC15}50%{transform:translateY(-3px);fill:#FEF08A}}
+@keyframes bvRing{0%,100%{stroke:#BFDBFE;stroke-width:2.5}50%{stroke:#FFFFFF;stroke-width:4}}
+@keyframes bvDrift{to{stroke-dashoffset:-32}}
+@keyframes bvPending{0%,100%{stroke:#60A5FA;opacity:.6}50%{stroke:#BFDBFE;opacity:1}}
+@keyframes bvBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes bvDrawOnce{from{stroke-dashoffset:170}to{stroke-dashoffset:0}}
+.bv-draw{stroke-dasharray:170;animation:bvDrawOnce 1.4s ease-out .5s both}
+@keyframes bvGrowOnce{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+.bv-bar{transform-box:fill-box;transform-origin:bottom;animation:bvGrowOnce .9s ease-out both}
+@keyframes bvDonutOnce{from{stroke-dasharray:0 176}to{stroke-dasharray:110 66}}
+.bv-donut{animation:bvDonutOnce 1.4s ease-out .4s both}
+.bv-ping{animation:bvPing 1.6s ease-in-out 1.8s 1}
+.bv-crown{transform-box:fill-box;transform-origin:center;animation:bvCrown 2.4s ease-in-out 1}
+.bv-ring{animation:bvRing 2.4s ease-in-out 1}
+@keyframes bvTwinkleOnce{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.15)}}
+.bv-star{transform-box:fill-box;transform-origin:center;animation:bvTwinkleOnce 2s ease-in-out 1}
+.bv-drift{animation:bvDrift 1.6s linear 1}
+@keyframes bvPopOnce{0%{transform:scale(0)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+.bv-pop{transform-box:fill-box;transform-origin:center;animation:bvPopOnce .6s ease-out both}
+.bv-pending{animation:bvPending 1.4s ease-in-out 1.3s 1}
+.bv-bob{transform-box:fill-box;transform-origin:center;animation:bvBob 2.6s ease-in-out 1}
+@media (prefers-reduced-motion: reduce){.bv-draw,.bv-bar,.bv-donut,.bv-ping,.bv-crown,.bv-ring,.bv-star,.bv-drift,.bv-pop,.bv-pending,.bv-bob{animation:none}}

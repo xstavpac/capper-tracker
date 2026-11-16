@@ -1,0 +1,479 @@
+<!doctype html>
+<!--
+  BettingView page banners: DESIGN REFERENCE (not production code).
+  One shared banner shell (rounded glowing card on navy, grid, faint edge bars,
+  light streak, round icon badge, divider, title, optional motto, controls row)
+  plus per-page right-side SVG art and CSS animations.
+  Loop forever: parlay, live.  Play once on load: dashboard, cappers, picks.
+  Rebuild this as a React component; copy colors, sizes, SVG paths and keyframes exactly.
+-->
+<html lang="en"><head><meta charset="utf-8"><title>BettingView page banners reference</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+@keyframes bvTrace{from{stroke-dashoffset:780}to{stroke-dashoffset:0}}
+@keyframes bvBeat{0%,100%{transform:scale(1);opacity:1}15%{transform:scale(1.25);opacity:1}30%{transform:scale(1);opacity:.85}}
+@keyframes bvWave{0%,100%{opacity:.15}40%{opacity:.95}}
+.bv-trace{stroke-dasharray:70 710;animation:bvTrace 2.4s linear infinite}
+.bv-dot{transform-box:fill-box;transform-origin:center;animation:bvBeat 1.2s ease-in-out infinite}
+.bv-wave1{animation:bvWave 1.2s ease-in-out infinite}
+.bv-wave2{animation:bvWave 1.2s ease-in-out .25s infinite}
+@media (prefers-reduced-motion: reduce){.bv-trace,.bv-dot,.bv-wave1,.bv-wave2{animation:none}.bv-trace{stroke-dasharray:none;opacity:0}}
+@keyframes bvChain{from{stroke-dashoffset:720}to{stroke-dashoffset:0}}
+@keyframes bvLeg{0%,30%,100%{stroke:#60A5FA;fill:#0C2160}8%,18%{stroke:#E0F2FE;fill:#1D4ED8}}
+@keyframes bvBolt{0%,62%,100%{transform:scale(1)}70%{transform:scale(1.14)}80%{transform:scale(1)}}
+@keyframes bvBoltFill{0%,62%,100%{fill:#FACC15}70%,76%{fill:#FEF9C3}}
+.bv-chain{stroke-dasharray:60 660;animation:bvChain 3s linear infinite}
+.bv-leg{animation:bvLeg 3s ease-in-out infinite}
+.bv-leg1{animation-delay:.15s}.bv-leg2{animation-delay:.9s}.bv-leg3{animation-delay:1.55s}
+.bv-bolt{transform-box:fill-box;transform-origin:center;animation:bvBolt 3s ease-in-out infinite}
+.bv-boltfill{animation:bvBoltFill 3s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.bv-chain,.bv-leg,.bv-bolt,.bv-boltfill{animation:none}.bv-chain{opacity:0}}
+@keyframes bvPing{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes bvCrown{0%,100%{transform:translateY(0);fill:#FACC15}50%{transform:translateY(-3px);fill:#FEF08A}}
+@keyframes bvRing{0%,100%{stroke:#BFDBFE;stroke-width:2.5}50%{stroke:#FFFFFF;stroke-width:4}}
+@keyframes bvDrift{to{stroke-dashoffset:-32}}
+@keyframes bvPending{0%,100%{stroke:#60A5FA;opacity:.6}50%{stroke:#BFDBFE;opacity:1}}
+@keyframes bvBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes bvDrawOnce{from{stroke-dashoffset:170}to{stroke-dashoffset:0}}
+.bv-draw{stroke-dasharray:170;animation:bvDrawOnce 1.4s ease-out .5s both}
+@keyframes bvGrowOnce{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+.bv-bar{transform-box:fill-box;transform-origin:bottom;animation:bvGrowOnce .9s ease-out both}
+@keyframes bvDonutOnce{from{stroke-dasharray:0 176}to{stroke-dasharray:110 66}}
+.bv-donut{animation:bvDonutOnce 1.4s ease-out .4s both}
+.bv-ping{animation:bvPing 1.6s ease-in-out 1.8s 1}
+.bv-crown{transform-box:fill-box;transform-origin:center;animation:bvCrown 2.4s ease-in-out 1}
+.bv-ring{animation:bvRing 2.4s ease-in-out 1}
+@keyframes bvTwinkleOnce{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.15)}}
+.bv-star{transform-box:fill-box;transform-origin:center;animation:bvTwinkleOnce 2s ease-in-out 1}
+.bv-drift{animation:bvDrift 1.6s linear 1}
+@keyframes bvPopOnce{0%{transform:scale(0)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+.bv-pop{transform-box:fill-box;transform-origin:center;animation:bvPopOnce .6s ease-out both}
+.bv-pending{animation:bvPending 1.4s ease-in-out 1.3s 1}
+.bv-bob{transform-box:fill-box;transform-origin:center;animation:bvBob 2.6s ease-in-out 1}
+@media (prefers-reduced-motion: reduce){.bv-draw,.bv-bar,.bv-donut,.bv-ping,.bv-crown,.bv-ring,.bv-star,.bv-drift,.bv-pop,.bv-pending,.bv-bob{animation:none}}
+</style>
+<style>html,body{background:#0A1530}</style></head><body>
+<!-- ===== BANNER: dashboard ===== -->
+
+<div style="padding: 14px 24px; background: #0A1530; font-family: Inter, system-ui, sans-serif">
+<section style="position: relative; overflow: hidden; height: 172px; border-radius: 28px; border: 1.5px solid rgba(96, 165, 250, 0.85); box-shadow: 0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22); background: radial-gradient(ellipse at 12% 50%, rgba(37, 99, 235, 0.45) 0%, rgba(37, 99, 235, 0) 45%), radial-gradient(ellipse at 80% 60%, rgba(29, 78, 216, 0.55) 0%, rgba(29, 78, 216, 0) 50%), radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 40%), #040B26">
+
+<!-- grid + faint edge bars, same language as the dashboard image -->
+<svg style="position: absolute; inset: 0" width="100%" height="180" aria-hidden="true">
+<defs><pattern id="pbgrid-dashboard" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#1E3A8A" stroke-width="1"></path></pattern></defs>
+<rect width="100%" height="180" fill="url(#pbgrid-dashboard)" opacity="0.35"></rect>
+</svg>
+<svg style="position: absolute; left: 0; bottom: 0; opacity: 0.35" width="220" height="180" viewBox="0 0 220 180" aria-hidden="true">
+<g fill="#3B82F6"><rect x="8" y="120" width="10" height="60" rx="2"></rect><rect x="26" y="96" width="10" height="84" rx="2"></rect><rect x="44" y="134" width="10" height="46" rx="2"></rect><rect x="62" y="108" width="10" height="72" rx="2"></rect><rect x="80" y="146" width="10" height="34" rx="2"></rect><rect x="98" y="124" width="10" height="56" rx="2"></rect><rect x="116" y="156" width="10" height="24" rx="2"></rect></g>
+<polyline points="0,150 40,90 90,110 140,70 220,40" fill="none" stroke="#60A5FA" stroke-width="1.5"></polyline>
+</svg>
+
+<svg style="position: absolute; inset: 0" width="100%" height="172" viewBox="0 0 1400 172" preserveAspectRatio="none" aria-hidden="true">
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#38BDF8" stroke-width="6" opacity="0.12" vector-effect="non-scaling-stroke"></path>
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#7DD3FC" stroke-width="1.5" opacity="0.7" vector-effect="non-scaling-stroke"></path>
+<path d="M300 172C520 150 640 120 820 110" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.45" vector-effect="non-scaling-stroke"></path>
+</svg>
+
+<!-- page-specific art, right side -->
+<div style="position: absolute; right: 0; bottom: 0; height: 180px" aria-hidden="true">
+
+<svg width="560" height="180" viewBox="0 0 560 180">
+<defs><filter id="pbg5-dashboard" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+<linearGradient id="dbar-dashboard" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#1D4ED8" stop-opacity="0.3"></stop><stop offset="1" stop-color="#38BDF8"></stop></linearGradient></defs>
+<g filter="url(#pbg5-dashboard)">
+<rect x="190" y="26" width="300" height="140" rx="14" fill="#0C2160" stroke="#93C5FD" stroke-width="2"></rect>
+<rect x="206" y="40" width="80" height="30" rx="7" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5"></rect>
+<rect x="296" y="40" width="80" height="30" rx="7" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5"></rect>
+<rect x="386" y="40" width="88" height="30" rx="7" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5"></rect>
+<rect x="214" y="50" width="34" height="5" rx="2.5" fill="#60A5FA"></rect><rect x="214" y="59" width="22" height="4" rx="2" fill="#22C55E"></rect>
+<rect x="304" y="50" width="34" height="5" rx="2.5" fill="#60A5FA"></rect><rect x="304" y="59" width="22" height="4" rx="2" fill="#22C55E"></rect>
+<rect x="394" y="50" width="34" height="5" rx="2.5" fill="#60A5FA"></rect><rect x="394" y="59" width="22" height="4" rx="2" fill="#F87171"></rect>
+<g fill="url(#dbar-dashboard)"><rect class="bv-bar" style="animation-delay: 0.00s" x="212" y="122" width="12" height="32" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.06s" x="230" y="112" width="12" height="42" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.12s" x="248" y="128" width="12" height="26" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.18s" x="266" y="104" width="12" height="50" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.24s" x="284" y="116" width="12" height="38" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.30s" x="302" y="96" width="12" height="58" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.36s" x="320" y="108" width="12" height="46" rx="2"></rect><rect class="bv-bar" style="animation-delay: 0.42s" x="338" y="88" width="12" height="66" rx="2"></rect></g>
+<polyline class="bv-draw" points="212,128 248,116 284,108 320,92 356,82" fill="none" stroke="#7DD3FC" stroke-width="2"></polyline>
+<circle cx="284" cy="108" r="3.5" fill="#E0F2FE"></circle><circle class="bv-ping" cx="356" cy="82" r="4.5" fill="#FFFFFF"></circle>
+<circle cx="428" cy="118" r="28" fill="none" stroke="#1E3A8A" stroke-width="10"></circle>
+<circle class="bv-donut" cx="428" cy="118" r="28" fill="none" stroke="#38BDF8" stroke-width="10" stroke-dasharray="110 66" transform="rotate(-90 428 118)"></circle>
+<circle cx="428" cy="118" r="28" fill="none" stroke="#7C3AED" stroke-width="10" stroke-dasharray="30 146" stroke-dashoffset="-110" transform="rotate(-90 428 118)"></circle>
+</g>
+<polyline points="110,150 150,120 180,128" fill="none" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="3 5" opacity="0.8"></polyline>
+<polyline points="500,120 530,70 560,40" fill="none" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="3 5" opacity="0.8"></polyline>
+<g fill="#93C5FD"><circle cx="150" cy="120" r="3"></circle><circle cx="530" cy="70" r="3.5"></circle></g>
+</svg>
+
+
+
+
+
+
+
+
+
+</div>
+
+<!-- title + this page's controls -->
+<div style="position: relative; max-width: 1400px; height: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 22px; box-sizing: border-box">
+<span style="display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%); border: 2px solid #3B82F6; box-shadow: 0 0 22px rgba(59, 130, 246, 0.7), inset 0 0 14px rgba(96, 165, 250, 0.35); color: #BFDBFE" aria-hidden="true">
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+
+
+
+
+</span>
+<span style="width: 1px; height: 70px; background: #3B82F6; opacity: 0.7; flex: 0 0 auto" aria-hidden="true"></span>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #FFFFFF; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6)">Dashboard</h1>
+<span style="display: flex; align-items: center; gap: 16px"><span style="width: 2px; height: 30px; border-radius: 2px; background: #3B82F6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.8)" aria-hidden="true"></span><span style="font-size: 14px; font-weight: 700; letter-spacing: 0.24em; color: #7DD3FC">TRACK · COMPARE · DECIDE</span></span>
+
+</div>
+
+
+
+
+
+
+</div>
+</div>
+
+</section>
+</div>
+
+<!-- ===== BANNER: cappers ===== -->
+
+<div style="padding: 14px 24px; background: #0A1530; font-family: Inter, system-ui, sans-serif">
+<section style="position: relative; overflow: hidden; height: 172px; border-radius: 28px; border: 1.5px solid rgba(96, 165, 250, 0.85); box-shadow: 0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22); background: radial-gradient(ellipse at 12% 50%, rgba(37, 99, 235, 0.45) 0%, rgba(37, 99, 235, 0) 45%), radial-gradient(ellipse at 80% 60%, rgba(29, 78, 216, 0.55) 0%, rgba(29, 78, 216, 0) 50%), radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 40%), #040B26">
+
+<!-- grid + faint edge bars, same language as the dashboard image -->
+<svg style="position: absolute; inset: 0" width="100%" height="180" aria-hidden="true">
+<defs><pattern id="pbgrid-cappers" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#1E3A8A" stroke-width="1"></path></pattern></defs>
+<rect width="100%" height="180" fill="url(#pbgrid-cappers)" opacity="0.35"></rect>
+</svg>
+<svg style="position: absolute; left: 0; bottom: 0; opacity: 0.35" width="220" height="180" viewBox="0 0 220 180" aria-hidden="true">
+<g fill="#3B82F6"><rect x="8" y="120" width="10" height="60" rx="2"></rect><rect x="26" y="96" width="10" height="84" rx="2"></rect><rect x="44" y="134" width="10" height="46" rx="2"></rect><rect x="62" y="108" width="10" height="72" rx="2"></rect><rect x="80" y="146" width="10" height="34" rx="2"></rect><rect x="98" y="124" width="10" height="56" rx="2"></rect><rect x="116" y="156" width="10" height="24" rx="2"></rect></g>
+<polyline points="0,150 40,90 90,110 140,70 220,40" fill="none" stroke="#60A5FA" stroke-width="1.5"></polyline>
+</svg>
+
+<svg style="position: absolute; inset: 0" width="100%" height="172" viewBox="0 0 1400 172" preserveAspectRatio="none" aria-hidden="true">
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#38BDF8" stroke-width="6" opacity="0.12" vector-effect="non-scaling-stroke"></path>
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#7DD3FC" stroke-width="1.5" opacity="0.7" vector-effect="non-scaling-stroke"></path>
+<path d="M300 172C520 150 640 120 820 110" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.45" vector-effect="non-scaling-stroke"></path>
+</svg>
+
+<!-- page-specific art, right side -->
+<div style="position: absolute; right: 0; bottom: 0; height: 180px" aria-hidden="true">
+
+
+
+<svg width="560" height="180" viewBox="0 0 560 180">
+<defs><filter id="pbg1-cappers" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+<linearGradient id="pod-cappers" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2563EB"></stop><stop offset="1" stop-color="#1E3A8A" stop-opacity="0.2"></stop></linearGradient></defs>
+<g filter="url(#pbg1-cappers)">
+<rect x="200" y="112" width="96" height="68" rx="6" fill="url(#pod-cappers)" stroke="#60A5FA" stroke-width="1.5"></rect>
+<rect x="300" y="84" width="96" height="96" rx="6" fill="url(#pod-cappers)" stroke="#93C5FD" stroke-width="2"></rect>
+<rect x="400" y="128" width="96" height="52" rx="6" fill="url(#pod-cappers)" stroke="#60A5FA" stroke-width="1.5"></rect>
+<circle cx="248" cy="86" r="20" fill="#0B1B4A" stroke="#60A5FA" stroke-width="2"></circle><circle cx="248" cy="80" r="7" fill="#60A5FA"></circle><path d="M235 98a13 9 0 0 1 26 0" fill="#60A5FA"></path>
+<circle class="bv-ring" cx="348" cy="56" r="23" fill="#0B1B4A" stroke="#BFDBFE" stroke-width="2.5"></circle><circle cx="348" cy="49" r="8" fill="#BFDBFE"></circle><path d="M333 70a15 10 0 0 1 30 0" fill="#BFDBFE"></path>
+<circle cx="448" cy="102" r="18" fill="#0B1B4A" stroke="#60A5FA" stroke-width="2"></circle><circle cx="448" cy="97" r="6" fill="#60A5FA"></circle><path d="M437 112a11 8 0 0 1 22 0" fill="#60A5FA"></path>
+<path class="bv-crown" d="M332 26l6 -12 10 9 10 -9 6 12z" fill="#FACC15" stroke="#FDE68A" stroke-width="1.5"></path>
+</g>
+<text x="248" y="156" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#BFDBFE">2</text>
+<text x="348" y="142" text-anchor="middle" font-family="Inter, sans-serif" font-size="28" font-weight="800" fill="#FFFFFF">1</text>
+<text x="448" y="162" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="#BFDBFE">3</text>
+<g fill="#93C5FD"><path class="bv-star" d="M150 60l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"></path><path class="bv-star" style="animation-delay: 1s" d="M520 50l2.5 5 5.5 1-4 4 1 5.5-5-2.5-5 2.5 1-5.5-4-4 5.5-1z"></path></g>
+<polyline class="bv-drift" points="120,150 170,128 210,136 260,100 320,108 380,70 450,76 540,30" fill="none" stroke="#38BDF8" stroke-width="1.5" stroke-dasharray="3 5" opacity="0.8"></polyline>
+</svg>
+
+
+
+
+
+
+
+</div>
+
+<!-- title + this page's controls -->
+<div style="position: relative; max-width: 1400px; height: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 22px; box-sizing: border-box">
+<span style="display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%); border: 2px solid #3B82F6; box-shadow: 0 0 22px rgba(59, 130, 246, 0.7), inset 0 0 14px rgba(96, 165, 250, 0.35); color: #BFDBFE" aria-hidden="true">
+
+<svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8l4 3 4-6 4 6 4-3-2 10H6z"></path><path d="M6 21h12"></path></svg>
+
+
+
+</span>
+<span style="width: 1px; height: 70px; background: #3B82F6; opacity: 0.7; flex: 0 0 auto" aria-hidden="true"></span>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #FFFFFF; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6)">Cappers</h1>
+
+
+</div>
+
+
+<div role="group" aria-label="Time range" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(4, 11, 38, 0.7); border: 1px solid #2A4A8A; align-self: flex-start">
+<button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: #2563EB; color: #FFFFFF">All Time</button><button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">Today</button><button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">Yesterday</button><button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">Last 7 Days</button><button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">Last 30 Days</button><button type="button" style="height: 32px; padding: 0 14px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">Last 60 Days</button>
+</div>
+
+
+
+
+
+</div>
+</div>
+
+</section>
+</div>
+
+<!-- ===== BANNER: picks ===== -->
+
+<div style="padding: 14px 24px; background: #0A1530; font-family: Inter, system-ui, sans-serif">
+<section style="position: relative; overflow: hidden; height: 172px; border-radius: 28px; border: 1.5px solid rgba(96, 165, 250, 0.85); box-shadow: 0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22); background: radial-gradient(ellipse at 12% 50%, rgba(37, 99, 235, 0.45) 0%, rgba(37, 99, 235, 0) 45%), radial-gradient(ellipse at 80% 60%, rgba(29, 78, 216, 0.55) 0%, rgba(29, 78, 216, 0) 50%), radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 40%), #040B26">
+
+<!-- grid + faint edge bars, same language as the dashboard image -->
+<svg style="position: absolute; inset: 0" width="100%" height="180" aria-hidden="true">
+<defs><pattern id="pbgrid-picks" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#1E3A8A" stroke-width="1"></path></pattern></defs>
+<rect width="100%" height="180" fill="url(#pbgrid-picks)" opacity="0.35"></rect>
+</svg>
+<svg style="position: absolute; left: 0; bottom: 0; opacity: 0.35" width="220" height="180" viewBox="0 0 220 180" aria-hidden="true">
+<g fill="#3B82F6"><rect x="8" y="120" width="10" height="60" rx="2"></rect><rect x="26" y="96" width="10" height="84" rx="2"></rect><rect x="44" y="134" width="10" height="46" rx="2"></rect><rect x="62" y="108" width="10" height="72" rx="2"></rect><rect x="80" y="146" width="10" height="34" rx="2"></rect><rect x="98" y="124" width="10" height="56" rx="2"></rect><rect x="116" y="156" width="10" height="24" rx="2"></rect></g>
+<polyline points="0,150 40,90 90,110 140,70 220,40" fill="none" stroke="#60A5FA" stroke-width="1.5"></polyline>
+</svg>
+
+<svg style="position: absolute; inset: 0" width="100%" height="172" viewBox="0 0 1400 172" preserveAspectRatio="none" aria-hidden="true">
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#38BDF8" stroke-width="6" opacity="0.12" vector-effect="non-scaling-stroke"></path>
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#7DD3FC" stroke-width="1.5" opacity="0.7" vector-effect="non-scaling-stroke"></path>
+<path d="M300 172C520 150 640 120 820 110" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.45" vector-effect="non-scaling-stroke"></path>
+</svg>
+
+<!-- page-specific art, right side -->
+<div style="position: absolute; right: 0; bottom: 0; height: 180px" aria-hidden="true">
+
+
+
+
+
+<svg width="560" height="180" viewBox="0 0 560 180">
+<defs><filter id="pbg2-picks" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter></defs>
+<g filter="url(#pbg2-picks)">
+<g transform="rotate(-8 300 100)"><rect x="210" y="36" width="190" height="120" rx="12" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5" opacity="0.75"></rect></g>
+<g transform="rotate(4 380 96)">
+<rect x="290" y="22" width="210" height="140" rx="12" fill="#0C2160" stroke="#93C5FD" stroke-width="2"></rect>
+<g class="bv-pop" style="animation-delay: 0.2s"><circle cx="318" cy="56" r="11" fill="#22C55E"></circle><path d="M313 56l4 4 7-8" fill="none" stroke="#FFFFFF" stroke-width="2.4"></path></g>
+<rect x="340" y="50" width="110" height="8" rx="4" fill="#93C5FD"></rect><rect x="462" y="50" width="24" height="8" rx="4" fill="#60A5FA"></rect>
+<g class="bv-pop" style="animation-delay: 0.7s"><circle cx="318" cy="92" r="11" fill="#22C55E"></circle><path d="M313 92l4 4 7-8" fill="none" stroke="#FFFFFF" stroke-width="2.4"></path></g>
+<rect x="340" y="86" width="90" height="8" rx="4" fill="#93C5FD"></rect><rect x="462" y="86" width="24" height="8" rx="4" fill="#60A5FA"></rect>
+<circle class="bv-pending" cx="318" cy="128" r="11" fill="none" stroke="#60A5FA" stroke-width="2"></circle>
+<rect x="340" y="122" width="100" height="8" rx="4" fill="#3B82F6"></rect><rect x="462" y="122" width="24" height="8" rx="4" fill="#3B82F6"></rect>
+</g>
+<g class="bv-bob"><circle cx="160" cy="118" r="26" fill="#0B1B4A" stroke="#60A5FA" stroke-width="2"></circle><path d="M134 118h52M160 92v52M141 99c10 8 10 30 0 38M179 99c-10 8-10 30 0 38" fill="none" stroke="#60A5FA" stroke-width="1.5"></path></g>
+<ellipse cx="530" cy="140" rx="26" ry="16" transform="rotate(-25 530 140)" fill="#0B1B4A" stroke="#60A5FA" stroke-width="2"></ellipse><path d="M520 140h20M524 136v8M530 136v8M536 136v8" transform="rotate(-25 530 140)" stroke="#93C5FD" stroke-width="1.5"></path>
+</g>
+</svg>
+
+
+
+
+
+</div>
+
+<!-- title + this page's controls -->
+<div style="position: relative; max-width: 1400px; height: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 22px; box-sizing: border-box">
+<span style="display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%); border: 2px solid #3B82F6; box-shadow: 0 0 22px rgba(59, 130, 246, 0.7), inset 0 0 14px rgba(96, 165, 250, 0.35); color: #BFDBFE" aria-hidden="true">
+
+
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 8l1.5 1.5L12 7M8 13l1.5 1.5L12 12M14 8h2M14 13h2M8 17h8"></path></svg>
+
+
+</span>
+<span style="width: 1px; height: 70px; background: #3B82F6; opacity: 0.7; flex: 0 0 auto" aria-hidden="true"></span>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #FFFFFF; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6)">Picks</h1>
+
+
+</div>
+
+
+
+
+
+
+</div>
+</div>
+
+</section>
+</div>
+
+<!-- ===== BANNER: parlay ===== -->
+
+<div style="padding: 14px 24px; background: #0A1530; font-family: Inter, system-ui, sans-serif">
+<section style="position: relative; overflow: hidden; height: 172px; border-radius: 28px; border: 1.5px solid rgba(96, 165, 250, 0.85); box-shadow: 0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22); background: radial-gradient(ellipse at 12% 50%, rgba(37, 99, 235, 0.45) 0%, rgba(37, 99, 235, 0) 45%), radial-gradient(ellipse at 80% 60%, rgba(29, 78, 216, 0.55) 0%, rgba(29, 78, 216, 0) 50%), radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 40%), #040B26">
+
+<!-- grid + faint edge bars, same language as the dashboard image -->
+<svg style="position: absolute; inset: 0" width="100%" height="180" aria-hidden="true">
+<defs><pattern id="pbgrid-parlay" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#1E3A8A" stroke-width="1"></path></pattern></defs>
+<rect width="100%" height="180" fill="url(#pbgrid-parlay)" opacity="0.35"></rect>
+</svg>
+<svg style="position: absolute; left: 0; bottom: 0; opacity: 0.35" width="220" height="180" viewBox="0 0 220 180" aria-hidden="true">
+<g fill="#3B82F6"><rect x="8" y="120" width="10" height="60" rx="2"></rect><rect x="26" y="96" width="10" height="84" rx="2"></rect><rect x="44" y="134" width="10" height="46" rx="2"></rect><rect x="62" y="108" width="10" height="72" rx="2"></rect><rect x="80" y="146" width="10" height="34" rx="2"></rect><rect x="98" y="124" width="10" height="56" rx="2"></rect><rect x="116" y="156" width="10" height="24" rx="2"></rect></g>
+<polyline points="0,150 40,90 90,110 140,70 220,40" fill="none" stroke="#60A5FA" stroke-width="1.5"></polyline>
+</svg>
+
+<svg style="position: absolute; inset: 0" width="100%" height="172" viewBox="0 0 1400 172" preserveAspectRatio="none" aria-hidden="true">
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#38BDF8" stroke-width="6" opacity="0.12" vector-effect="non-scaling-stroke"></path>
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#7DD3FC" stroke-width="1.5" opacity="0.7" vector-effect="non-scaling-stroke"></path>
+<path d="M300 172C520 150 640 120 820 110" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.45" vector-effect="non-scaling-stroke"></path>
+</svg>
+
+<!-- page-specific art, right side -->
+<div style="position: absolute; right: 0; bottom: 0; height: 180px" aria-hidden="true">
+
+
+
+
+
+
+
+<svg width="560" height="180" viewBox="0 0 560 180">
+<defs><filter id="pbg3-parlay" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter></defs>
+<g filter="url(#pbg3-parlay)" fill="none">
+<path d="M150 130C190 60 230 60 260 104S330 150 360 92 430 40 470 70" stroke="#60A5FA" stroke-width="2.5"></path>
+<path d="M150 130C190 60 230 60 260 104S330 150 360 92 430 40 470 70" stroke="#38BDF8" stroke-width="8" opacity="0.18"></path>
+<path class="bv-chain" d="M150 130C190 60 230 60 260 104S330 150 360 92 430 40 470 70" stroke="#E0F2FE" stroke-width="3.5" stroke-linecap="round"></path>
+</g>
+<g filter="url(#pbg3-parlay)">
+<rect class="bv-leg bv-leg1" x="122" y="112" width="58" height="34" rx="10" fill="#0C2160" stroke="#60A5FA" stroke-width="2"></rect>
+<rect class="bv-leg bv-leg2" x="232" y="88" width="58" height="34" rx="10" fill="#0C2160" stroke="#60A5FA" stroke-width="2"></rect>
+<rect class="bv-leg bv-leg3" x="332" y="76" width="58" height="34" rx="10" fill="#0C2160" stroke="#60A5FA" stroke-width="2"></rect>
+<g class="bv-bolt"><circle cx="490" cy="72" r="34" fill="#0B1B4A" stroke="#BFDBFE" stroke-width="2.5"></circle>
+<path class="bv-boltfill" d="M494 48l-16 28h12l-4 22 18-30h-12z" fill="#FACC15"></path></g>
+</g>
+<g font-family="Inter, sans-serif" font-size="13" font-weight="800" fill="#BFDBFE" text-anchor="middle"><text x="151" y="134">LEG 1</text><text x="261" y="110">LEG 2</text><text x="361" y="98">LEG 3</text></g>
+<g fill="#93C5FD"><circle cx="205" cy="80" r="3"></circle><circle cx="315" cy="128" r="3"></circle><circle cx="430" cy="52" r="3"></circle></g>
+</svg>
+
+
+
+</div>
+
+<!-- title + this page's controls -->
+<div style="position: relative; max-width: 1400px; height: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 22px; box-sizing: border-box">
+<span style="display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%); border: 2px solid #3B82F6; box-shadow: 0 0 22px rgba(59, 130, 246, 0.7), inset 0 0 14px rgba(96, 165, 250, 0.35); color: #BFDBFE" aria-hidden="true">
+
+
+
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L4 14h7l-1 8 9-12h-7z"></path></svg>
+
+</span>
+<span style="width: 1px; height: 70px; background: #3B82F6; opacity: 0.7; flex: 0 0 auto" aria-hidden="true"></span>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #FFFFFF; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6)">Parlay Generator</h1>
+
+<span style="display: flex; align-items: center; gap: 16px"><span style="width: 2px; height: 30px; border-radius: 2px; background: #3B82F6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.8)" aria-hidden="true"></span><span style="font-size: 14px; font-weight: 700; letter-spacing: 0.24em; color: #7DD3FC">BUILD · HEDGE · FADE</span></span>
+</div>
+
+
+
+
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 999px; border: 1px solid #2A4A8A; background: rgba(4, 11, 38, 0.7); color: #E6EAF2; font-size: 13px; font-weight: 600; align-self: flex-start">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M9 8h6M9 12h6"></path></svg>Parlay slip · 0 picks · 0 games</button>
+
+
+
+</div>
+</div>
+
+</section>
+</div>
+
+<!-- ===== BANNER: live ===== -->
+
+<div style="padding: 14px 24px; background: #0A1530; font-family: Inter, system-ui, sans-serif">
+<section style="position: relative; overflow: hidden; height: 172px; border-radius: 28px; border: 1.5px solid rgba(96, 165, 250, 0.85); box-shadow: 0 0 18px rgba(59, 130, 246, 0.55), inset 0 0 28px rgba(59, 130, 246, 0.22); background: radial-gradient(ellipse at 12% 50%, rgba(37, 99, 235, 0.45) 0%, rgba(37, 99, 235, 0) 45%), radial-gradient(ellipse at 80% 60%, rgba(29, 78, 216, 0.55) 0%, rgba(29, 78, 216, 0) 50%), radial-gradient(ellipse at 50% 120%, rgba(56, 189, 248, 0.35) 0%, rgba(56, 189, 248, 0) 40%), #040B26">
+
+<!-- grid + faint edge bars, same language as the dashboard image -->
+<svg style="position: absolute; inset: 0" width="100%" height="180" aria-hidden="true">
+<defs><pattern id="pbgrid-live" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#1E3A8A" stroke-width="1"></path></pattern></defs>
+<rect width="100%" height="180" fill="url(#pbgrid-live)" opacity="0.35"></rect>
+</svg>
+<svg style="position: absolute; left: 0; bottom: 0; opacity: 0.35" width="220" height="180" viewBox="0 0 220 180" aria-hidden="true">
+<g fill="#3B82F6"><rect x="8" y="120" width="10" height="60" rx="2"></rect><rect x="26" y="96" width="10" height="84" rx="2"></rect><rect x="44" y="134" width="10" height="46" rx="2"></rect><rect x="62" y="108" width="10" height="72" rx="2"></rect><rect x="80" y="146" width="10" height="34" rx="2"></rect><rect x="98" y="124" width="10" height="56" rx="2"></rect><rect x="116" y="156" width="10" height="24" rx="2"></rect></g>
+<polyline points="0,150 40,90 90,110 140,70 220,40" fill="none" stroke="#60A5FA" stroke-width="1.5"></polyline>
+</svg>
+
+<svg style="position: absolute; inset: 0" width="100%" height="172" viewBox="0 0 1400 172" preserveAspectRatio="none" aria-hidden="true">
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#38BDF8" stroke-width="6" opacity="0.12" vector-effect="non-scaling-stroke"></path>
+<path d="M520 172C720 160 860 92 1400 24" fill="none" stroke="#7DD3FC" stroke-width="1.5" opacity="0.7" vector-effect="non-scaling-stroke"></path>
+<path d="M300 172C520 150 640 120 820 110" fill="none" stroke="#3B82F6" stroke-width="1" opacity="0.45" vector-effect="non-scaling-stroke"></path>
+</svg>
+
+<!-- page-specific art, right side -->
+<div style="position: absolute; right: 0; bottom: 0; height: 180px" aria-hidden="true">
+
+
+
+
+
+
+
+
+
+<svg width="560" height="180" viewBox="0 0 560 180">
+<defs><filter id="pbg4-live" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur><feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter></defs>
+<g filter="url(#pbg4-live)">
+<polyline points="90,112 190,112 214,112 232,62 254,150 276,88 292,112 360,112 378,96 392,112 560,112" fill="none" stroke="#38BDF8" stroke-width="2.5" stroke-linejoin="round"></polyline>
+<polyline class="bv-trace" points="90,112 190,112 214,112 232,62 254,150 276,88 292,112 360,112 378,96 392,112 560,112" fill="none" stroke="#E0F2FE" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+<rect x="380" y="28" width="150" height="58" rx="10" fill="#0C2160" stroke="#93C5FD" stroke-width="2"></rect>
+<rect x="394" y="42" width="54" height="30" rx="6" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5"></rect>
+<rect x="462" y="42" width="54" height="30" rx="6" fill="#0B1B4A" stroke="#3B82F6" stroke-width="1.5"></rect>
+<circle cx="455" cy="57" r="3" fill="#93C5FD"></circle>
+<circle class="bv-dot" cx="150" cy="60" r="9" fill="#FF5A5A"></circle>
+</g>
+<g fill="none" stroke="#FF5A5A" stroke-width="2"><g class="bv-wave1"><path d="M134 44a22 22 0 0 0 0 32"></path><path d="M166 44a22 22 0 0 1 0 32"></path></g><g class="bv-wave2"><path d="M124 34a36 36 0 0 0 0 52"></path><path d="M176 34a36 36 0 0 1 0 52"></path></g></g>
+<g font-family="Inter, sans-serif" font-weight="800" text-anchor="middle"><text x="421" y="62" font-size="12" fill="#BFDBFE">HOME</text><text x="489" y="62" font-size="12" fill="#BFDBFE">AWAY</text></g>
+</svg>
+
+</div>
+
+<!-- title + this page's controls -->
+<div style="position: relative; max-width: 1400px; height: 100%; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 22px; box-sizing: border-box">
+<span style="display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 78px; height: 78px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, #16307A 0%, #0A1A4A 70%); border: 2px solid #3B82F6; box-shadow: 0 0 22px rgba(59, 130, 246, 0.7), inset 0 0 14px rgba(96, 165, 250, 0.35); color: #BFDBFE" aria-hidden="true">
+
+
+
+
+<svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3" fill="#FF5A5A" stroke="#FF5A5A"></circle><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"></path></svg>
+</span>
+<span style="width: 1px; height: 70px; background: #3B82F6; opacity: 0.7; flex: 0 0 auto" aria-hidden="true"></span>
+<div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+<div style="display: flex; align-items: center; gap: 16px 20px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: #FFFFFF; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6)">Live</h1>
+
+
+</div>
+
+
+
+
+
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<div role="group" aria-label="League" style="display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(4, 11, 38, 0.7); border: 1px solid #2A4A8A">
+<button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">NFL</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: #2563EB; color: #FFFFFF">NBA</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">MLB</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">NHL</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">WNBA</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">NCAAF</button><button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; font-size: 13px; font-weight: 700; background: transparent; color: #C9D3E6">NCAAB</button>
+</div>
+<div role="group" aria-label="View" style="display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(4, 11, 38, 0.7); border: 1px solid #2A4A8A">
+<button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; background: transparent; color: #C9D3E6; font-size: 13px; font-weight: 700">Feed</button>
+<button type="button" style="height: 32px; padding: 0 13px; border-radius: 999px; border: 0; background: #2563EB; color: #FFFFFF; font-size: 13px; font-weight: 700">Grid</button>
+</div>
+<button type="button" style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #2A4A8A; background: rgba(4, 11, 38, 0.7); color: #E6EAF2; font-size: 13px; font-weight: 600">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M9 8h6M9 12h6"></path></svg>Parlay slip</button>
+</div>
+
+</div>
+</div>
+
+</section>
+</div>
+
+</body></html>

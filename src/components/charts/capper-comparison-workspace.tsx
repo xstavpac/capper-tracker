@@ -10,10 +10,9 @@ import { CapperComparisonChart, type ComparisonSeries } from "@/components/chart
 import { getRecordColor } from "@/server/data/stats";
 import { useFullscreen, FULLSCREEN_CHART_HEIGHT, FULLSCREEN_SURFACE_CLASS } from "@/components/charts/use-fullscreen";
 import { FullscreenButton } from "@/components/charts/fullscreen-button";
-import { BANNER_CONTROLS, BANNER_GLOW, BANNER_ICON, BANNER_ROW, BannerBrand, NavyBanner } from "@/components/ui/navy-banner";
 import { CONTROL, GREEN, Message, PanelShell, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { StatCell } from "@/components/dashboard/stat-cell";
-import { ChartsIcon, TrendingUpIcon } from "@/components/dashboard/cappers-icons";
+import { TrendingUpIcon } from "@/components/dashboard/cappers-icons";
 import { leagueColorVars } from "@/lib/league-colors";
 import { addDaysToDateKey, easternDateKey } from "@/lib/dates";
 import { formatSignedUnits } from "@/lib/units-extremes";
@@ -264,14 +263,9 @@ export function CapperComparisonWorkspace({
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
-  const brand = <BannerBrand icon={<ChartsIcon className={BANNER_ICON} />} title="Charts" tagline={["Compare", "Side by side"]} />;
-
   if (cappers.length < 2) {
     return (
       <div className="space-y-3.5">
-        <NavyBanner>
-          <div className={BANNER_ROW}>{brand}</div>
-        </NavyBanner>
         <div className={CARD + " p-10 text-center text-[13px] font-medium text-muted-foreground"}>
           You need at least 2 cappers tracked to use comparison - log picks under a second capper first.
         </div>
@@ -307,12 +301,9 @@ export function CapperComparisonWorkspace({
 
   return (
     <div ref={fs.ref} className={(fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "space-y-3.5"}>
-      <NavyBanner glow={false}>
-        {/* The edge glow is drawn in this row only, under the time control: never over the rows below. */}
-        <div className={"relative " + BANNER_ROW + " [@container_(min-width:640px)]:flex-wrap"}>
-          <span aria-hidden className={BANNER_GLOW} />
-          {brand}
-          <div className={"relative " + BANNER_CONTROLS + " [@container_(min-width:640px)]:py-3"}>
+      {/* The time range, the league and the two cappers, under the page banner: the same navy card they were in. */}
+      <div className="overflow-hidden rounded-2xl bg-banner shadow-[0_10px_28px_rgba(3,11,41,0.28)] [container-type:inline-size]">
+        <div className="flex px-3 py-3 sm:px-5">
             <div role="group" aria-label="Time range" className="flex max-w-full gap-0.5 rounded-full border border-white/[0.14] bg-white/[0.08] p-0.5">
               {TIME_PRESETS.map((p) => {
                 const active = p === preset;
@@ -334,7 +325,6 @@ export function CapperComparisonWorkspace({
               })}
             </div>
           </div>
-        </div>
 
         {/* One row that scrolls sideways on a phone, as on /cappers; it wraps from `sm` up. */}
         <div
@@ -371,7 +361,7 @@ export function CapperComparisonWorkspace({
             <ProfileStrip key={s.id} name={s.profile?.capperName ?? nameOf(s.capperId)} color={s.color} profile={s.profile} />
           ))}
         </div>
-      </NavyBanner>
+      </div>
 
       <div className={CARD + " space-y-2.5 p-3"}>
         <div className="flex flex-wrap items-center gap-2">

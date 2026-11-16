@@ -38,10 +38,9 @@ import { toLedgerPick, toLedgerRow } from "@/server/data/picks-ledger-rows";
 import { olderPicksQueryKey, type OlderPicksQuery } from "@/lib/older-picks";
 import { formatPickLabel } from "@/lib/bet-line";
 import type { PickStatus } from "@prisma/client";
-import { ImageBanner } from "@/components/ui/ImageBanner";
+import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
 import { ThemedPage } from "@/components/dashboard/themed-page";
 import { TINTS } from "@/components/dashboard/panel-shell";
-import picksBanner from "../../../../public/banners/picks.png";
 
 // betTypeOptionsForChipSet/firstHalfLabelPrefixForChipSet/
 // visibleBetTypeOptionsForChipSet now live in lib/bet-type-filter.ts (moved
@@ -298,9 +297,10 @@ export default async function PicksPage({
   }));
 
   return (
+    <>
+    <PageBanner variant="picks" title="Picks" icon={PAGE_BANNER_ICONS.picks} />
     <ThemedPage>
       <div className="mx-auto max-w-5xl">
-        <ImageBanner src={picksBanner} title="Picks" priority />
         {gradeable.sportKeys.length > 0 && <GradeDuePicks sportKeys={gradeable.sportKeys} dueKey={gradeable.dueKey} />}
         <div className="space-y-3.5">
           <DateNavigator
@@ -421,5 +421,6 @@ export default async function PicksPage({
         )}
       </div>
     </ThemedPage>
+    </>
   );
 }
