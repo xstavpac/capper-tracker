@@ -13,6 +13,7 @@ import {
   getNflLiveScores,
   getNhlLiveScores,
   getNcaabLiveScores,
+  getNcaafLiveScores,
   getMlbLiveScores,
   matchScoreToGame,
   toClientScores,
@@ -111,12 +112,31 @@ async function main() {
   );
   check("MLB: logos from the Stats API team ids", [mlb[0].homeLogoUrl, mlb[0].awayLogoUrl], [CDN + "mlb/500/tb.png", CDN + "mlb/500/nyy.png"]);
 
-  // College is a later phase: the plumbing is ESPN-generic but the college getters don't opt in yet.
+  // College: logos are keyed by ESPN team id (ncaa/500/{id}.png). A school ESPN sends no logo for
+  // (a non-D1 exhibition opponent) gets null, which the UI renders as the old mark.
   const ncaab = await withFetch(
-    { events: [espnEvent("c1", ["Duke Blue Devils", CDN + "ncaa/500/150.png"], ["Kansas Jayhawks", CDN + "ncaa/500/2305.png"])] },
+    {
+      events: [
+        espnEvent("c1", ["Duke Blue Devils", CDN + "ncaa/500/150.png"], ["Kansas Jayhawks", CDN + "ncaa/500/2305.png"]),
+        espnEvent("c2", ["UIC Flames", CDN + "ncaa/500/82.png"], ["Johnson & Wales Griffins"]),
+      ],
+    },
     () => getNcaabLiveScores()
   );
-  check("NCAAB: no logo fields yet", ["homeLogoUrl" in ncaab[0], "awayLogoUrl" in ncaab[0]], [false, false]);
+  check("NCAAB: logos by ESPN id", [ncaab[0].homeLogoUrl, ncaab[0].awayLogoUrl], [CDN + "ncaa/500/150.png", CDN + "ncaa/500/2305.png"]);
+  check("NCAAB: a school with no logo is null, its opponent keeps one", [ncaab[1].homeLogoUrl, ncaab[1].awayLogoUrl], [CDN + "ncaa/500/82.png", null]);
+
+  const ncaaf = await withFetch(
+    {
+      events: [
+        espnEvent("g1", ["South Florida Bulls", CDN + "ncaa/500/58.png"], ["Navy Midshipmen", CDN + "ncaa/500/2426.png"]),
+        espnEvent("g2", ["Montana State Bobcats", CDN + "ncaa/500/149.png"], ["Virginia Lynchburg Dragons"]),
+      ],
+    },
+    () => getNcaafLiveScores()
+  );
+  check("NCAAF: logos by ESPN id", [ncaaf[0].homeLogoUrl, ncaaf[0].awayLogoUrl], [CDN + "ncaa/500/58.png", CDN + "ncaa/500/2426.png"]);
+  check("NCAAF: Virginia Lynchburg (no logo) is null", [ncaaf[1].homeLogoUrl, ncaaf[1].awayLogoUrl], [CDN + "ncaa/500/149.png", null]);
 
   // ---- the logos survive the client trim and reach an odds-spelled card ----
   const client = toClientScores(nba);
