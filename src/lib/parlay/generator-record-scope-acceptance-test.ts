@@ -4,7 +4,8 @@
 // in THIS league and their all-time record in the market - no minimum volume,
 // never last 20 (pick-record-best-of-two-acceptance-test.ts has the rule's own
 // cases). Contrarian takes any capper on the other side who clears the gate,
-// whatever the headcount. Pure - no DB. Run with:
+// whatever the headcount. What a leg and a swap SHOW is shownRecord instead: the
+// real all-leagues record with the in-league slice (PR C). Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-record-scope-acceptance-test.ts
 import { buildGeneratedParlay, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
@@ -88,7 +89,7 @@ const SETTINGS: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
 const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   const l = p.legs.find((x) => x.original.pick.pickId === pickId)!;
-  return l.swap ? { to: l.swap.pick.pickId, basis: l.swap.basis ?? "MARKET", record: `${l.swap.record.wins}-${l.swap.record.losses}` } : l.unchangedReason;
+  return l.swap ? { to: l.swap.pick.pickId, basis: l.swap.basis ?? "MARKET", record: `${l.swap.record.wins}-${l.swap.record.losses}`, league: l.swap.leagueSlice && `${l.swap.leagueSlice.wins}-${l.swap.leagueSlice.losses}` } : l.unchangedReason;
 };
 
 // ============================================================================
@@ -150,9 +151,10 @@ const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   check("no MLB record: all time qualifies it", ids(now).includes("fallback"), true);
   check("Last 20 never qualifies a pick", ids(now).includes("last20"), false);
   const leg = (id: string) => now.legs.find((l) => l.pick.pickId === id)!;
-  check("each leg says which record it is", [leg("lgGood").basis, leg("rank").basis, leg("fallback").basis], ["LEAGUE", "LEAGUE", "OVERALL"]);
-  check("the leg's record is the one it was gated on", [leg("lgGood").record, leg("fallback").record], [{ wins: 40, losses: 10, n: 50, winPct: 80 }, { wins: 60, losses: 40, n: 100, winPct: 60 }]);
-  check("shown: MLB market / all leagues market", [recordText(leg("lgGood").record, "LEAGUE", leg("lgGood").pick), recordText(leg("fallback").record, "OVERALL", leg("fallback").pick)], ["80% (40–10) · MLB favorite moneyline", "60% (60–40) · all leagues favorite moneyline"]);
+  // Shown (PR C): the real all-leagues record, never the in-league slice alone.
+  check("each leg shows its all-leagues record", [leg("lgGood").basis, leg("rank").basis, leg("fallback").basis], ["OVERALL", "OVERALL", "OVERALL"]);
+  check("the leg's record is the real combined one, the slice beside it", [leg("lgGood").record, leg("lgGood").leagueSlice, leg("fallback").record, leg("fallback").leagueSlice], [{ wins: 40, losses: 60, n: 100, winPct: 40 }, { wins: 40, losses: 10 }, { wins: 60, losses: 40, n: 100, winPct: 60 }, { wins: 0, losses: 0 }]);
+  check("shown: combined · category · MLB slice", [recordText(leg("lgGood").record, leg("lgGood").basis, leg("lgGood").pick, undefined, leg("lgGood").leagueSlice), recordText(leg("fallback").record, leg("fallback").basis, leg("fallback").pick, undefined, leg("fallback").leagueSlice)], ["40% (40–60) · Favorite moneyline · MLB 40–10", "60% (60–40) · Favorite moneyline · MLB 0–0"]);
 }
 
 // ============================================================================
@@ -176,11 +178,11 @@ const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   ]);
   const now = buildGeneratedParlay(snap, SETTINGS, null, NOW);
   check("primaries", ids(now).sort(), ["c", "h", "o", "x"]);
-  check("Hedge: alternate qualifies on its MLB record", swapOf(now.hedge.SUGGESTED, "h"), { to: "hAlt", basis: "LEAGUE", record: "60-20" });
-  check("Contrarian 1 vs 1: the other side's capper clears the gate - a swap", swapOf(now.contrarian.SUGGESTED, "c"), { to: "cAlt", basis: "LEAGUE", record: "6-3" });
-  check("Contrarian: 2-3 in MLB no longer hides 30-10 all time", swapOf(now.contrarian.SUGGESTED, "x"), { to: "xAlt", basis: "OVERALL", record: "30-10" });
-  check("Contrarian with the other side bigger: same Wilson order as everything else", swapOf(now.contrarian.SUGGESTED, "o"), { to: "oBig", basis: "LEAGUE", record: "20-8" });
-  check("swap shown with its record", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "LEAGUE", snap.games[0].picks[1]), "75% (6–2) · MLB over");
+  check("Hedge: alternate shown on its combined record, MLB slice beside it", swapOf(now.hedge.SUGGESTED, "h"), { to: "hAlt", basis: "OVERALL", record: "120-80", league: "60-20" });
+  check("Contrarian 1 vs 1: the other side's capper clears the gate - a swap", swapOf(now.contrarian.SUGGESTED, "c"), { to: "cAlt", basis: "OVERALL", record: "6-3", league: "6-3" });
+  check("Contrarian: shows 30-10 all time with the 2-3 MLB slice", swapOf(now.contrarian.SUGGESTED, "x"), { to: "xAlt", basis: "OVERALL", record: "30-10", league: "2-3" });
+  check("Contrarian with the other side bigger", swapOf(now.contrarian.SUGGESTED, "o"), { to: "oBig", basis: "OVERALL", record: "20-8", league: "20-8" });
+  check("swap shown with its record", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "OVERALL", snap.games[0].picks[1], undefined, { wins: 6, losses: 2 }), "75% (6–2) · Over · MLB 6–2");
 }
 
 // ============================================================================

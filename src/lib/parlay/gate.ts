@@ -16,6 +16,13 @@ export function normalizeMinWinPct(x: unknown): number {
 }
 
 // The note under the control once the gate sits below the default. Empty at 55 and above.
+// The Parlay Generator's line under Minimum capper win rate, and the longer version
+// behind its info icon (scoring.ts: the in-league record shrunk toward the other
+// leagues, then the edge against the price, then the long-shot rule).
+export const WIN_RATE_HELP = "Judged on each capper's record in that bet type, weighted toward the same league.";
+export const WIN_RATE_HELP_MORE =
+  "Every league counts, with this league's picks counting most. The pick also has to beat its price: a 10-10 capper betting +200 underdogs can qualify; 10-10 at −150 won't. A long shot also needs a raw record that clears its own price.";
+
 export function gateRiskNote(value: number): string {
   if (value >= GATE_DEFAULT) return "";
   return ` Under ${GATE_DEFAULT}% means more risk. At 0%, any capper with a graded record in that bet type counts; cappers with no record are still left out.`;

@@ -19,7 +19,7 @@
 //     price is the engine's answer.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { PICK_CATEGORY_LABELS, PICK_CATEGORY_MARKET_NOUN } from "@/server/data/stats";
+import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { ClipboardIcon, ClockIcon, FlameIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL } from "@/components/parlay/parlay-controls";
@@ -28,15 +28,15 @@ import { combineOdds, decimalToAmerican, formatAmericanOdds, formatPayout, hasUs
 import { ANALYZING_STATUS, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
 import { prefersReducedMotion, type Reveal } from "@/components/parlay/use-build-reveal";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
-import { SWAP_TAB_KEYS, type EngineLeg, type GeneratedParlay, type LegRecord, type LegSwapOptions, type SwapOption, type SwapTabKey } from "@/lib/parlay/generator";
+import { SWAP_TAB_KEYS, type EngineLeg, type GeneratedParlay, type LeagueSlice, type LegRecord, type LegSwapOptions, type SwapOption, type SwapTabKey } from "@/lib/parlay/generator";
 import type { PropMarketKey } from "@/lib/prop-market-key";
-import { PROP_MARKET_LABELS } from "@/lib/prop-market-key";
 import { SELECTION_MODES, type SelectionMode } from "@/lib/parlay/selection";
 import { noAlternativeText, pickSummary, regenerateState, unusedLine, unusedPicks, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import {
   isHot,
   leagueChips,
   leagueTagClass,
+  legRecordLabel,
   OTHER_GAMES_NOTE,
   strengthOrder,
   SWAP_EMPTY,
@@ -55,21 +55,20 @@ export const formatGameTime = (iso: string) => new Date(iso).toLocaleTimeString(
 const plural = (n: number) => (n === 1 ? "" : "s");
 const TAG = "inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-bold";
 
-// "62% (106–65)" plus what the record is: "· NFL favorite spread" (this
-// league, this market), "· all leagues favorite spread" (this market, every
-// league) or "· last 20 picks" (a slip pick's card, nothing better). A
-// generated prop gated on its per-market record (`propMarket`) names that
-// market - "· NBA points" - not its category's "player prop".
-export function recordText(record: LegRecord | null, basis: EngineLeg["basis"], pick: Pick<ExpanderPick, "category" | "leagueName">, propMarket?: PropMarketKey): string {
-  if (!record) return "No record yet";
-  const base = `${Math.round(record.winPct)}% (${record.wins}–${record.losses})`;
-  const market = propMarket ? PROP_MARKET_LABELS[propMarket] : pick.category ? PICK_CATEGORY_MARKET_NOUN[pick.category] : "this market";
-  if (basis === "LEAGUE") return `${base} · ${pick.leagueName} ${market}`;
-  if (basis === "OVERALL") return `${base} · all leagues ${market}`;
-  if (basis === "LAST20") return `${base} · last 20 picks`;
-  return base;
+// "50% (6–6) · Underdog spread · NFL 1–0": the capper's real record in the
+// category across every league, the category, and the in-league slice
+// (legRecordLabel, swap-modal.ts). A prop with a market key names its market.
+// A slip pick with no category record: "· last 20 picks".
+export function recordText(
+  record: LegRecord | null,
+  basis: EngineLeg["basis"],
+  pick: Pick<ExpanderPick, "category" | "leagueName">,
+  propMarket?: PropMarketKey,
+  leagueSlice?: LeagueSlice
+): string {
+  return legRecordLabel(record, basis, pick, propMarket, leagueSlice);
 }
-const legRecordText = (l: EngineLeg) => recordText(l.record, l.basis, l.pick, l.propMarket);
+const legRecordText = (l: EngineLeg) => recordText(l.record, l.basis, l.pick, l.propMarket, l.leagueSlice);
 
 // ---- Win rate: the text and its bar, coloured by tier (swap-modal.ts) -------------
 const TIER_TEXT: Record<WinTier, string> = {

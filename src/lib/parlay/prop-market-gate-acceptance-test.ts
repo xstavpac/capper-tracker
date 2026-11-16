@@ -132,16 +132,17 @@ check("legs: every pick that clears 55% on its own record", legIds, ["line", "ml
 check("a prop strong only on Player Props is never a leg", legIds.includes("noMarketRecord"), false);
 const text = (id: string) => {
   const l = built.legs.find((x) => x.pick.pickId === id)!;
-  return recordText(l.record, l.basis, l.pick, l.propMarket);
+  return recordText(l.record, l.basis, l.pick, l.propMarket, l.leagueSlice);
 };
-check("label: NBA points", text("nbaPts"), "80% (8–2) · NBA points");
-check("label: all leagues shots on goal", text("nhlSog"), "60% (60–40) · all leagues shots on goal");
-check("label: NFL touchdowns", text("nflTd"), "60% (60–40) · NFL touchdowns");
-check("label: MLB pitcher strikeouts", text("mlbKs"), "100% (8–0) · MLB pitcher strikeouts");
-check("label: a prop with no key keeps the category noun", text("noKey"), "70% (7–3) · NBA player prop");
-check("label: a game line keeps the category noun", text("line"), "60% (60–40) · NBA favorite moneyline");
+// Shown (PR C): the market's real record across its sport family, the market, and the in-league slice.
+check("label: NBA points - 9-5 all time, 8-2 in the NBA", text("nbaPts"), "64% (9–5) · Points · NBA 8–2");
+check("label: shots on goal - 60-40 all time, 1-2 in the NHL", text("nhlSog"), "60% (60–40) · Shots on goal · NHL 1–2");
+check("label: NFL touchdowns", text("nflTd"), "60% (60–40) · Touchdowns · NFL 60–40");
+check("label: pitcher strikeouts - 60-40 all time, the 8-0 MLB slice beside it", text("mlbKs"), "60% (60–40) · Pitcher strikeouts · MLB 8–0");
+check("label: a prop with no key keeps the category noun", text("noKey"), "70% (7–3) · Player prop · NBA 7–3");
+check("label: a game line keeps the category noun", text("line"), "60% (60–40) · Favorite moneyline · NBA 60–40");
 check("only per-market legs carry propMarket", built.legs.filter((l) => l.propMarket).map((l) => l.pick.pickId).sort(), ["mlbKs", "nbaPts", "nflTd", "nhlSog"]);
-check("a swap's label names its market the same way", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "OVERALL", pickOf("nbaPts"), "BASKETBALL:POINTS"), "75% (6–2) · all leagues points");
+check("a swap's label names its market the same way", recordText({ wins: 6, losses: 2, n: 8, winPct: 75 }, "OVERALL", pickOf("nbaPts"), "BASKETBALL:POINTS", { wins: 4, losses: 1 }), "75% (6–2) · Points · NBA 4–1");
 
 // ---- A snapshot with no prop at all builds exactly as before (no propMarketRecords field).
 const linesOnly = makeSnapshot(SPECS.filter((s) => s.betType === "MONEYLINE"));

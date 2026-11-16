@@ -104,7 +104,8 @@ check("shared Wilson default is still z=1.96 (6-2 -> 0.4093)", wilsonLowerBound(
   ]);
   const now = buildGeneratedParlay(snap, settings(1), null, NOW);
   check("40-10 in NCAAF qualifies and is the leg; 1-3 in NCAAF doesn't", ids(now), ["ncaafGood"]);
-  check("...on its NCAAF record", [now.legs[0].basis, now.legs[0].record], ["LEAGUE", { wins: 40, losses: 10, n: 50, winPct: 80 }]);
+  // Shown (PR C): the real 50-60 across every league, the 40-10 NCAAF slice beside it.
+  check("...shown on its real combined record with the NCAAF slice", [now.legs[0].basis, now.legs[0].record, now.legs[0].leagueSlice], ["OVERALL", { wins: 50, losses: 60, n: 110, winPct: (50 / 110) * 100 }, { wins: 40, losses: 10 }]);
 }
 
 // ============================================================================

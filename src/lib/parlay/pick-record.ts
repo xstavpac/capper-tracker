@@ -45,9 +45,8 @@ export function bestAvailableRecord(pick: RecordInput, records: CapperLeagueReco
   return null;
 }
 
-// The record a generated leg (and a Hedge / Contrarian alternate, and a
-// Consensus Hybrid supporter - consensus.ts) is gated and ranked on - the
-// better of two: the capper's record in this bet category in
+// The record a Consensus Hybrid supporter shows (consensus.ts) - the better of
+// two (the Parlay Generator's legs and swap rows show shownRecord below): the capper's record in this bet category in
 // THIS league, and their all-time record in the category (every league, every
 // season). Each is scored with the generator's ordering score (Wilson lower
 // bound at GENERATOR_Z) and the higher one is the record; a tie goes to the
@@ -114,6 +113,51 @@ export function recordForGate(
   if (!c) return null;
   if (!c.league || !c.overall) return c.league ?? c.overall;
   return wilsonLowerBound(c.overall.wins, c.overall.losses, z) > wilsonLowerBound(c.league.wins, c.league.losses, z) ? c.overall : c.league;
+}
+
+// The record a generated leg and every swap-modal row SHOWS: the capper's real,
+// unweighted record in this bet category across every league (this one
+// included), with the in-league slice beside it. Labelled by legRecordLabel
+// (swap-modal.ts): "50% (6–6) · Underdog spread · NFL 1–0". Its win % is also what
+// the win-rate colour, the Hot tag and "strongest first" read.
+//
+// Display only. It never gates or ranks: scoring.ts does, from the same two
+// columns (in-league shrunk toward the other leagues, the long-shot rule on the
+// combined raw record), so the label shows the numbers the gate actually read,
+// never a slice picked over the other. A player prop with a market key reads its
+// per-market record (all-time across the sport family, and in-league), the same
+// as scoring.ts. Null exactly when recordForGate is: no decided pick in either.
+export type ShownRecord = {
+  wins: number;
+  losses: number;
+  winPct: number;
+  n: number;
+  // OVERALL: every league. LEAGUE: only when the bundle had no all-leagues column (then the combined record is this league's).
+  source: "LEAGUE" | "OVERALL";
+  // The in-league slice of the record above: 0-0 when the capper has no decided pick here yet.
+  league: { wins: number; losses: number };
+  propMarket?: PropMarketKey;
+};
+
+export function shownRecord(
+  pick: GateInput,
+  records: CapperLeagueRecords,
+  allTime: Record<string, CategoryBreakdownItem | null> = {},
+  propMarkets: Record<string, PropMarketRecord | null> = {}
+): ShownRecord | null {
+  const c = gateCandidates(pick, records, allTime, propMarkets);
+  if (!c) return null;
+  const whole = c.overall ?? c.league;
+  if (!whole) return null;
+  return {
+    wins: whole.wins,
+    losses: whole.losses,
+    winPct: whole.winPct,
+    n: whole.n,
+    source: whole.source,
+    league: { wins: c.league?.wins ?? 0, losses: c.league?.losses ?? 0 },
+    ...(whole.propMarket ? { propMarket: whole.propMarket } : {}),
+  };
 }
 
 // The Parlay Generator's one ordering: win% desc, then more graded picks,

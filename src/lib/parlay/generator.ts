@@ -23,10 +23,10 @@
 //   3. SCORING: a generated leg and a Hedge alternate are gated and ranked by
 //      lib/parlay/scoring.ts, and slip picks are ranked by it. Which gated legs
 //      are taken is lib/parlay/selection.ts, reading the edge (rankScore, in
-//      points) directly. The record a leg shows is recordForGate's: the better
-//      of the capper's record in its market in its league and their all-time
-//      record in the market (a tie goes to the league; pick-record.ts), with
-//      which one it is (basis) so the sample size shows. Contrarian (PR 7) is
+//      points) directly. The record a leg shows is shownRecord's (pick-record.ts):
+//      the capper's real record in its market across every league, with the
+//      in-league slice beside it, so the sample size shows and the label never
+//      names one slice the gate didn't use alone. Contrarian (PR 7) is
 //      the other side of the same bet (contrarian-match.ts), gated by scoring.ts
 //      at its own price and chosen by selection.ts like Hedge. A leg must also
 //      pass the Include Picks filter (include-picks.ts: All Picks, or any of
@@ -72,7 +72,7 @@ import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks"
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { GeneratorGame, GeneratorPick, SwapMode } from "@/lib/parlay/auto-generate";
-import { bestAvailableRecord, rankPoolPicks, recordForGate, type RankRecordSource } from "@/lib/parlay/pick-record";
+import { bestAvailableRecord, rankPoolPicks, shownRecord, type RankRecordSource } from "@/lib/parlay/pick-record";
 import { compareScores, EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore, type PlatformRates, type ScoredPick } from "@/lib/parlay/scoring";
 import {
   betKeyOf,
@@ -140,14 +140,14 @@ export type GeneratorSnapshot = {
   // board) is reported in `unavailableTargets`.
   targets: string[];
   // Every slip pick's and candidate's card (in-league and all-time market
-  // records): what slip picks show (bestAvailableRecord) and what candidates
-  // are gated and ranked on (recordForGate).
+  // records): what every leg shows (shownRecord; a slip pick with none falls
+  // back to its last 20, bestAvailableRecord) and what scoring.ts gates and ranks on.
   leagueRecords: CapperLeagueRecords;
-  // Every candidate's all-leagues market record: recordForGate's all-time
+  // Every candidate's all-leagues market record: the all-time column
   // record when a pick has no card.
   categoryRecords: Record<string, CategoryBreakdownItem | null>;
   // Every candidate player prop's per-market record (propMarketRecordKey):
-  // what recordForGate gates and ranks a prop with a market key on, in place
+  // what a prop with a market key is shown, gated and ranked on, in place
   // of its category's. Optional: a snapshot built before it existed has none,
   // and its props then have no record.
   propMarketRecords?: Record<string, PropMarketRecord | null>;
@@ -162,8 +162,7 @@ export type GeneratorSnapshot = {
 // Tunables
 // ---------------------------------------------------------------------------
 // The generator's Wilson z (generator-z.ts): 1.5, softer than the shared 1.96. It
-// only picks the record a leg shows (recordForGate) and the Wilson number shown
-// with it; scoring.ts gates and ranks.
+// only scores the Wilson number shown with a leg's record; scoring.ts gates and ranks.
 export { GENERATOR_Z };
 
 export type GeneratorSettings = {
@@ -207,6 +206,8 @@ export type Variation = {
 // Output
 // ---------------------------------------------------------------------------
 export type LegRecord = { wins: number; losses: number; n: number; winPct: number };
+// The in-league part of a shown record (shownRecord, pick-record.ts): "NFL 1–0".
+export type LeagueSlice = { wins: number; losses: number };
 
 export type EngineLeg = {
   pick: GeneratorPick;
@@ -214,11 +215,14 @@ export type EngineLeg = {
   gameLabel: string;
   gameTime: string;
   source: "SLIP" | "GENERATED";
-  // A slip pick: the record its card shows (bestAvailableRecord, `basis` says
-  // which). A generated leg: the record it was gated and ranked on - LEAGUE or
-  // OVERALL (recordForGate).
+  // The record the card shows (shownRecord, pick-record.ts): the capper's real record
+  // in the category across every league (OVERALL; LEAGUE only when there is no
+  // all-leagues column), with `leagueSlice` its in-league part. Display only:
+  // scoring.ts gates and ranks. A slip pick with no category record falls back to
+  // its card's last 20 (bestAvailableRecord, basis LAST20, no slice).
   record: LegRecord | null;
   basis: RankRecordSource | null;
+  leagueSlice?: LeagueSlice;
   // Generated legs only.
   wilsonLowerBound: number | null;
   // A generated leg under SCORING: its edge in percentage points (rankScore x 100),
@@ -226,7 +230,7 @@ export type EngineLeg = {
   score?: number;
   // True when its game has another leg in this parlay (an SGP).
   sameGame: boolean;
-  // A generated player prop gated on its per-market record (recordForGate):
+  // A player prop shown with its per-market record (shownRecord):
   // which market, so the record is labelled with it. Absent otherwise.
   propMarket?: PropMarketKey;
   // Chosen by hand from the leg's swap tray (applyLegSwap). Hedge / Contrarian
@@ -256,8 +260,9 @@ export type EngineSwapLeg = {
     rule: Rule | "SAME_BET";
     record: LegRecord;
     wilsonLowerBound: number;
-    // Which record it was gated on (recordForGate).
+    // As EngineLeg.basis / leagueSlice (shownRecord).
     basis?: "LEAGUE" | "OVERALL";
+    leagueSlice?: LeagueSlice;
     // As EngineLeg.propMarket.
     propMarket?: PropMarketKey;
     // SAME_BET only: the market, and how far its line is from the exact other side
@@ -350,6 +355,7 @@ type Candidate = {
   game: GeneratorGame;
   record: LegRecord;
   basis: "LEAGUE" | "OVERALL";
+  leagueSlice: LeagueSlice;
   propMarket?: PropMarketKey;
   wilsonLowerBound: number;
   // What selection reads: the edge in points (rankScore x 100).
@@ -402,13 +408,22 @@ const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? o
 // auto-generate.ts).
 const sureOfGame = (game: GeneratorGame | undefined, pick: GeneratorPick) => !game?.doubleheader || pick.gameNumber != null;
 
-// The record a candidate is shown and checked for on: the better of in-league and all-time.
+// The record a candidate shows (shownRecord): its real record in the category across
+// every league, with the in-league slice. Null: no record, never qualifies.
 function gateRecord(
   pick: GeneratorPick,
   snapshot: GeneratorSnapshot
-): { record: { wins: number; losses: number; winPct: number }; basis: Candidate["basis"]; propMarket?: PropMarketKey } | null {
-  const record = recordForGate(pick, snapshot.leagueRecords, snapshot.categoryRecords, GENERATOR_Z, snapshot.propMarketRecords);
-  return record ? { record, basis: record.source, ...(record.propMarket ? { propMarket: record.propMarket } : {}) } : null;
+): { record: { wins: number; losses: number; winPct: number }; basis: Candidate["basis"]; leagueSlice: LeagueSlice; propMarket?: PropMarketKey } | null {
+  const record = shownRecord(pick, snapshot.leagueRecords, snapshot.categoryRecords, snapshot.propMarketRecords);
+  return record ? { record, basis: record.source, leagueSlice: record.league, ...(record.propMarket ? { propMarket: record.propMarket } : {}) } : null;
+}
+
+// What a leg or swap row shows for a record (shownRecord), as the fields EngineLeg carries.
+function shownFields(pick: GeneratorPick, snapshot: GeneratorSnapshot) {
+  const r = gateRecord(pick, snapshot);
+  return r
+    ? { record: toLegRecord(r.record), wilsonLowerBound: wilsonLowerBound(r.record.wins, r.record.losses, GENERATOR_Z), basis: r.basis, leagueSlice: r.leagueSlice, ...(r.propMarket ? { propMarket: r.propMarket } : {}) }
+    : null;
 }
 
 // The gate a build applies: the setting, or 55.
@@ -456,7 +471,7 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
         ),
     };
   }
-  const { record, basis, propMarket } = gated;
+  const { record, basis, leagueSlice, propMarket } = gated;
   const wilson = wilsonLowerBound(record.wins, record.losses, GENERATOR_Z);
   return {
     ok: true,
@@ -465,6 +480,7 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
       game,
       record: toLegRecord(record),
       basis,
+      leagueSlice,
       ...(propMarket ? { propMarket } : {}),
       wilsonLowerBound: wilson,
       score: pickScore.rankScore * 100,
@@ -762,18 +778,7 @@ export function buildGeneratedParlay(
   // ---- 6. Assemble ------------------------------------------------------------
   const legs: EngineLeg[] = [
     ...slipLegs.map((p): EngineLeg => {
-      const r = bestAvailableRecord(p, snapshot.leagueRecords);
-      return {
-        pick: p,
-        gameId: p.gameId,
-        gameLabel: p.gameLabel,
-        gameTime: p.gameTime,
-        source: "SLIP",
-        record: r ? { wins: r.wins, losses: r.losses, n: r.n, winPct: r.winPct } : null,
-        basis: r?.source ?? null,
-        wilsonLowerBound: null,
-        sameGame: false,
-      };
+      return slipLegOf(p, snapshot);
     }),
     ...chosen.map(
       (c): EngineLeg => ({
@@ -784,6 +789,7 @@ export function buildGeneratedParlay(
         source: "GENERATED",
         record: c.record,
         basis: c.basis,
+        leagueSlice: c.leagueSlice,
         wilsonLowerBound: c.wilsonLowerBound,
         score: c.score,
         sameGame: false,
@@ -937,7 +943,7 @@ export function legAlternatives(
       const onGame = legsOn(p.gameId);
       if (onGame.length >= maxPerGame) continue;
       if (onGame.some((l) => blocks(toBuildCandidate(p, snapshot.leagueRecords), toBuildCandidate(l, snapshot.leagueRecords)).blocked)) continue;
-      add(tab, slipLegOf(p, snapshot.leagueRecords));
+      add(tab, slipLegOf(p, snapshot));
     }
     return out;
   }
@@ -997,19 +1003,14 @@ export function legSwapOptions(snapshot: GeneratorSnapshot, settings: GeneratorS
   return out;
 }
 
-function slipLegOf(p: GeneratorPick, records: CapperLeagueRecords): EngineLeg {
-  const r = bestAvailableRecord(p, records);
-  return {
-    pick: p,
-    gameId: p.gameId,
-    gameLabel: p.gameLabel,
-    gameTime: p.gameTime,
-    source: "SLIP",
-    record: r ? { wins: r.wins, losses: r.losses, n: r.n, winPct: r.winPct } : null,
-    basis: r?.source ?? null,
-    wilsonLowerBound: null,
-    sameGame: false,
-  };
+// A slip pick's leg: the record the generator shows for any leg (shownRecord), or with
+// no category record its card's last 20 (bestAvailableRecord). Never gated.
+function slipLegOf(p: GeneratorPick, snapshot: GeneratorSnapshot): EngineLeg {
+  const base = { pick: p, gameId: p.gameId, gameLabel: p.gameLabel, gameTime: p.gameTime, source: "SLIP" as const, wilsonLowerBound: null, sameGame: false };
+  const shown = gateRecord(p, snapshot);
+  if (shown) return { ...base, record: toLegRecord(shown.record), basis: shown.basis, leagueSlice: shown.leagueSlice, ...(shown.propMarket ? { propMarket: shown.propMarket } : {}) };
+  const r = bestAvailableRecord(p, snapshot.leagueRecords);
+  return { ...base, record: r ? { wins: r.wins, losses: r.losses, n: r.n, winPct: r.winPct } : null, basis: r?.source ?? null };
 }
 
 function generatedLegOf(c: Candidate): EngineLeg {
@@ -1021,6 +1022,7 @@ function generatedLegOf(c: Candidate): EngineLeg {
     source: "GENERATED",
     record: c.record,
     basis: c.basis,
+    leagueSlice: c.leagueSlice,
     wilsonLowerBound: c.wilsonLowerBound,
     score: c.score,
     sameGame: false,
@@ -1269,7 +1271,7 @@ function buildSwap(
       traceLeg!(() => ({ pick: pickRef(leg.pick), result, ...(rule ? { rule } : {}), ...analysis, ...(contrarian ? { contrarian } : {}) }));
     };
     let best:
-      | { leg: { pickId: string }; rule: Rule | "SAME_BET"; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; propMarket?: PropMarketKey; contrarian?: { market: ContrarianMarket; lineGap: number | null } }
+      | { leg: { pickId: string }; rule: Rule | "SAME_BET"; record: LegRecord; wilsonLowerBound: number; basis?: "LEAGUE" | "OVERALL"; leagueSlice?: LeagueSlice; propMarket?: PropMarketKey; contrarian?: { market: ContrarianMarket; lineGap: number | null } }
       | undefined;
     if (search) {
       // Every qualifying pick on the other side of this bet is a candidate, whatever
@@ -1281,18 +1283,8 @@ function buildSwap(
         );
         const top = order[0].item;
         if (scope === "ALL") hedgeSelect.picked.push(legTrace(order[0]));
-        const shown = recordForGate(top.pick, snapshot.leagueRecords, snapshot.categoryRecords, GENERATOR_Z, snapshot.propMarketRecords);
-        best = shown
-          ? {
-              leg: { pickId: top.pick.pickId },
-              rule: "SAME_BET",
-              record: toLegRecord(shown),
-              wilsonLowerBound: wilsonLowerBound(shown.wins, shown.losses, GENERATOR_Z),
-              basis: shown.source,
-              ...(shown.propMarket ? { propMarket: shown.propMarket } : {}),
-              contrarian: { market: top.market, lineGap: top.lineGap },
-            }
-          : undefined;
+        const shown = shownFields(top.pick, snapshot);
+        best = shown ? { leg: { pickId: top.pick.pickId }, rule: "SAME_BET", ...shown, contrarian: { market: top.market, lineGap: top.lineGap } } : undefined;
       }
     } else {
       const gated = rankCandidatesByScore(
@@ -1316,17 +1308,8 @@ function buildSwap(
         if (scope === "ALL") hedgeSelect.picked.push(legTrace(order[0]));
       }
       // Scored means it has a record: the one its row shows.
-      const shown = top && recordForGate(pickById.get(top.leg.pickId)!, snapshot.leagueRecords, snapshot.categoryRecords, GENERATOR_Z, snapshot.propMarketRecords);
-      best = top && shown
-        ? {
-            leg: top.leg,
-            rule: top.rule,
-            record: toLegRecord(shown),
-            wilsonLowerBound: wilsonLowerBound(shown.wins, shown.losses, GENERATOR_Z),
-            basis: shown.source,
-            ...(shown.propMarket ? { propMarket: shown.propMarket } : {}),
-          }
-        : undefined;
+      const shown = top && shownFields(pickById.get(top.leg.pickId)!, snapshot);
+      best = top && shown ? { leg: top.leg, rule: top.rule, ...shown } : undefined;
     }
     const bestPick = best ? others.find((p) => p.pickId === best!.leg.pickId) : undefined;
     if (!best || !bestPick) {
@@ -1340,10 +1323,10 @@ function buildSwap(
     note("SWAPPED", best.rule, best.contrarian ? { id: bestPick.pickId, lineGap: best.contrarian.lineGap } : undefined);
     inParlay.add(bestPick.pickId);
     current.set(leg.pick.pickId, bestPick);
-    const { basis, rule, record, propMarket, contrarian } = best;
+    const { basis, leagueSlice, rule, record, propMarket, contrarian } = best;
     return {
       original: leg,
-      swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}), ...(propMarket ? { propMarket } : {}), ...(contrarian ? { contrarian } : {}) },
+      swap: { pick: bestPick, rule, record, wilsonLowerBound: best.wilsonLowerBound, ...(basis ? { basis } : {}), ...(leagueSlice ? { leagueSlice } : {}), ...(propMarket ? { propMarket } : {}), ...(contrarian ? { contrarian } : {}) },
       unchangedReason: null,
     };
   });

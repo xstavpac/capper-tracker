@@ -2,6 +2,9 @@
 // (generator-result.tsx renders them). Client-safe, no React.
 import { combineOdds, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import type { EngineLeg, LegSwapOptions, SwapOption, SwapTabKey } from "@/lib/parlay/generator";
+import type { RankRecordSource } from "@/lib/parlay/pick-record";
+import { PICK_CATEGORY_MARKET_NOUN, type PickCategoryKey } from "@/server/data/stats";
+import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
 
 // ---- The modal's tabs ----------------------------------------------------------
 export const SWAP_TAB_LABELS: Record<SwapTabKey, string> = { PRIMARY: "Primary", HEDGE: "Hedge", CONTRARIAN: "Contrarian", OTHER_GAMES: "Other games" };
@@ -31,6 +34,36 @@ export function leagueChips(rows: readonly SwapOption[]): { league: string | nul
 export function tabRows(options: LegSwapOptions, tab: SwapTabKey, league: string | null = null): SwapOption[] {
   const rows = options[tab];
   return tab === "OTHER_GAMES" && league ? rows.filter((r) => r.pick.leagueName === league) : rows;
+}
+
+// ---- The record label ------------------------------------------------------------
+// A bet category in plain words, capitalised: "Underdog spread", "First-5 over",
+// "Team total", "NRFI". A player prop with a market key names its market
+// ("Points", "Shots on goal"), never its category's catch-all "Player prop".
+export function categoryName(category: PickCategoryKey | null | undefined, propMarket?: PropMarketKey): string {
+  const noun = propMarket ? PROP_MARKET_LABELS[propMarket] : category ? PICK_CATEGORY_MARKET_NOUN[category] : null;
+  return noun ? noun.charAt(0).toUpperCase() + noun.slice(1) : "This market";
+}
+
+// What a leg card and a swap-modal row say about the record (shownRecord): the real,
+// unweighted record across every league, the category, and the in-league slice:
+//   "50% (6–6) · Underdog spread · NFL 1–0"
+// The slice shows even at 0–0 (no pick in this league yet). A slip pick with no
+// category record shows its last 20 ("· last 20 picks"). No record: "No record yet".
+export function legRecordLabel(
+  record: { wins: number; losses: number; winPct: number } | null,
+  basis: RankRecordSource | null,
+  pick: { category?: PickCategoryKey | null; leagueName: string },
+  propMarket?: PropMarketKey,
+  leagueSlice?: { wins: number; losses: number }
+): string {
+  if (!record) return "No record yet";
+  const base = `${Math.round(record.winPct)}% (${record.wins}–${record.losses})`;
+  if (basis === "LAST20") return `${base} · last 20 picks`;
+  if (basis === null) return base;
+  // No slice given: a LEAGUE record is its own slice; an all-leagues one names no slice rather than guess.
+  const slice = leagueSlice ?? (basis === "LEAGUE" ? record : null);
+  return `${base} · ${categoryName(pick.category, propMarket)}` + (slice ? ` · ${pick.leagueName} ${slice.wins}–${slice.losses}` : "");
 }
 
 // ---- Win rate --------------------------------------------------------------------

@@ -36,7 +36,7 @@ import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay
 import { reconcileMix, selectedCategories, toggleInclude, type IncludeSelection, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, WIN_RATE_HELP, WIN_RATE_HELP_MORE, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { legRange, legsNote, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
@@ -529,8 +529,18 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 icon={<TrophyIcon className="h-5 w-5" />}
                 label="Minimum capper win rate"
                 note={
-                  "A pick passes when its edge against its price clears this bar. A 10-10 capper betting +200 underdogs can qualify; 10-10 at −150 won't." +
-                  gateRiskNote(minWinPct)
+                  <>
+                    {WIN_RATE_HELP}{" "}
+                    <span
+                      role="img"
+                      aria-label={WIN_RATE_HELP_MORE}
+                      title={WIN_RATE_HELP_MORE}
+                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-current align-[-2px] text-[9px] font-bold"
+                    >
+                      i
+                    </span>
+                    {gateRiskNote(minWinPct)}
+                  </>
                 }
               >
                 <StepperControl label="Minimum capper win rate" value={minWinPct} min={GATE_MIN} max={GATE_MAX} step={GATE_STEP} unit="%" onChange={setMinWinPct} />
