@@ -6,11 +6,11 @@
 // "Send to generator →", which turns slip mode off and opens /parlay. The
 // checkboxes write straight into the slip, so there is nothing to confirm or
 // discard; leaving slip mode keeps the slip. A pick refused at the leg cap says
-// "25 legs max" here.
+// "60 picks max" here.
 import Link from "next/link";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
-import { MAX_PARLAY_LEGS_MESSAGE } from "@/lib/parlay/leg-cap";
+import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 // The navy /live banner's pills: 34px, or 44px where the banner is 640px wide or more.
 const BANNER_PILL = "flex h-[34px] items-center rounded-full border text-[12.5px] transition [@container_(min-width:640px)]:h-11 [@container_(min-width:640px)]:text-sm ";
@@ -42,7 +42,7 @@ export function ParlaySlipButton() {
       </span>
       {overCapBy !== null && (
         <span role="alert" className={BANNER_PILL + BANNER_IDLE + " gap-1 pl-3 pr-1.5"}>
-          <span className="font-semibold text-white">{MAX_PARLAY_LEGS_MESSAGE}</span>
+          <span className="font-semibold text-white">{MAX_POOL_PICKS_MESSAGE}</span>
           <button type="button" onClick={dismissOverCap} className="rounded-full px-2 py-1 text-xs font-medium hover:bg-white/10 hover:text-white">
             OK
           </button>

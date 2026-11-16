@@ -110,9 +110,9 @@ async function main() {
   });
   check("and untargeting removes it", !ctx.isTargeted("g4"));
   await act(() => {
-    for (let i = 0; i < 30; i++) ctx.togglePick(pick("cap" + i, "gc" + i));
+    for (let i = 0; i < 65; i++) ctx.togglePick(pick("cap" + i, "gc" + i));
   });
-  check("picks stop at the leg cap and say so", ctx.pool.length === 25 && ctx.overCapBy === 1, `pool=${ctx.pool.length} over=${ctx.overCapBy}`);
+  check("picks stop at the pool cap (60, not the 25-leg parlay cap) and say so", ctx.pool.length === 60 && ctx.overCapBy === 1, `pool=${ctx.pool.length} over=${ctx.overCapBy}`);
 
   // ---- 3. Slip mode: in memory only; Send to generator and Exit turn it off ----
   await mount("u2");

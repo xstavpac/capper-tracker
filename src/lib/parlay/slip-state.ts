@@ -21,7 +21,7 @@
 // locks and Source - which only the old Confirm flow and /parlay sections had -
 // are dropped.
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { MAX_PARLAY_LEGS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
+import { MAX_POOL_PICKS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
 import { isGameOver } from "@/lib/parlay/game-over";
 
 export type SlipPick = ExpanderPick;
@@ -137,16 +137,62 @@ export function toggleTarget(state: SlipStateV2, game: SlipTarget): SlipChange {
 // ---------------------------------------------------------------------------
 const switchOn = (excluded: string[], leagues: string[]) => (excluded.some((l) => leagues.includes(l)) ? excluded.filter((l) => !leagues.includes(l)) : excluded);
 
-// Adds a pick, or removes it if it is already there. Past MAX_PARLAY_LEGS
+// Adds a pick, or removes it if it is already there. Past MAX_POOL_PICKS
 // picks it is refused, nothing added. A new pick switches its league on.
 export function togglePick(state: SlipStateV2, pick: SlipPick): SlipChange {
   if (state.picks.some((p) => p.pickId === pick.pickId)) return { state: removePick(state, pick.pickId) };
-  if (state.picks.length >= MAX_PARLAY_LEGS) return { state, refused: "PICK_CAP" };
+  if (state.picks.length >= MAX_POOL_PICKS) return { state, refused: "PICK_CAP" };
   return { state: { ...state, picks: [...state.picks, pick], excludedLeagues: switchOn(state.excludedLeagues, [pick.leagueName]) } };
 }
 
 export function removePick(state: SlipStateV2, pickId: string): SlipStateV2 {
   return { ...state, picks: state.picks.filter((p) => p.pickId !== pickId) };
+}
+
+// ---------------------------------------------------------------------------
+// A league switched off while the slip has picks or games from it: those picks
+// and games leave the slip (said once, with an Undo - see leagueRemovedText)
+// and the league goes off. Undo brings them back and the league on.
+// ---------------------------------------------------------------------------
+export type LeagueRemoval = { league: string; picks: SlipPick[]; targets: SlipTarget[] };
+
+export function switchLeagueOff(state: SlipStateV2, league: string): { state: SlipStateV2; removed: LeagueRemoval } {
+  const removed: LeagueRemoval = {
+    league,
+    picks: state.picks.filter((p) => p.leagueName === league),
+    targets: state.targets.filter((t) => t.leagueName === league),
+  };
+  return {
+    state: {
+      ...state,
+      picks: state.picks.filter((p) => p.leagueName !== league),
+      targets: state.targets.filter((t) => t.leagueName !== league),
+      excludedLeagues: state.excludedLeagues.includes(league) ? state.excludedLeagues : [...state.excludedLeagues, league],
+    },
+    removed,
+  };
+}
+
+// Puts a removal back (nothing doubled, picks stop at MAX_POOL_PICKS) and the league on.
+export function restoreLeague(state: SlipStateV2, removal: LeagueRemoval): SlipStateV2 {
+  const havePicks = new Set(state.picks.map((p) => p.pickId));
+  const haveTargets = new Set(state.targets.map((t) => t.gameId));
+  return {
+    ...state,
+    picks: [...state.picks, ...removal.picks.filter((p) => !havePicks.has(p.pickId))].slice(0, MAX_POOL_PICKS),
+    targets: [...state.targets, ...removal.targets.filter((t) => !haveTargets.has(t.gameId))],
+    excludedLeagues: state.excludedLeagues.filter((l) => l !== removal.league),
+  };
+}
+
+// "Removed 3 NFL picks" (games named too when target games went with them).
+export function leagueRemovedText(removal: LeagueRemoval): string {
+  const parts: string[] = [];
+  const np = removal.picks.length;
+  const ng = removal.targets.length;
+  if (np > 0) parts.push(`${np} ${removal.league} pick${np === 1 ? "" : "s"}`);
+  if (ng > 0) parts.push(`${ng} ${removal.league} game${ng === 1 ? "" : "s"}`);
+  return `Removed ${parts.join(" and ")}`;
 }
 
 // "Clear all picks": the slip starts over. The league scope stays.

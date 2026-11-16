@@ -22,7 +22,7 @@ import {
   type SlipStateV2,
   type SlipTarget,
 } from "@/lib/parlay/slip-state";
-import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { MAX_POOL_PICKS } from "@/lib/parlay/leg-cap";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -99,10 +99,10 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
   check("a pick goes straight in and switches its league on", [s.picks.map((p) => p.pickId), s.excludedLeagues], [["a"], []]);
   s = togglePick(s, pick("a", "g1", "MLB")).state;
   check("toggling it again removes it", s.picks.length, 0);
-  const atCap: SlipStateV2 = { ...EMPTY_SLIP_STATE, picks: Array.from({ length: MAX_PARLAY_LEGS }, (_, i) => pick("p" + i, "g" + i)) };
+  const atCap: SlipStateV2 = { ...EMPTY_SLIP_STATE, picks: Array.from({ length: MAX_POOL_PICKS }, (_, i) => pick("p" + i, "g" + i)) };
   const over = togglePick(atCap, pick("extra", "gx"));
-  check(`a ${MAX_PARLAY_LEGS + 1}th pick is refused, nothing added`, [over.refused, over.state.picks.length], ["PICK_CAP", MAX_PARLAY_LEGS]);
-  check("removing one at the cap still works", togglePick(atCap, pick("p0", "g0")).state.picks.length, MAX_PARLAY_LEGS - 1);
+  check(`a ${MAX_POOL_PICKS + 1}th pick is refused, nothing added`, [over.refused, over.state.picks.length], ["PICK_CAP", MAX_POOL_PICKS]);
+  check("removing one at the cap still works", togglePick(atCap, pick("p0", "g0")).state.picks.length, MAX_POOL_PICKS - 1);
 }
 
 // ============================================================================

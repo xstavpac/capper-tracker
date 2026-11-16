@@ -28,6 +28,14 @@ export function slipLegFloor(picks: { gameId: string }[], maxPerGame: number): n
 
 export const MAX_PARLAY_LEGS_MESSAGE = `${MAX_PARLAY_LEGS} legs max`;
 
+// The most picks the hand-picked pool ("Your picks" / the Live slip) holds. A
+// separate ceiling from MAX_PARLAY_LEGS on purpose: the pool is what the
+// generator draws from, the parlay it builds is still at most MAX_PARLAY_LEGS
+// legs (a pool above that is built with Fill from = Your picks only, which
+// draws the best MAX_PARLAY_LEGS of it). Below MAX_POOL_REQUEST_PICKS.
+export const MAX_POOL_PICKS = 60;
+export const MAX_POOL_PICKS_MESSAGE = `${MAX_POOL_PICKS} picks max`;
+
 // The most slip picks one Auto Hedge / Contrarian request may name. Above the
 // leg cap on purpose - a slip saved before the cap existed can hold more than
 // MAX_PARLAY_LEGS picks and still builds from all of them - but bounded, so

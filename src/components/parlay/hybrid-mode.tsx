@@ -204,7 +204,7 @@ export function HybridControls({
                 inScope={isLeagueInScope(league)}
                 onToggle={() => toggleLeague(league)}
                 ariaLabel={
-                  isLeagueLocked(league) ? league + " is on: your slip has picks or games from it" : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
+                  isLeagueLocked(league) ? "Leave out " + league + " games - removes your " + league + " picks from the slip" : (isLeagueInScope(league) ? "Leave out " : "Include ") + league + " games"
                 }
               />
             ))}
