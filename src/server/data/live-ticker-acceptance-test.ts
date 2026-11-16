@@ -78,6 +78,12 @@ function score(homeTeam: string, awayTeam: string, commenceTime: string, status:
   const withoutScore = buildTickerGamesForSport("baseball_mlb", "MLB", [game], [], NOW);
   check("no score match falls back to preview status", withoutScore[0]?.status, "preview");
   check("no score match has null scores", [withoutScore[0]?.homeScore, withoutScore[0]?.awayScore], [null, null]);
+
+  // Logos ride along from the matched score row; no row means null (the ticker then shows the team-colour dot).
+  const logoScore = { ...score("Yankees", "Red Sox", "2026-09-15T17:00:00Z", "live", "3", "2"), homeLogoUrl: "https://a.espncdn.com/i/teamlogos/mlb/500/nyy.png", awayLogoUrl: "https://a.espncdn.com/i/teamlogos/mlb/500/bos.png" };
+  const withLogos = buildTickerGamesForSport("baseball_mlb", "MLB", [game], [logoScore], NOW);
+  check("matched game carries both logo URLs", [withLogos[0]?.homeLogoUrl, withLogos[0]?.awayLogoUrl], [logoScore.homeLogoUrl, logoScore.awayLogoUrl]);
+  check("unmatched game has null logos", [withoutScore[0]?.homeLogoUrl, withoutScore[0]?.awayLogoUrl], [null, null]);
 }
 
 // --- cross-sport interleaving ---

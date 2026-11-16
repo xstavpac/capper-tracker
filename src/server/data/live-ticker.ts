@@ -28,6 +28,12 @@ export type TickerGame = {
   inningHalf: string | null;
   inningOrdinal: string | null;
   accentColor: string;
+  // Team logo URLs (ESPN CDN, from the matched score row) and each team's own colour, for the fallback mark
+  // when a logo is missing. Null when the game has no score row.
+  homeLogoUrl: string | null;
+  awayLogoUrl: string | null;
+  homeColor: string;
+  awayColor: string;
 };
 
 // The per-sport transform: today's-date filtering + score-matching, pulled
@@ -72,6 +78,10 @@ export function buildTickerGamesForSport(
       inningHalf: score?.inningHalf ?? null,
       inningOrdinal: score?.inningOrdinal ?? null,
       accentColor: getTeamColor(sportKey, game.homeTeam) ?? "#64748B",
+      homeLogoUrl: score?.homeLogoUrl ?? null,
+      awayLogoUrl: score?.awayLogoUrl ?? null,
+      homeColor: getTeamColor(sportKey, game.homeTeam) ?? "#64748B",
+      awayColor: getTeamColor(sportKey, game.awayTeam) ?? "#64748B",
     };
   });
 }
