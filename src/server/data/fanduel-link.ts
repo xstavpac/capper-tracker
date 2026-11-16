@@ -61,9 +61,19 @@ function dropExpired(now: number) {
 // until the platform killed the function): callTimeoutMs per call - the abort covers the body read too - and
 // deadlineMs for the whole send, measured from when getFanDuelLink started. A call that times out, or that is
 // reached after the deadline, is not retried and comes back as TIMEOUT.
-export const fanDuelFetchTuning = { maxConcurrent: 4, retryDelayMs: 500, callTimeoutMs: 8000, deadlineMs: 25000 };
+//
+// "Reached after the deadline" is read from the send's own SendDeadline, not from the clock alone. The timers run on
+// the event loop's monotonic clock and the deadline is a Date.now() value, so a timer due at the deadline can fire
+// while Date.now() still reads 1 ms short of it (seen on Linux CI). The slot that timer frees would then go to a
+// queued call with "1 ms left", and fire a real request. So a timer whose length the deadline set marks the send's
+// deadline passed when it fires - before its call returns and hands the slot on - and a call that gets a slot after
+// that gives up without fetching. One SendDeadline per send (oddsApiDeps): another send's never touches it.
+// now() is the clock the deadline is read against - Date.now in production, swapped by the test to recreate a clock
+// that still reads just short of the deadline when the timers due at it fire.
+export const fanDuelFetchTuning = { maxConcurrent: 4, retryDelayMs: 500, callTimeoutMs: 8000, deadlineMs: 25000, now: (): number => Date.now() };
 const TIMEOUT = "timeout" as const;
 type Timeout = typeof TIMEOUT;
+type SendDeadline = { at: number; passed: boolean };
 let inFlight = 0;
 const waiting: (() => void)[] = [];
 async function acquireSlot() {
@@ -81,20 +91,24 @@ function releaseSlot() {
 }
 const retryableStatus = (status: number) => status === 429 || status >= 500;
 
-async function fetchOnce(url: string, ctx: Record<string, unknown>, deadlineAt: number): Promise<Response | Timeout | null> {
+async function fetchOnce(url: string, ctx: Record<string, unknown>, deadline: SendDeadline): Promise<Response | Timeout | null> {
   await acquireSlot();
   try {
     // The wait for a slot counts against the deadline, so what is left is what this call may use.
-    const ms = Math.min(fanDuelFetchTuning.callTimeoutMs, deadlineAt - Date.now());
-    if (ms <= 0) {
+    const left = deadline.at - fanDuelFetchTuning.now();
+    if (deadline.passed || left <= 0) {
       console.error(LOG_TAG + " deadline passed before the call", JSON.stringify(ctx));
       return TIMEOUT;
     }
+    const cutByDeadline = left <= fanDuelFetchTuning.callTimeoutMs;
+    const ms = Math.min(fanDuelFetchTuning.callTimeoutMs, left);
     // The timer is left to run out rather than cleared on headers: the abort then also bounds the body read.
     // The race makes the bound hold even for a fetch that ignores its signal.
     const ac = new AbortController();
     const timeout = new Promise<Timeout>((resolve) => {
       setTimeout(() => {
+        // Set before the race below settles, so before this call's finally hands its slot to a queued call.
+        if (cutByDeadline) deadline.passed = true;
         ac.abort();
         resolve(TIMEOUT);
       }, ms);
@@ -132,11 +146,11 @@ function deferUsageWrite(write: () => Promise<void>) {
 async function oddsApiGet(
   url: string,
   ctx: Record<string, unknown>,
-  deadlineAt: number,
+  deadline: SendDeadline,
   onResponse?: (res: Response) => Promise<void> | void
 ): Promise<Response | Timeout | null> {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetchOnce(url, ctx, deadlineAt);
+    const res = await fetchOnce(url, ctx, deadline);
     // Never retried: waiting for the same stalled upstream a second time is what the bound exists to avoid.
     if (res === TIMEOUT) return TIMEOUT;
     if (res) await onResponse?.(res);
@@ -147,9 +161,9 @@ async function oddsApiGet(
   }
 }
 
-async function fetchEvents(sportKey: string, apiKey: string, deadlineAt: number): Promise<FanDuelEvent[] | Timeout | null> {
+async function fetchEvents(sportKey: string, apiKey: string, deadline: SendDeadline): Promise<FanDuelEvent[] | Timeout | null> {
   const ctx = { sportKey, call: "events" };
-  const res = await oddsApiGet(ODDS_API_BASE_URL + "/sports/" + sportKey + "/events?apiKey=" + apiKey, ctx, deadlineAt);
+  const res = await oddsApiGet(ODDS_API_BASE_URL + "/sports/" + sportKey + "/events?apiKey=" + apiKey, ctx, deadline);
   if (!res || res === TIMEOUT) return res;
   if (!res.ok) {
     console.error(LOG_TAG + " events listing failed", JSON.stringify({ sportKey, status: res.status }));
@@ -162,7 +176,7 @@ async function fetchEvents(sportKey: string, apiKey: string, deadlineAt: number)
   return raw.map((e) => ({ id: String(e.id), sportKey, homeTeam:String(e.home_team), awayTeam: String(e.away_team), commenceTime: String(e.commence_time) }));
 }
 
-async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: string[], apiKey: string, deadlineAt: number): Promise<FanDuelMarket[] | Timeout | null> {
+async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: string[], apiKey: string, deadline: SendDeadline): Promise<FanDuelMarket[] | Timeout | null> {
   const params = new URLSearchParams({
     apiKey,
     regions: "us",
@@ -178,7 +192,7 @@ async function fetchEventMarkets(sportKey: string, eventId: string, marketKeys: 
   const res = await oddsApiGet(
     ODDS_API_BASE_URL + "/sports/" + sportKey + "/events/" + encodeURIComponent(eventId) + "/odds?" + params.toString(),
     ctx,
-    deadlineAt,
+    deadline,
     // Every attempt, including a 429 that is about to be retried: logs x-requests-remaining / -used / -last.
     // The headers are read now; the write itself is deferred (deferUsageWrite), so no record is lost and none waits.
     (attempt) => {
@@ -247,7 +261,8 @@ function remember<T>(raw: Promise<T | Timeout | null>, state: CallState, forget:
 export function oddsApiDeps(now: Date, startedAt: number = Date.now()): FanDuelDeps {
   const apiKey = process.env.ODDS_API_KEY;
   const at = now.getTime();
-  const deadlineAt = startedAt + fanDuelFetchTuning.deadlineMs;
+  // This send's alone: every call it starts carries it, and only those calls' timers can mark it passed.
+  const deadline: SendDeadline = { at: startedAt + fanDuelFetchTuning.deadlineMs, passed: false };
   dropExpired(at);
   // What this send's callers got a timeout for: "<sportKey>|events" and "<sportKey>|<eventId>".
   const timedOut = new Set<string>();
@@ -265,7 +280,7 @@ export function oddsApiDeps(now: Date, startedAt: number = Date.now()): FanDuelD
         const created: Cached<FanDuelEvent[]> = {
           expires: at + CACHE_TTL_MS,
           state,
-          value: remember(fetchEvents(sportKey, apiKey, deadlineAt), state, () => {
+          value: remember(fetchEvents(sportKey, apiKey, deadline), state, () => {
             if (eventListings.get(sportKey) === created) eventListings.delete(sportKey);
           }),
         };
@@ -286,7 +301,7 @@ export function oddsApiDeps(now: Date, startedAt: number = Date.now()): FanDuelD
           expires: at + CACHE_TTL_MS,
           marketKeys,
           state,
-          value: remember(fetchEventMarkets(sportKey, eventId, marketKeys, apiKey, deadlineAt), state, () =>
+          value: remember(fetchEventMarkets(sportKey, eventId, marketKeys, apiKey, deadline), state, () =>
             eventMarkets.set(key, (eventMarkets.get(key) ?? []).filter((e) => e !== created))
           ),
         };
