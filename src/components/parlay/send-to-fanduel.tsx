@@ -79,7 +79,7 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
 // `keepWhenEmpty` shows the button, disabled, when there are no legs;
 // otherwise nothing is shown for none. `onOpened` runs when the user opens
 // FanDuel's betslip - the generator clears the slip then.
-// `className` replaces the wrapper's top rule and padding (the generator's PARLAY COMPLETE banner frames it itself).
+// `className` replaces the wrapper's top rule and padding (for a caller whose own box frames it).
 export function SendToFanDuel({ legs, keepWhenEmpty, onOpened, className }: { legs: SendLeg[]; keepWhenEmpty?: boolean; onOpened?: () => void; className?: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,8 +1,8 @@
 // The Parlay Generator's pick-by-pick reveal (presentation only): the timing and
 // the status lines for showing a parlay the engine already built, one leg at a
-// time. Nothing here chooses, orders or prices a leg - the sequencer walks the
-// real `legs` array in its order, and the card prices the legs shown so far with
-// combine-odds.ts as it always has.
+// time. Nothing here chooses or prices a leg - the card reveals the engine's legs
+// in the order it shows them (strongest first, swap-modal.ts strengthOrder) and
+// prices the legs shown so far with combine-odds.ts as it always has.
 
 // The analyzing step lasts at least this long, or until the server answers.
 export const ANALYZE_MIN_MS = 1000;
@@ -38,12 +38,6 @@ export function findingStatus(index: number, total: number): string {
 
 // The status line once leg `n` (1-based) is in.
 export const addedStatus = (n: number) => `Adding selection ${n} · Calculating combined odds`;
-
-// The PARLAY COMPLETE banner's line. Short of Total legs: says only that many matched.
-export function completeText(legs: number, requested: number): string {
-  const all = `All ${legs} selection${legs === 1 ? "" : "s"} assembled.`;
-  return legs < requested ? `${all} Only ${legs} eligible pick${legs === 1 ? "" : "s"} matched your filters.` : all;
-}
 
 // One step of the schedule, in ms after the build (not the analyzing step) starts.
 export type RevealStep = { at: number; kind: "status"; index: number } | { at: number; kind: "land"; index: number } | { at: number; kind: "complete" };

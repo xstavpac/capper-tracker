@@ -6,7 +6,7 @@
 //     generic status text only;
 //   - analyzing -> building -> complete on Generate and on Regenerate, the counter,
 //     the progress bar, the status line, the odds row under the legs landing on the
-//     engine's own combined price, PARLAY COMPLETE with Send to FanDuel inside;
+//     engine's own combined price, the bottom bar with Send to FanDuel inside;
 //   - one card and one row per leg from start to finish (no remount while revealing);
 //   - Clear result mid-build, Generate mid-build, unmount mid-build, reduced motion.
 // Pure - no DB. Run with:
@@ -16,7 +16,7 @@ import type { Root } from "react-dom/client";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { GenerateRequest } from "@/server/actions/parlay-generate";
-import { ANALYZE_MIN_MS, ANALYZING_STATUS, BUILD_BUDGET_MS, completeText, LAND_MS, ODDS_TWEEN_MS, findingStatus, revealGap, revealSchedule } from "@/lib/parlay/build-reveal";
+import { ANALYZE_MIN_MS, ANALYZING_STATUS, BUILD_BUDGET_MS, LAND_MS, ODDS_TWEEN_MS, findingStatus, revealGap, revealSchedule } from "@/lib/parlay/build-reveal";
 import { combineOdds, formatAmericanOdds } from "@/lib/parlay/combine-odds";
 
 let failures = 0;
@@ -41,7 +41,6 @@ for (const n of [1, 3, 8, 12, 20, 25]) {
   check(`schedule · ${n} legs: each status line comes between the last leg and the next`, statusFirst);
 }
 check("status: first and final", findingStatus(0, 5) === "Finding strongest available pick…" && findingStatus(4, 5) === "Finding final pick…" && findingStatus(0, 1) === "Finding strongest available pick…");
-check("complete: all N; short of Total legs says how many matched", completeText(3, 3) === "All 3 selections assembled." && completeText(2, 4) === "All 2 selections assembled. Only 2 eligible picks matched your filters.");
 
 // ---- The card (jsdom) ----
 const FUTURE = "2099-06-01T23:00:00.000Z";

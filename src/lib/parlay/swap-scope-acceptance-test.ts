@@ -1,12 +1,12 @@
-// The Swap setting on Hedge and Contrarian (swap-scope.ts, generator.ts
-// buildSwap): Suggested swaps only generated legs (the behavior before the
-// setting), Your picks only slip legs, All any leg. Every scope comes with each
-// build; the Primary is the same whichever is shown. An alternate is still
-// never a slip pick or a parlay leg and never breaks a same-game rule. The
-// choice is remembered per user, All by default. Pure - no DB. Run with:
+// The swap scopes of the whole-parlay Hedge and Contrarian (swap-scope.ts,
+// generator.ts buildSwap - what the run log reads): Suggested swaps only
+// generated legs, Your picks only slip legs, All any leg. Every scope comes with
+// each build; the Primary is the same whichever is read. An alternate is still
+// never a slip pick or a parlay leg and never breaks a same-game rule. Pure - no
+// DB. Run with:
 //   npx tsx src/lib/parlay/swap-scope-acceptance-test.ts
 import { buildGeneratedParlay, type EngineSwap, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
-import { inSwapScope, normalizeSwapScope, readStoredSwapScope, SWAP_SCOPE_DEFAULT, SWAP_SCOPE_OPTIONS, writeStoredSwapScope } from "@/lib/parlay/swap-scope";
+import { inSwapScope } from "@/lib/parlay/swap-scope";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { CategoryBreakdownItem, PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
@@ -59,34 +59,13 @@ const SETTINGS: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "
 const view = (s: EngineSwap) => s.legs.map((l) => [l.original.pick.pickId, l.swap ? l.swap.pick.pickId : l.unchangedReason]);
 
 // ============================================================================
-// The helpers
+// The helper
 // ============================================================================
-check("labels, in order", SWAP_SCOPE_OPTIONS.map((o) => o.label), ["Suggested", "Your picks", "All"]);
-check("default: All", SWAP_SCOPE_DEFAULT, "ALL");
-check("normalize: known values kept, anything else is All", ["SUGGESTED", "YOUR_PICKS", "ALL", "nope", null, 3].map(normalizeSwapScope), ["SUGGESTED", "YOUR_PICKS", "ALL", "ALL", "ALL", "ALL"]);
 check(
   "inSwapScope: [slip, generated] per scope",
   (["SUGGESTED", "YOUR_PICKS", "ALL"] as const).map((s) => [inSwapScope(s, "SLIP"), inSwapScope(s, "GENERATED")]),
   [[false, true], [true, false], [true, true]]
 );
-
-// Remembered per user, like the gate (a stand-in localStorage).
-{
-  const store = new Map<string, string>();
-  (globalThis as unknown as { window: unknown }).window = {
-    localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) },
-  };
-  check("nothing stored: All", readStoredSwapScope("u1"), "ALL");
-  writeStoredSwapScope("u1", "YOUR_PICKS");
-  check("stored per user", [readStoredSwapScope("u1"), readStoredSwapScope("u2"), store.get("parlay-swap-scope:u1")], ["YOUR_PICKS", "ALL", "YOUR_PICKS"]);
-  writeStoredSwapScope("u1", "ALL");
-  check("the default is not stored", store.has("parlay-swap-scope:u1"), false);
-  store.set("parlay-swap-scope:u1", "garbage");
-  check("a bad stored value is All", readStoredSwapScope("u1"), "ALL");
-  (globalThis as unknown as { window: unknown }).window = { get localStorage(): never { throw new Error("blocked"); } };
-  check("storage unavailable: All, and writing doesn't throw", [readStoredSwapScope("u1"), (writeStoredSwapScope("u1", "SUGGESTED"), "ok")], ["ALL", "ok"]);
-  delete (globalThis as unknown as { window?: unknown }).window;
-}
 
 // ============================================================================
 // The engine
