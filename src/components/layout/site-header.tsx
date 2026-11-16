@@ -31,7 +31,16 @@ function MenuIcon() {
   );
 }
 
-const TAB = "relative flex h-12 items-center gap-2 rounded-xl px-5 text-[17px] font-semibold transition ";
+// Tab sizes by width, as three non-overlapping ranges (the tabs are hidden below 1024px):
+//   1024-1279px  14px, 10px side padding, 4px gaps, 16px icons
+//   1280-1479px  15px, 14px side padding, 6px gaps, 16px icons
+//   from 1480px  17px, 20px side padding, 8px gaps, 18px icons
+// so the header stays one row at every width from 1024px.
+const TAB =
+  "relative flex h-12 shrink-0 items-center whitespace-nowrap rounded-xl font-semibold transition gap-2 px-5 text-[17px] " +
+  "lg:max-xl:gap-1 lg:max-xl:px-2.5 lg:max-xl:text-[14px] xl:max-[1479.9px]:gap-1.5 xl:max-[1479.9px]:px-3.5 xl:max-[1479.9px]:text-[15px] ";
+const TAB_ICON = "h-[18px] w-[18px] lg:max-[1479.9px]:h-4 lg:max-[1479.9px]:w-4";
+const NAV_GAP = "gap-2 lg:max-xl:gap-1 xl:max-[1479.9px]:gap-1.5";
 const TAB_IDLE = "text-[#C9D3E6] hover:bg-white/5 hover:text-white";
 const TAB_ACTIVE = "bg-[#2563EB] text-white";
 
@@ -82,23 +91,22 @@ export function SiteHeader({
   }, [open]);
 
   return (
-    <header className="relative z-40 flex flex-wrap items-center gap-x-4 gap-y-3 bg-[#0A1530] px-6 py-[14px]">
+    <header className="relative z-40 flex flex-wrap items-center gap-x-4 gap-y-3 bg-[#0A1530] px-6 py-[14px] lg:flex-nowrap">
       <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 rounded-xl">
         <LogoMark />
-        <span className="text-[20px] font-bold text-white">BettingView</span>
+        {/* 1024-1279px: the tile only. 1280-1479px: 18px. */}
+        <span className="whitespace-nowrap text-[20px] font-bold text-white lg:max-xl:hidden xl:max-[1479.9px]:text-[18px]">BettingView</span>
       </Link>
 
-      {/* From 1024px. Six 17px tabs plus the logo, Drop Catalog and the menu button need about 1450px
-          in one row, so up to 1479px the tabs take a full second row (order-last) rather than wrapping
-          wherever they happen to break. themed-page.tsx's min-height follows these two heights. */}
-      <nav aria-label="Main" className="hidden basis-full flex-wrap items-center gap-2 lg:order-last lg:flex min-[1480px]:order-none min-[1480px]:basis-auto">
+      {/* From 1024px, in the header's single row (see TAB for the sizes per width). */}
+      <nav aria-label="Main" className={"hidden items-center lg:flex " + NAV_GAP}>
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActiveHref(pathname, item.href);
           return (
             <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={TAB + (active ? TAB_ACTIVE : TAB_IDLE)}>
               <span className="relative flex">
-                <Icon className="h-[18px] w-[18px]" />
+                <Icon className={TAB_ICON} />
                 {item.liveDot && <LiveDot ringClassName={active ? "border-[#2563EB]" : "border-[#0A1530]"} />}
               </span>
               {item.label}
@@ -109,16 +117,20 @@ export function SiteHeader({
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        {/* Below 640px: the bolt only (plus the badge), the label kept for screen readers. */}
+        {/* Below 640px: the bolt only (plus the badge). 1024-1279px: the bolt and "Catalog", 14px.
+            1280-1479px: 15px. The link's accessible name is always the full one. */}
         <a
           href="/picks/import"
-          className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#7C3AED] px-3.5 text-[17px] font-bold text-white transition animate-glow-pulse-compact hover:bg-[#6D28D9] motion-reduce:animate-none sm:px-5"
+          aria-label={"Drop Catalog" + (reviewCount > 0 ? ", " + reviewCount + " to review" : "")}
+          className="flex h-12 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-[#7C3AED] px-3.5 text-[17px] font-bold text-white transition animate-glow-pulse-compact hover:bg-[#6D28D9] motion-reduce:animate-none sm:px-5 lg:max-xl:px-3 lg:max-xl:text-[14px] xl:max-[1479.9px]:px-4 xl:max-[1479.9px]:text-[15px]"
         >
           <LightningIcon />
-          <span className="sr-only sm:not-sr-only">Drop Catalog</span>
+          <span aria-hidden="true" className="hidden sm:inline">
+            <span className="lg:max-xl:hidden">Drop </span>Catalog
+          </span>
           {reviewCount > 0 && (
             <span
-              aria-label={reviewCount + " to review"}
+              aria-hidden="true"
               className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-semibold text-[#6D28D9]"
             >
               {reviewCount}
