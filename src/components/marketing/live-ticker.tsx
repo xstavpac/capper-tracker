@@ -6,6 +6,7 @@ import { closestByTime } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import { LocalGameTime } from "@/components/local-game-time";
 import { useSafePoll } from "@/lib/use-safe-poll";
+import { TeamMark } from "@/components/live/team-mark";
 import { isUnplayed, unplayedLabel } from "@/lib/feed-game-status";
 
 // Deliberately lighter than the authenticated live page's 25s poll
@@ -24,6 +25,8 @@ type ScoreUpdate = {
   scores: { name: string; score: string }[] | null;
   inningHalf: string | null;
   inningOrdinal: string | null;
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
 };
 
 // Same team-pair-plus-closest-commenceTime matching odds.ts's
@@ -81,6 +84,9 @@ function applyScoreUpdates(games: TickerGame[], scoresBySport: Record<string, Sc
       awayScore: parseScore(update, game.awayTeam, game.sportKey),
       inningHalf: update.inningHalf,
       inningOrdinal: update.inningOrdinal,
+      // Keep the logo already shown when a poll row carries none.
+      homeLogoUrl: update.homeLogoUrl ?? game.homeLogoUrl,
+      awayLogoUrl: update.awayLogoUrl ?? game.awayLogoUrl,
     };
   });
 }
@@ -102,6 +108,20 @@ function GameState({ game }: { game: TickerGame }) {
   return <>Live</>;
 }
 
+// A team's logo in a fixed 16px box (so a missing logo never shifts the strip), or - with none, or when it fails to
+// load - a small dot in the team's colour.
+function TickerTeam({ logoUrl, color }: { logoUrl: string | null | undefined; color: string }) {
+  return (
+    <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+      <TeamMark
+        logoUrl={logoUrl}
+        sizeClass="h-4 w-4"
+        fallback={<span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />}
+      />
+    </span>
+  );
+}
+
 function Segment({ game }: { game: TickerGame }) {
   const isLive = game.status === "live";
   return (
@@ -111,12 +131,14 @@ function Segment({ game }: { game: TickerGame }) {
     >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-300">{game.sportLabel}</span>
       <div className="flex items-center gap-1.5 text-xs font-medium text-white">
+        <TickerTeam logoUrl={game.awayLogoUrl} color={game.awayColor} />
         <span>{game.awayShort}</span>
         <span className="text-blue-300">
           {game.awayScore ?? ""}
           {game.status !== "preview" && !isUnplayed(game.status) && " - "}
           {game.homeScore ?? ""}
         </span>
+        <TickerTeam logoUrl={game.homeLogoUrl} color={game.homeColor} />
         <span>{game.homeShort}</span>
       </div>
       <span className="flex items-center gap-1.5 text-xs text-blue-200">
