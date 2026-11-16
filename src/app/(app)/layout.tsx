@@ -1,4 +1,4 @@
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { SiteHeader } from "@/components/layout/site-header";
 import { LiveTicker } from "@/components/marketing/live-ticker";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, tickerGames] = await Promise.all([requireUser(), getLiveTickerGames()]);
-  // Sidebar visibility only, from the shared flag snapshot (no per-request
+  // Admin menu-item visibility only, from the shared flag snapshot (no per-request
   // query). The gated pages do their own uncached check - see feature-flags.ts.
   // Pending Telegram-ingest review items for the Catalog Import badge: a cached per-user count, never a per-render query.
   const [[showAdminOps], reviewCount] = await Promise.all([
@@ -29,16 +29,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ParlayPoolProvider key={user.id} userId={user.id}>
         <div className="flex min-h-screen flex-col">
           <LiveTicker initialGames={tickerGames} />
-          <div className="flex flex-1 flex-col md:flex-row md:gap-3 md:p-3">
-            <AppSidebar
-              user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
-              showAdminOps={showAdminOps}
-              reviewCount={reviewCount}
-            />
-            <main className="flex-1 bg-background p-4 md:rounded-xl md:border md:border-border md:bg-card md:p-8 md:shadow-soft">
-              {children}
-            </main>
-          </div>
+          <SiteHeader
+            user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
+            showAdminOps={showAdminOps}
+            reviewCount={reviewCount}
+          />
+          {/* Full width. Its padding (p-4, md:p-8) is what ThemedPage's backdrop cancels - see themed-page.tsx. */}
+          <main className="flex-1 bg-background p-4 md:p-8">{children}</main>
         </div>
       </ParlayPoolProvider>
     </ThemeProvider>

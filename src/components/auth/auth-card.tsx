@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-// Same logo-mark.png asset as the sidebar's LogoMark (app-sidebar.tsx) - kept
+// Same logo-mark.png asset as the app header's LogoMark (site-header.tsx) - kept
 // in sync visually with the rest of the app, unlike the new brand-purple
 // (#7F2FD4) used for this page's primary buttons, which is a separate,
 // explicitly-requested color. The asset is a full lockup (icon + divider +
