@@ -3,8 +3,9 @@
 // shapes) at gates 0 / 45 / 55 / 60, through hybrid-scoring-frozen-capture.ts:
 //   - WILSON (the rollback) must be byte-identical to the before JSON (__fixtures__/hybrid-scoring-before-frozen.json,
 //     written by the capture file on origin/main 5f64665).
-//   - SCORING (the default: the capper's actual record gates - either the in-league or the all-leagues record
-//     reaching the lever - and the shrunk rankScore at the posted price only orders) is diffed against it.
+//   - SCORING (hyb-maingate-v3: Standard's gate - scorePick's shrunk, price-aware edge at the posted price and
+//     its long-shot rule - and that same scorePick's rankScore orders) is diffed against it. (v2 gated on the
+//     raw win % of EITHER the in-league or the all-leagues record; that best of two is gone.)
 //     hybrid-scoring-diff.txt lists every position that came, went, flipped direction, changed anchor or
 //     changed its top supporter, the box-eligible games, boxes and legs before and after for every case and
 //     gate, and why: each post whose gate verdict changed, with both records.
@@ -16,7 +17,7 @@ import { join } from "node:path";
 import { GENERATOR_Z } from "@/lib/parlay/generator";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { qualifies, wilsonLowerBound } from "@/lib/parlay/qualification-core";
-import { EMPTY_PLATFORM_RATES, scorePickBestOfTwo, type PickScore } from "@/lib/parlay/scoring";
+import { EMPTY_PLATFORM_RATES, scorePick, type PickScore } from "@/lib/parlay/scoring";
 import { capture, captureKey, type Capture, type CapturedCase } from "@/lib/parlay/hybrid-scoring-frozen-capture";
 import { caseSnapshot, FROZEN_CASES, FROZEN_GATES, type FrozenCase } from "@/lib/parlay/hybrid-scoring-frozen-cases";
 import { hybridScoringVersion } from "@/lib/parlay/run-trace";
@@ -37,7 +38,7 @@ const scoring = capture("now, SCORING");
 // ---- The before capture is frozen (origin/main 5f64665, when the WILSON rollback still existed) ----
 check("the before capture covers every case at every gate", Object.keys(before.cases).sort(), Object.keys(scoring.cases).sort());
 const version = hybridScoringVersion();
-check("SCORING's version names scoring.ts's rules and fits the 80-character intake", [version, version.length < 80], ["hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-rawgate-bo2-v2", true]);
+check("SCORING's version names scoring.ts's rules and fits the 80-character intake", [version, version.length < 80], ["hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-maingate-v3", true]);
 
 // ---- The diff ----
 type Pos = [string, number, boolean, [string, string, number, number, string, number, number][], string[], number];
@@ -88,9 +89,15 @@ function resultDiff(a: CapturedCase, b: CapturedCase, label: (id: string) => str
   return out;
 }
 
-// Every post whose gate verdict moved on the games the diff touched: both records, and the score that ranks.
-const half = (h: { wins: number; losses: number; winPct: number; clears: boolean } | null) => (h ? `${h.wins}-${h.losses} ${h.winPct.toFixed(1)}%${h.clears ? " ✓" : ""}` : "none");
-const rankText = (s: PickScore | null) => (s && s.status === "SCORED" ? `edge ${(s.rankScore * 100).toFixed(1)}` : "unranked");
+// Every post whose gate verdict moved on the games the diff touched: the records scorePick read, its gate's
+// working (shrunk probability, the edge against the posted price, the long-shot rule) and the score that ranks.
+const wl = (w: { wins: number; losses: number }) => `${w.wins}-${w.losses}`;
+const gateText = (s: PickScore) => {
+  if (s.status !== "SCORED") return "no record";
+  const g = s.gate;
+  const ls = g.raw ? `; long-shot ${g.raw.wins}/${g.raw.decided} vs ${pct(g.raw.bar)}${g.raw.clears ? " ✓" : " ✗"}` : "";
+  return `in-league ${wl(s.levels.league)}, other leagues ${wl(s.levels.otherLeagues)}; shrunk ${pct(s.shrunkWinProb)}; p ${pct(g.probability)} vs break-even ${pct(g.breakEven)}${ls}; edge ${(s.rankScore * 100).toFixed(1)}`;
+};
 function postLines(c: FrozenCase, gate: number, games: Set<string>): string[] {
   const snap = caseSnapshot(c);
   const ctx = { leagueRecords: snap.leagueRecords, categoryRecords: snap.categoryRecords, platformRates: snap.platformRates ?? EMPTY_PLATFORM_RATES, minWinPct: gate };
@@ -99,13 +106,12 @@ function postLines(c: FrozenCase, gate: number, games: Set<string>): string[] {
     if (!games.has(g.gameId)) continue;
     for (const p of g.picks) {
       const r = recordForGate(p, snap.leagueRecords, snap.categoryRecords, GENERATOR_Z);
-      const b = scorePickBestOfTwo(p, ctx);
+      const b = scorePick(p, ctx);
       const was = qualifies(r, gate);
-      const is = b.passes;
+      const is = !!r && b.status === "SCORED" && b.gate.passes;
       const odds = p.odds > 0 ? "+" + p.odds : String(p.odds);
       const w = r ? `${r.wins}-${r.losses} ${r.source === "LEAGUE" ? "lg" : "all"} ${r.winPct.toFixed(1)}%, Wilson ${pct(wilsonLowerBound(r.wins, r.losses, GENERATOR_Z))}` : "no record";
-      const s = `in-league ${half(b.raw.inLeague)}; all-leagues ${half(b.raw.allLeagues)}; ranks by ${b.chosenFrom === null ? "nothing" : b.chosenFrom === "IN_LEAGUE" ? "in-league" : "all-leagues"} ${rankText(b.chosen)}`;
-      out.push(`    ${was === is ? "  " : is ? "+ " : "- "}${g.gameLabel}: ${p.capperId} ${p.betDetail} ${odds} · WILSON ${w} ${was ? "passes" : "fails"} · SCORING ${is ? "passes" : "fails"} (${s})`);
+      out.push(`    ${was === is ? "  " : is ? "+ " : "- "}${g.gameLabel}: ${p.capperId} ${p.betDetail} ${odds} · WILSON ${w} ${was ? "passes" : "fails"} · SCORING ${is ? "passes" : "fails"} (${gateText(b)})`);
     }
   }
   return out;
@@ -149,16 +155,19 @@ for (const k of Object.keys(before.cases)) lines.push(`${k.padEnd(38)} ${shape(b
 // ---- Pinned outcomes ----
 const at = (name: string, gate: number) => scoring.cases[`${name} @ ${gate}%`];
 const has = (cc: CapturedCase, id: string, family: string) => (cc.positions as Pos[]).some((p) => p[0].startsWith(id + "|" + family + "|"));
-check("raw gate: the 0-3 dog at +300 makes no position at any gate above 0", [45, 55, 60].map((g) => has(at("long dogs", g), "LD1", "SIDE")), [false, false, false]);
+check("long-shot rule: the 0-3 dog at +300 makes no position at any gate above 0", [45, 55, 60].map((g) => has(at("long dogs", g), "LD1", "SIDE")), [false, false, false]);
 check("...and does at 0 (any graded record)", has(at("long dogs", 0), "LD1", "SIDE"), true);
-check("either record: the 30-20 all / 2-8 in-league capper (Wide) qualifies at 55 and 60 on the all-leagues record", [55, 60].map((g) => has(at("all-leagues vs in-league", g), "AL1", "SIDE")), [true, true]);
-check("either record: the 8-0 in-league / 20-30 overall capper (Local) is a position at every gate, 0 to 60", FROZEN_GATES.map((g) => has(at("all-leagues vs in-league", g), "AL2", "SIDE")), [true, true, true, true]);
-// Devils @ Stars total: Porter PICKS' Under is 4-2 in the NHL (12-19 overall), so it passes the raw gate at 55 and 60
-// (the shrunk gate dropped it). At 55 the direction contest is decided by the shrunk score, and Porter's -5.5 loses to
-// O2's 5-4 Over (+0.7): the Over is the position, Porter an opposer. At 60 O2 (55.6%) fails the gate and the Under stands.
+// Neither record stands in for the other any more (v2's either-half gate passed both of these at 55 and 60).
+// Wide: 2-8 in-league is shrunk toward 28-12 elsewhere, to 49.3% - it passes 45 and fails 55 and 60.
+check("Wide (2-8 in-league / 30-20 all-leagues) passes 45, not 55 or 60: in-league is shrunk, not replaced", [45, 55, 60].map((g) => has(at("all-leagues vs in-league", g), "AL1", "SIDE")), [true, false, false]);
+// Local: 8-0 in-league shrinks to 54.4% against 12-30 elsewhere, and the long-shot rule reads 20-30 (40%).
+check("Local (8-0 in-league / 20-30 all-leagues) is a position only at 0: the raw 20-30 fails the long-shot rule", FROZEN_GATES.map((g) => has(at("all-leagues vs in-league", g), "AL2", "SIDE")), [true, false, false, false]);
+// Devils @ Stars total: Porter PICKS' Under is 4-2 in the NHL over 8-17 elsewhere (shrunk 46.8%, long-shot 12-19 fails)
+// and O2's Over is 5-4 (shrunk 53.1%): neither clears 55 or 60, so the game has no total (v2 had one at both).
 const devilsTotal = (g: number) => (at("slate-10-27", g).positions as Pos[]).filter((p) => p[0].startsWith("NHL2|TOTAL|")).map((p) => [p[0].split("|")[2], p[3].map((s) => s[0]), p[4]]);
-check("Devils @ Stars has its total back at 55 (a box again): the Over by O2, with Porter PICKS' Under an opposer", devilsTotal(55), [["OVER", ["O2"], ["Porter PICKS"]]]);
-check("...and at 60 it is Porter PICKS' Under", devilsTotal(60), [["UNDER", ["Porter PICKS"], []]]);
+check("Devils @ Stars has no total at 55 or 60: Porter PICKS' 4-2 Under and O2's 5-4 Over both fail the shrunk gate", [devilsTotal(55), devilsTotal(60)], [[], []]);
+// A strong in-league record still carries a position: Porter PICKS' 9-2 NHL Over (Canucks @ Ducks) at 55.
+check("a strong in-league record still passes: Porter PICKS' 9-2 Over on Canucks @ Ducks is a position at 55", (at("slate-10-27", 55).positions as Pos[]).filter((p) => p[3].some((s) => s[0] === "Porter PICKS") && p[0].includes("|TOTAL|OVER")).length > 0, true);
 const b55 = (before.cases["slate-10-27 @ 55%"].result as { d: Delivery }).d;
 check("the 10/27 slate before: 5 boxes, 10 of 15 legs", [b55.boxes, b55.deliveredLegs, b55.requestedLegs], [5, 10, 15]);
 

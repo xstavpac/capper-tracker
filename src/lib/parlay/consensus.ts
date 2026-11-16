@@ -15,15 +15,15 @@
 //     team merge into ONE position.
 //   - Total: a game + Over, or a game + Under.
 //
-// Supporters are DISTINCT cappers. Scoring is scoring.ts's best of two (scorePickBestOfTwo). The GATE is the
-//   capper's actual record: the post counts when the raw win % of EITHER record - this
-//   league alone, or every league - reaches the win-% lever (so an 8-0 in-league capper
-//   with a bad overall record counts, and so does 30-20 overall with 2-8 in-league). No
-//   shrinkage, no price and no long-shot rule: a 0-for-N capper fails at every lever
-//   above 0, and lowering the lever never removes anyone. The SCORE only orders: the
-//   better rankScore (an edge at the capper's OWN posted price, which can be negative; a
-//   FanDuel ladder rung never reaches this file) among only the records that cleared the
-//   gate. Ties: the larger decided sample, then id.
+// Supporters are DISTINCT cappers. Scoring is scoring.ts's scorePick, the same call and the same
+//   gate as Standard / Hedge / Contrarian: the post counts when scorePick's gate passes - the
+//   shrunk, price-aware edge at the capper's OWN posted price reaches the win-% lever, and with
+//   a real price the raw record in the category (in-league plus other leagues) clears the
+//   long-shot rule. A small in-league sample is shrunk toward the capper's other-leagues record,
+//   so it never passes on its own (1-0 in-league over 64-69 elsewhere fails at 55). The SCORE
+//   that orders is that same scorePick's rankScore - the edge the gate read - so gate and rank
+//   never disagree. A FanDuel ladder rung never reaches this file. Ties: the larger decided
+//   sample, then id.
 //
 // The record shown (PositionCapper.record) is recordForGate's. Only gated
 // posts count at all: an ungated post is neither a supporter nor an opposer, and never
@@ -59,7 +59,7 @@ import { GATE_DEFAULT, normalizeMinWinPct } from "@/lib/parlay/gate";
 import { hasKickedOff, isGameOver, OFF_BOARD_GAME_PREFIX } from "@/lib/parlay/game-over";
 import { recordForGate } from "@/lib/parlay/pick-record";
 import { describePick } from "@/lib/parlay/relationship-classifier";
-import { EMPTY_PLATFORM_RATES, scorePickBestOfTwo, type BestOfTwoScore, type ScoreModel, type ScoringContext } from "@/lib/parlay/scoring";
+import { DEFAULT_BREAK_EVEN, EMPTY_PLATFORM_RATES, scorePick, type PickScore, type ScoreModel, type ScoringContext } from "@/lib/parlay/scoring";
 
 // Supporters a position needs: one strong capper is enough.
 export const HYBRID_MIN_SUPPORTERS = 1;
@@ -82,11 +82,10 @@ export type PositionCapper = {
   record: HybridRecord;
   // The market of the post whose record this is (the capper's best-scoring post on the position).
   recordMarket: HybridMarket;
-  // The post's best-of-two rankScore (an edge at the capper's posted price).
+  // The post's scorePick rankScore (an edge at the capper's posted price).
   score: number;
-  // What scored the post - decided picks behind the score (the tie-break),
-  // which record won the best of two, and the model.
-  scoring?: { decided: number; from: NonNullable<BestOfTwoScore["chosenFrom"]>; model: ScoreModel };
+  // What scored the post - decided picks behind the score (the tie-break) and the model.
+  scoring?: { decided: number; model: ScoreModel };
   // The hardest gated post on the position, as posted: its market and number
   // (null for a moneyline).
   postedMarket: HybridMarket;
@@ -143,7 +142,7 @@ type Post = {
   endorsedLine: number;
   record: HybridRecord;
   score: number;
-  scored?: BestOfTwoScore;
+  scored?: PickScore;
 };
 
 // How a build scores: the gate, the z (the record shown), and scoring's context.
@@ -158,14 +157,14 @@ function scoringOf(snapshot: ConsensusRecords, opts: Pick<ConsensusOptions, "min
   };
 }
 
-// The post's gate verdict: a record, and scoring's raw-record gate.
+// The post's gate verdict: a record, and scorePick's gate (Standard's: shrinkage, price-aware edge, long-shot rule).
 function postPasses(read: ReadPost): boolean {
-  return !!read.record && !!read.scored && read.scored.passes;
+  return !!read.record && read.scored?.status === "SCORED" && read.scored.gate.passes;
 }
 
 // The tie-break sample: the decided picks behind the score, else the record n.
 const sampleOf = (decided: number | undefined, record: HybridRecord) => decided ?? record.n;
-const decidedOf = (p: { scored?: BestOfTwoScore }) => (p.scored?.chosen?.status === "SCORED" ? p.scored.chosen.decided : undefined);
+const decidedOf = (p: { scored?: PickScore }) => (p.scored?.status === "SCORED" ? p.scored.decided : undefined);
 
 const MARKET_BY_BET_TYPE: Record<string, HybridMarket> = { SPREAD: "SPREAD", MONEYLINE: "MONEYLINE", TOTAL: "TOTAL" };
 
@@ -221,9 +220,9 @@ function readPost(pick: GeneratorPick, game: GeneratorGame, snapshot: ConsensusR
     record: record && { wins: record.wins, losses: record.losses, n: record.n, winPct: record.winPct, source: record.source },
   };
   // At the capper's posted price: the pick as posted is all scoring.ts is handed.
-  const scored = scorePickBestOfTwo(pick, s.ctx);
-  // A post that cleared neither record has no chosen score; it never passes the gate, so this number is never ranked.
-  return { ...base, score: scored.chosen?.status === "SCORED" ? scored.chosen.rankScore : Number.NEGATIVE_INFINITY, scored };
+  const scored = scorePick(pick, s.ctx);
+  // A pick with no record never passes the gate, so this number is never ranked.
+  return { ...base, score: scored.status === "SCORED" ? scored.rankScore : Number.NEGATIVE_INFINITY, scored };
 }
 
 // The pick as a Post, or null when it is not one a hybrid position can use (readPost)
@@ -266,7 +265,7 @@ function toCapper(posts: Post[]): PositionCapper {
     record: best.record,
     recordMarket: best.market,
     score: best.score,
-    ...(best.scored?.chosen?.status === "SCORED" && best.scored.chosenFrom ? { scoring: { decided: best.scored.chosen.decided, from: best.scored.chosenFrom, model: best.scored.chosen.model } } : {}),
+    ...(best.scored?.status === "SCORED" ? { scoring: { decided: best.scored.decided, model: best.scored.model } } : {}),
     postedMarket: hardest.market,
     postedLine: hardest.postedLine,
     endorsedLine: hardest.endorsedLine,
@@ -359,8 +358,10 @@ export function buildConsensusPositions(snapshot: Pick<GeneratorSnapshot, "games
 export type FamilyDiagnosis = {
   // Full-game posts of the family that could be read, gated or not.
   posts: number;
-  // The highest win % among those posts' records (then the larger sample); null when none had a record.
-  best: { direction: string; winPct: number; wins: number; losses: number } | null;
+  // The post the gate scored highest (rankScore, then the larger sample), with the record shown (recordForGate)
+  // and what the gate read: `rated` is the probability on the lever's -110 scale (the post passes the edge test
+  // when rated >= L), `longShot` the raw record and bar when the long-shot rule failed it. Null when none had a record.
+  best: { direction: string; winPct: number; wins: number; losses: number; rated: number | null; longShot: { wins: number; decided: number; bar: number } | null } | null;
   // Distinct cappers clearing the gate on each direction, hedged cappers set aside.
   gatedByDirection: Record<string, number>;
   // Cappers who cleared the gate on both directions of the family (hedged), set aside.
@@ -380,12 +381,24 @@ export function diagnoseConsensusGame(game: GeneratorGame, snapshot: ConsensusRe
   }
   const family = (f: HybridFamily): FamilyDiagnosis => {
     const posts = read.filter((p) => p.family === f);
-    let best: FamilyDiagnosis["best"] = null;
+    let top: ReadPost | null = null;
     for (const p of posts) {
       if (!p.record) continue;
-      if (!best || p.record.winPct > best.winPct || (p.record.winPct === best.winPct && p.record.wins + p.record.losses > best.wins + best.losses)) {
-        best = { direction: p.direction, winPct: p.record.winPct, wins: p.record.wins, losses: p.record.losses };
-      }
+      const pn = sampleOf(decidedOf(p), p.record);
+      const tn = top ? sampleOf(decidedOf(top), top.record!) : -1;
+      if (!top || p.score > top.score || (p.score === top.score && pn > tn)) top = p;
+    }
+    let best: FamilyDiagnosis["best"] = null;
+    if (top?.record) {
+      const g = top.scored?.status === "SCORED" ? top.scored.gate : null;
+      best = {
+        direction: top.direction,
+        winPct: top.record.winPct,
+        wins: top.record.wins,
+        losses: top.record.losses,
+        rated: g ? (g.probability - (g.breakEven - DEFAULT_BREAK_EVEN)) * 100 : null,
+        longShot: g?.raw && !g.raw.clears ? { wins: g.raw.wins, decided: g.raw.decided, bar: g.raw.bar } : null,
+      };
     }
     // The same verdict toPost reads, so the diagnostic matches selection.
     const gated = posts.filter((p) => postPasses(p));

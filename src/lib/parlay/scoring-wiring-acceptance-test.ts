@@ -185,8 +185,8 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   const version = standardScoringVersion();
   check("the new version string (selection layer sel-v1, Contrarian same-bet model)", version, "standard/hier-k20-logit-edge-min5-ls1-v2/sel-v1/contra-samebet-v1");
   check("it fits the intake's 80 characters", version.length <= 80, true);
-  check("Hybrid's version string names scoring.ts's rules and the raw-gate best of two", hybridScoringVersion(), "hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-rawgate-bo2-v2");
-  check("every full version string fits 80: Standard 65, Hybrid 57", [version.length, hybridScoringVersion().length], [65, 57]);
+  check("Hybrid's version string names scoring.ts's rules and Standard's gate (hyb-maingate-v3)", hybridScoringVersion(), "hybrid/hier-k20-logit-edge-min5-ls1-v2/hyb-maingate-v3");
+  check("every full version string fits 80: Standard 65, Hybrid 54", [version.length, hybridScoringVersion().length], [65, 54]);
   const s = t.extras.scoring!;
   check("extras.scoring holds the rate row count", s.platformRows, RATE_ROWS.length);
   const legRoles = s.legs.filter((l) => l.role !== "HEDGE").map((l) => l.id);
@@ -236,7 +236,8 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("the loader always asks the bundle for pricing and reads the platform rates", [loader.includes("includePricing: true"), loader.includes("await getPlatformCategoryRates()"), loader.includes("opts.scoring")], [true, true, false]);
   check("Standard and Hybrid both load through it with no scoring switch", ["src/server/actions/parlay-generate.ts", "src/server/actions/parlay-hybrid.ts"].map((f) => read(f).includes("scoring:")), [false, false]);
   const consensus = read("src/lib/parlay/consensus.ts");
-  check("Consensus scores through scoring.ts's best of two", [consensus.includes("parlay/scoring"), consensus.includes("scorePickBestOfTwo(pick, s.ctx)")], [true, true]);
+  check("Consensus gates and scores through Standard's scorePick, and the best of two is gone", [consensus.includes("parlay/scoring"), consensus.includes("scorePick(pick, s.ctx)"), consensus.includes("read.scored.gate.passes"), consensus.includes("BestOfTwo")], [true, true, true, false]);
+  check("...and scoring.ts no longer has it", read("src/lib/parlay/scoring.ts").includes("BestOfTwo"), false);
   const list = read("src/server/data/generator-runs-view.ts");
   check("the admin list query leaves the per-leg rows out", (list.match(/#- '\{scoring,legs\}'/g) ?? []).length, 2);
   check("...and selection's per-leg rows (PR 5)", [(list.match(/#- '\{selection,legs\}'/g) ?? []).length, (list.match(/#- '\{selection,hedge\}'/g) ?? []).length], [2, 2]);
