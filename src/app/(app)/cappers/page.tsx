@@ -40,8 +40,9 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
   const cappersWithCounts = suspectedDuplicates.length > 0 ? await getCappersWithPickCounts(user.id) : [];
 
   return (
+    <>
+    <CappersHeader params={params} controls={data.capperCount > 0} />
     <ThemedPage>
-      <CappersHeader params={params} controls={data.capperCount > 0} />
       {suspectedDuplicates.length > 0 && <MergeCappersPanel cappers={cappersWithCounts} suspected={suspectedDuplicates} />}
 
       {data.capperCount === 0 ? (
@@ -79,5 +80,6 @@ export default async function CappersPage({ searchParams }: { searchParams: Reco
         </>
       )}
     </ThemedPage>
+    </>
   );
 }
