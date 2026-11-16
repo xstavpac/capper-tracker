@@ -257,7 +257,56 @@ function ChartsArt({ uid }: { uid: string }) {
   );
 }
 
-// import reuses the dashboard art until it gets its own.
+function ImportArt({ uid }: { uid: string }) {
+  const f = "pbgi-" + uid;
+  return (
+    <svg width="560" height="180" viewBox="0 0 560 180">
+      <defs>{BLUR(f)}</defs>
+      <g filter={`url(#${f})`}>
+        <g transform="rotate(-6 200 96)">
+          <rect x="140" y="34" width="120" height="124" rx="10" fill="var(--bv-panel)" stroke="var(--bv-c2)" strokeWidth="2" />
+          <rect x="156" y="52" width="76" height="6" rx="3" fill="var(--bv-c4)" />
+          <rect x="156" y="68" width="88" height="6" rx="3" fill="var(--bv-grid)" />
+          <rect x="156" y="84" width="64" height="6" rx="3" fill="var(--bv-grid)" />
+          <rect x="156" y="100" width="82" height="6" rx="3" fill="var(--bv-grid)" />
+          <rect x="156" y="116" width="58" height="6" rx="3" fill="var(--bv-grid)" />
+          <rect className="bv-scan" x="148" y="48" width="104" height="3" rx="1.5" fill="var(--bv-bright)" opacity="0.7" />
+        </g>
+        <path className="bv-flow" d="M272 96C300 96 304 96 326 96" fill="none" stroke="var(--bv-bright)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray="6 6" />
+        <path d="M322 88l10 8-10 8" fill="none" stroke="var(--bv-bright)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="344" y="26" width="166" height="140" rx="14" fill="var(--bv-panel)" stroke="var(--bv-c2)" strokeWidth="2" />
+        <g className="bv-row" style={{ animationDelay: "0s" }}>
+          <rect x="358" y="42" width="138" height="30" rx="8" fill="var(--bv-inner)" stroke="var(--bv-grid)" strokeWidth="1" />
+          <circle cx="374" cy="57" r="8" fill="#22C55E" />
+          <path d="M370 57l3 3 5-6" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+          <rect x="390" y="53" width="60" height="7" rx="3.5" fill="var(--bv-c2)" />
+          <rect x="460" y="53" width="24" height="7" rx="3.5" fill="var(--bv-c5)" />
+        </g>
+        <g className="bv-row" style={{ animationDelay: "0.5s" }}>
+          <rect x="358" y="80" width="138" height="30" rx="8" fill="var(--bv-inner)" stroke="var(--bv-grid)" strokeWidth="1" />
+          <circle cx="374" cy="95" r="8" fill="#22C55E" />
+          <path d="M370 95l3 3 5-6" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+          <rect x="390" y="91" width="48" height="7" rx="3.5" fill="var(--bv-c2)" />
+          <rect x="460" y="91" width="24" height="7" rx="3.5" fill="var(--bv-c5)" />
+        </g>
+        <g className="bv-row" style={{ animationDelay: "1s" }}>
+          <rect x="358" y="118" width="138" height="30" rx="8" fill="var(--bv-inner)" stroke="var(--bv-grid)" strokeWidth="1" />
+          <circle cx="374" cy="133" r="8" fill="#22C55E" />
+          <path d="M370 133l3 3 5-6" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+          <rect x="390" y="129" width="66" height="7" rx="3.5" fill="var(--bv-c2)" />
+          <rect x="460" y="129" width="24" height="7" rx="3.5" fill="var(--bv-c5)" />
+        </g>
+      </g>
+      <polyline points="60,150 100,126 128,134" fill="none" stroke="var(--bv-c5)" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.8" />
+      <polyline points="520,120 540,80 560,50" fill="none" stroke="var(--bv-c5)" strokeWidth="1.5" strokeDasharray="3 5" opacity="0.8" />
+      <g fill="var(--bv-c2)">
+        <circle cx="100" cy="126" r="3" />
+        <circle cx="540" cy="80" r="3.5" />
+      </g>
+    </svg>
+  );
+}
+
 export function BannerArt({ variant, uid }: { variant: BannerVariant; uid: string }) {
   switch (variant) {
     case "cappers":
@@ -268,6 +317,8 @@ export function BannerArt({ variant, uid }: { variant: BannerVariant; uid: strin
       return <ParlayArt uid={uid} />;
     case "charts":
       return <ChartsArt uid={uid} />;
+    case "import":
+      return <ImportArt uid={uid} />;
     case "live":
       return <LiveArt uid={uid} />;
     default:
