@@ -64,16 +64,16 @@ export function MomentumCard({
   const activeRange: "today" | MomentumRange = canRange ? range : "today";
   const ranged = activeRange !== "today";
   const filterKey = JSON.stringify(rangeFilters ?? {}) + "|" + (todayKey ?? "");
-  // Daily rows per range, fetched on first tap only (one grouped query, <= 30 rows) and kept for the page's life.
+  // Daily rows per range and mode, fetched on first tap only (one grouped query, <= 30 rows) and kept for the page's life.
   const [daily, setDaily] = useState<Record<string, DailyNet[]>>({});
   const [failed, setFailed] = useState<string | null>(null);
-  const dailyKey = activeRange + "|" + filterKey;
+  const dailyKey = activeRange + "|" + filterKey + (unique ? "|unique" : "");
   const dailyRows = ranged ? daily[dailyKey] : undefined;
   useEffect(() => {
     if (!ranged || daily[dailyKey]) return;
     let live = true;
     setFailed(null);
-    loadMomentumDailyAction(activeRange, rangeFilters ?? {}).then((r) => {
+    loadMomentumDailyAction(activeRange, rangeFilters ?? {}, unique).then((r) => {
       if (!live) return;
       if (r.success) setDaily((d) => ({ ...d, [dailyKey]: r.rows }));
       else setFailed(dailyKey);
@@ -129,7 +129,7 @@ export function MomentumCard({
           >
             {(net > 0 ? "+" : "") + net.toFixed(2) + "u"}
           </p>
-          <p className="mt-1.5 text-base text-foreground/80">{ranged ? "Net Units, last " + (activeRange === "7D" ? "7" : "30") + " days" : unique ? "Current Net Units (unique)" : "Current Net Units"}</p>
+          <p className="mt-1.5 text-base text-foreground/80">{ranged ? "Net Units, last " + (activeRange === "7D" ? "7" : "30") + " days" + (unique ? " (unique)" : "") : unique ? "Current Net Units (unique)" : "Current Net Units"}</p>
         </div>
       </div>
 
@@ -151,7 +151,6 @@ export function MomentumCard({
                 ))}
               </div>
             )}
-            {!ranged && (
             <div role="group" aria-label="Momentum picks" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
               {(["all", "unique"] as const).map((k) => (
                 <button
@@ -165,7 +164,6 @@ export function MomentumCard({
                 </button>
               ))}
             </div>
-            )}
           </div>
           <span className={"flex items-center gap-2 rounded-full px-3.5 py-[7px] text-sm font-semibold " + pill.cls}>
             <span className="h-[9px] w-[9px] rounded-full" style={{ background: pill.dot }} />
