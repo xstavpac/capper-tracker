@@ -137,6 +137,9 @@ export type MomentumPoint = {
   v: number; // running net units
   change: number; // since the previous point
   prevT: number | null; // that previous point's time (null on the first)
+  // Only the 7D/30D daily series sets these (momentum-daily.ts): the tooltip shows them instead of a clock time.
+  label?: string;
+  prevLabel?: string | null;
 };
 export type MomentumTick = { t: number; label: string; dayStart: boolean };
 export type MomentumTrend = "up" | "down" | "flat";
