@@ -2,22 +2,26 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { resolveShowAll, type ListScopeState } from "@/lib/live-list-scope";
+import type { BoardStatusFilter } from "@/components/live/live-scoreboard-ordering";
 
 // The one "See more" toggle shared by Grid's list, Feed's list and the category panel (siblings
 // on /live, so the state lives in a provider next to LiveGameJumpProvider). Collapsed = today's
 // and live games; expanded = the whole lookahead window. See orderBoardGames' `todayOnly`.
-type LiveListScope = { showAll: boolean; setShowAll: (next: boolean) => void };
+// `statusFilter` is the ?status= deep link (live / pending only); null = every game.
+type LiveListScope = { showAll: boolean; setShowAll: (next: boolean) => void; statusFilter: BoardStatusFilter | null };
 
-const NOT_MOUNTED: LiveListScope = { showAll: false, setShowAll: () => {} };
+const NOT_MOUNTED: LiveListScope = { showAll: false, setShowAll: () => {}, statusFilter: null };
 
 const LiveListScopeContext = createContext<LiveListScope>(NOT_MOUNTED);
 
 export function LiveListScopeProvider({
   sportKey,
   initialShowAll,
+  statusFilter = null,
   children,
 }: {
   sportKey: string;
+  statusFilter?: BoardStatusFilter | null;
   // True when the request deep-linked to a game the collapsed list hides (resolveInitialScope).
   initialShowAll: boolean;
   children: ReactNode;
@@ -25,7 +29,7 @@ export function LiveListScopeProvider({
   const [state, setState] = useState<ListScopeState>({ sportKey, showAll: initialShowAll });
   const showAll = resolveShowAll(state, sportKey);
   const setShowAll = useCallback((next: boolean) => setState({ sportKey, showAll: next }), [sportKey]);
-  const value = useMemo(() => ({ showAll, setShowAll }), [showAll, setShowAll]);
+  const value = useMemo(() => ({ showAll, setShowAll, statusFilter }), [showAll, setShowAll, statusFilter]);
   return <LiveListScopeContext.Provider value={value}>{children}</LiveListScopeContext.Provider>;
 }
 

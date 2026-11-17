@@ -5,7 +5,9 @@ import { getSportCategoryPanelData } from "@/server/data/pick-aggregates-cappers
 import { getLiveBoardData } from "@/server/data/live-board-picks";
 import { getHeavyConsensusRate } from "@/server/data/heavy-consensus";
 import { getDefaultLiveSport } from "@/server/data/live-default-sport";
+import Link from "next/link";
 import { LiveScoreboard } from "@/components/live/live-scoreboard";
+import { parseBoardStatusFilter } from "@/components/live/live-scoreboard-ordering";
 import { GridLiveBoard } from "@/components/live/grid-live-board";
 import { resolveGridLiveSelection } from "@/lib/grid-live-selection";
 import { resolveInitialScope } from "@/lib/live-list-scope";
@@ -23,7 +25,7 @@ const EMPTY = "rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(1
 export default async function LivePage({
   searchParams,
 }: {
-  searchParams: { sport?: string; view?: string; gameId?: string };
+  searchParams: { sport?: string; view?: string; gameId?: string; status?: string };
 }) {
   const user = await requireUser();
 
@@ -112,6 +114,10 @@ export default async function LivePage({
   // (see grid-live-selection.ts).
   const isGrid = searchParams.view !== "feed";
 
+  // ?status=live|pending (the Slate Bar's Live games / Pending cells): narrows the list to live games or
+  // games not started yet. Anything else is no filter. Banner links drop it, so switching league or view clears it.
+  const statusFilter = parseBoardStatusFilter(searchParams.status);
+
   // Initial selection for Grid Live, resolved server-side from this
   // request's own searchParams against the same board the client will
   // render (same odds, same orderBoardGames, matched against the initial
@@ -125,15 +131,19 @@ export default async function LivePage({
   const initialScope = resolveInitialScope(
     odds.map((game) => ({ game, score: matchScoreToGame(scores, game, activeSport) })),
     todayKey,
-    searchParams.gameId ?? null
+    searchParams.gameId ?? null,
+    new Date(),
+    statusFilter ?? undefined
   );
   const initialSelection = isGrid ? resolveGridLiveSelection(initialScope.gameIds, searchParams.gameId ?? null) : null;
 
   // The one score poll on the page is mounted exactly when a board is, as
   // before - the category panel reads it through the provider and counts
   // nothing when there is no board to count.
-  const showGrid = odds.length > 0 && isGrid && initialSelection !== null;
-  const showFeed = odds.length > 0 && !isGrid;
+  // A status filter that matches no game gets its own message instead of an empty board.
+  const filterEmpty = statusFilter !== null && initialScope.gameIds.length === 0;
+  const showGrid = odds.length > 0 && isGrid && initialSelection !== null && !filterEmpty;
+  const showFeed = odds.length > 0 && !isGrid && !filterEmpty;
 
   const categoryPanel = (
     <LiveCategoryPanel
@@ -147,9 +157,9 @@ export default async function LivePage({
       picks={categoryPanelPicks}
     />
   );
-  const emptyState = odds.length === 0 && hasApiKey && (
+  const emptyState = (filterEmpty || (odds.length === 0 && hasApiKey)) && (
     <div className={EMPTY}>
-      <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
+      <p className="text-[13px] font-medium text-muted-foreground">{filterEmpty ? (statusFilter === "live" ? "No live games in " : "No games waiting to start in ") + sportLabel + " right now." : "No games found for this sport right now."}</p>
     </div>
   );
 
@@ -159,12 +169,20 @@ export default async function LivePage({
         Feed/Grid toggle and the Parlay slip control. */}
     <LiveBanner activeSport={activeSport} isGrid={isGrid} />
     <ThemedPage>
+      {statusFilter && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#E1E7FA] bg-white px-3 py-2 text-[13px] font-semibold text-foreground dark:border-border dark:bg-card">
+          <span>{statusFilter === "live" ? "Showing live games only" : "Showing games that have not started"}</span>
+          <Link href={"/live?sport=" + activeSport + "&view=" + (isGrid ? "advanced" : "feed")} className="flex min-h-11 items-center text-brand-700 dark:text-brand-300">
+            Show all
+          </Link>
+        </div>
+      )}
 
       {showGrid || showFeed ? (
         <LiveScoresProvider key={activeSport} activeSport={activeSport} initialScores={scores}>
           {/* A category-panel row sends the viewer to its game on whichever board is mounted. */}
           <LiveGameJumpProvider>
-          <LiveListScopeProvider key={activeSport} sportKey={activeSport} initialShowAll={initialScope.showAll}>
+          <LiveListScopeProvider key={activeSport} sportKey={activeSport} initialShowAll={initialScope.showAll} statusFilter={statusFilter}>
           {categoryPanel}
           {/* Grid Live's board fills the themed page's width; Feed's LiveScoreboard sits in the same full-width column. */}
           {showGrid && initialSelection && (

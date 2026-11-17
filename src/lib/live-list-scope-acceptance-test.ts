@@ -110,8 +110,8 @@ expect("'See more' hides exactly the later-day games", hiddenLaterGameCount(slat
   const grid = read("src/components/live/grid-live-board.tsx");
   const feed = read("src/components/live/live-scoreboard.tsx");
   const panel = read("src/components/live/live-category-panel.tsx");
-  expect("Grid reads the shared toggle and filters with it", grid.includes("useLiveListScope()") && grid.includes("{ todayOnly: !showAll }"), true);
-  expect("Feed reads the shared toggle and filters with it", feed.includes("useLiveListScope()") && feed.includes("{ todayOnly: !showAll }"), true);
+  expect("Grid reads the shared toggle and filters with it", grid.includes("useLiveListScope()") && grid.includes("todayOnly: !showAll"), true);
+  expect("Feed reads the shared toggle and filters with it", feed.includes("useLiveListScope()") && feed.includes("todayOnly: !showAll"), true);
   expect("category panel reads the shared toggle and filters with it", panel.includes("useLiveListScope()") && panel.includes("!showAll)"), true);
   expect("Grid and Feed both render the See more button", grid.includes("hiddenCount={hiddenCount}") && feed.includes("<SeeMoreGamesButton"), true);
 }

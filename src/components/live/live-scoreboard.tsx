@@ -62,7 +62,7 @@ export function LiveScoreboard({
   heavyRate: HeavyConsensusRate | null;
 }) {
   const scores = useSharedLiveScores();
-  const { showAll, setShowAll } = useLiveListScope();
+  const { showAll, setShowAll, statusFilter } = useLiveListScope();
   // A category-panel jump to a game the collapsed list hides: open the list, then scroll once
   // the card exists (the effect below runs after that render commits).
   const [pendingJump, setPendingJump] = useState<string | null>(null);
@@ -82,8 +82,8 @@ export function LiveScoreboard({
   // read (live-list-scope.tsx). Only the DISPLAY narrows; `odds` and the matched picks still
   // cover the whole lookahead window.
   const todayKey = easternDateKey(new Date());
-  const sortedGames = orderBoardGames(gamesWithScores, todayKey, new Date(), { todayOnly: !showAll });
-  const hiddenCount = hiddenLaterGameCount(gamesWithScores, todayKey);
+  const sortedGames = orderBoardGames(gamesWithScores, todayKey, new Date(), { todayOnly: !showAll, status: statusFilter ?? undefined });
+  const hiddenCount = hiddenLaterGameCount(gamesWithScores, todayKey, new Date(), statusFilter ?? undefined);
 
   useRegisterLiveGameJump((gameId) => {
     if (!showAll && needsExpandToShow(gamesWithScores, todayKey, gameId)) {

@@ -136,12 +136,27 @@ function isTodayOrLive<T extends OrderableGame>({ game, score }: T, todayKey: st
 // in that scope AFTER Finals are removed (a Tuesday with the next game Thursday, or today's last
 // game just ended) the whole window shows instead of an empty board. Omitted/false = the full
 // window, exactly as before.
-export type BoardScopeOptions = { todayOnly?: boolean };
+export type BoardScopeOptions = {
+  todayOnly?: boolean;
+  // The Slate Bar's ?status= deep link: only live games, or only games not started yet. Unlike
+  // todayOnly it never falls back to the unfiltered list - an empty answer is a real answer.
+  status?: BoardStatusFilter;
+};
+export type BoardStatusFilter = "live" | "pending";
+
+// Reads the ?status= query param; anything but the two known values means no filter.
+export function parseBoardStatusFilter(raw: string | undefined | null): BoardStatusFilter | null {
+  return raw === "live" || raw === "pending" ? raw : null;
+}
+
+function matchesStatusFilter<T extends OrderableGame>({ score }: T, status: BoardStatusFilter): boolean {
+  return status === "live" ? score?.status === "live" : !score || score.status === "preview";
+}
 
 // How many games the default scope is hiding behind "See more": 0 when the scope shows the whole
 // window anyway (nothing hidden, or the empty-scope fallback above).
-export function hiddenLaterGameCount<T extends OrderableGame>(games: T[], todayKey: string, now: Date = new Date()): number {
-  return orderBoardGames(games, todayKey, now).length - orderBoardGames(games, todayKey, now, { todayOnly: true }).length;
+export function hiddenLaterGameCount<T extends OrderableGame>(games: T[], todayKey: string, now: Date = new Date(), status?: BoardStatusFilter): number {
+  return orderBoardGames(games, todayKey, now, { status }).length - orderBoardGames(games, todayKey, now, { todayOnly: true, status }).length;
 }
 
 // `todayKey` is passed in (not read from the clock here) so the caller
@@ -170,7 +185,8 @@ export function orderBoardGames<T extends OrderableGame>(
     return now.getTime() - start.getTime() < unmatchedCarryoverMs; // a carry-over with no live score to go on
   });
   const scoped = scope.todayOnly ? windowed.filter((g) => isTodayOrLive(g, todayKey)) : windowed;
-  const visible = scoped.length > 0 ? scoped : windowed;
+  const unfiltered = scoped.length > 0 ? scoped : windowed;
+  const visible = scope.status ? unfiltered.filter((g) => matchesStatusFilter(g, scope.status as BoardStatusFilter)) : unfiltered;
 
   return [...visible].sort((a, b) => {
     const rankDiff = statusRank(a.score?.status) - statusRank(b.score?.status);

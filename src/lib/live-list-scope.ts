@@ -2,7 +2,7 @@
 // toggle (components/live/live-list-scope.tsx holds the React state; the filter itself is
 // orderBoardGames' `todayOnly` option). Kept React-free so the server page and the tests use
 // the very same functions the client does.
-import { orderBoardGames } from "@/components/live/live-scoreboard-ordering";
+import { orderBoardGames, type BoardStatusFilter } from "@/components/live/live-scoreboard-ordering";
 
 // The toggle remembers which league it was set for. A different league always reads as
 // collapsed, so a league switch resets it without any effect or explicit reset call.
@@ -23,10 +23,11 @@ export function resolveInitialScope<T extends ScopedGame>(
   games: T[],
   todayKey: string,
   requestedGameId: string | null,
-  now: Date = new Date()
+  now: Date = new Date(),
+  status?: BoardStatusFilter
 ): { showAll: boolean; gameIds: string[] } {
-  const scoped = orderBoardGames(games as never[], todayKey, now, { todayOnly: true }) as T[];
-  const full = orderBoardGames(games as never[], todayKey, now) as T[];
+  const scoped = orderBoardGames(games as never[], todayKey, now, { todayOnly: true, status }) as T[];
+  const full = orderBoardGames(games as never[], todayKey, now, { status }) as T[];
   const hidden = requestedGameId !== null && full.some((g) => g.game.id === requestedGameId) && !scoped.some((g) => g.game.id === requestedGameId);
   return { showAll: hidden, gameIds: (hidden ? full : scoped).map((g) => g.game.id) };
 }
