@@ -28,6 +28,7 @@ import { startOfEasternDay } from "../../src/lib/dates";
 // createPicksWithEntitlementCheck): the SQL aggregation paths read the STORED category, so an
 // unstamped fixture pick would be invisible to them and the harness would diff nothing real.
 import { pickCategory, PICK_CATEGORY_VERSION } from "../../src/server/data/stats";
+import { withUniqueKey } from "../../src/lib/pick-unique-key";
 import { FIXTURE_USER_A_SUPABASE_ID, FIXTURE_USER_B_SUPABASE_ID } from "./fixture-user-ids.mjs";
 
 export { FIXTURE_USER_A_SUPABASE_ID, FIXTURE_USER_B_SUPABASE_ID };
@@ -183,7 +184,7 @@ async function main() {
 
   for (const p of [...picksA, ...picksB]) {
     await prisma.pick.create({
-      data: {
+      data: withUniqueKey({
         userId: p.userId,
         capperId: p.capperId,
         sportId: sportRecords[p.sport],
@@ -212,7 +213,7 @@ async function main() {
           propMarket: null,
         }),
         categoryVersion: PICK_CATEGORY_VERSION,
-      },
+      }),
     });
   }
 

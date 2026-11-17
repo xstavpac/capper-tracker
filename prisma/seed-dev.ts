@@ -13,6 +13,7 @@ import { seedModelEngineFixtures } from "./seed-ci";
 // createPicksWithEntitlementCheck), and the /cappers aggregates read the stored value - a seeded
 // pick left unstamped would be invisible to specialist tags and the category panel.
 import { pickCategory, PICK_CATEGORY_VERSION } from "../src/server/data/stats";
+import { withUniqueKey } from "../src/lib/pick-unique-key";
 
 const prisma = new PrismaClient();
 
@@ -110,7 +111,7 @@ async function main() {
   ];
   for (const p of pickSeed) {
     await prisma.pick.create({
-      data: {
+      data: withUniqueKey({
         userId: user.id,
         capperId: p.capper.id,
         sportId: sportRecords[p.sport],
@@ -140,7 +141,7 @@ async function main() {
           propMarket: null,
         }),
         categoryVersion: PICK_CATEGORY_VERSION,
-      },
+      }),
     });
   }
 

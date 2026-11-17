@@ -63,6 +63,11 @@ const ALLOWLIST: Record<string, string[]> = {
     "one sport: fuzzy-graded within the lookback, take REGRADE_MAX_ROWS",
   ],
   "src/server/data/parlay-slip-picks.ts": ["id IN the slip's pick ids (<= MAX_POOL_REQUEST_PICKS)"],
+  "src/server/data/pick-unique-key.ts": [
+    "restampUniqueKeys: id IN the ids a backfill just wrote, chunks of 500, key columns only",
+    "backfillUniqueKeys: keyset batches by id, take: batchSize, key columns only (one-off CLI backfill)",
+    "verifyUniqueKeys: id IN a stratified random sample, chunks of 500, read-only CLI check",
+  ],
   "src/server/data/pick-dedup.ts": ["existingPicksWhere, inside the insert transaction"],
   "src/server/data/picks-older.ts": ["Load older picks: keyset page, take: 51, at most 3 per click (18 columns)"],
   "src/server/data/picks.ts": [

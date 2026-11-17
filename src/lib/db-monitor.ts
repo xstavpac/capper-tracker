@@ -123,9 +123,9 @@ export function describeStatement(query: string): StatementShape {
 // retired shapes were 29 columns, the schema was 30 before the four posted-odds
 // columns, 34 with them).
 export const PICK_COLUMN_COUNT = Object.keys(Prisma.PickScalarFieldEnum).length;
-// 3 + the 4 posted-odds columns (postedLine, oddsCapturedAt, oddsBook, oddsNullReason): the same statements stay full-row
-// reads, and the 18-column projected board read still does not.
-const FULL_ROW_SLACK = 7;
+// 3 + the 4 posted-odds columns (postedLine, oddsCapturedAt, oddsBook, oddsNullReason) + uniqueKey: the same statements
+// stay full-row reads, and the 18-column projected board read still does not.
+const FULL_ROW_SLACK = 8;
 
 export function isFullRowPicks(s: StatementShape): boolean {
   return s.picksColumnsSelected >= PICK_COLUMN_COUNT - FULL_ROW_SLACK;
