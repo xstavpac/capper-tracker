@@ -904,7 +904,8 @@ export function buildGeneratedParlay(
 //                swapped leg's game out (unless another leg is on it).
 // Best available: the build's own candidates (qualifyPick - Include Picks, the
 // star, a record, the win-rate gate), never a pick already in the parlay or in
-// the slip, ordered by the build's ranking (byRank). Your picks only: the slip
+// the slip, ordered by the build's ranking (byRank); then the slip picks not in
+// the parlay, ungated as in Your picks only, after them. Your picks only: the slip
 // picks not in the parlay (game not over), ungated like every slip pick, in the
 // slip's order (rankSlip), either/or by blocks() as rule 6 has it. Pick Mix
 // doesn't shape a hand swap. Live games follow the build's rule with no
@@ -935,7 +936,8 @@ export function legAlternatives(
   const gate = effectiveGate(settings);
   const scoreOf = scorerFor(snapshot, gate);
 
-  if (settings.fillFrom === "YOUR_PICKS_ONLY") {
+  // The slip picks not in the parlay (game not over), ungated, in the slip's order.
+  const addUnusedSlipPicks = () => {
     const unused = snapshot.slipPicks.filter((p) => !inParlay.has(p.pickId) && !isGameOver(p, now));
     for (const p of rankSlip(unused, snapshot.leagueRecords, scoreOf)) {
       const tab = tabOf(p.gameId);
@@ -945,6 +947,10 @@ export function legAlternatives(
       if (onGame.some((l) => blocks(toBuildCandidate(p, snapshot.leagueRecords), toBuildCandidate(l, snapshot.leagueRecords)).blocked)) continue;
       add(tab, slipLegOf(p, snapshot));
     }
+  };
+
+  if (settings.fillFrom === "YOUR_PICKS_ONLY") {
+    addUnusedSlipPicks();
     return out;
   }
 
@@ -973,6 +979,8 @@ export function legAlternatives(
   }
   found.sort((a, b) => byRank(a.c, b.c));
   for (const { tab, c } of found) add(tab, generatedLegOf(c));
+  // Then your own unused slip picks, ungated, after every gate-qualifying candidate.
+  addUnusedSlipPicks();
   return out;
 }
 
