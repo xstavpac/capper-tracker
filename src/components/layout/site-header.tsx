@@ -166,7 +166,7 @@ export function SiteHeader({
           aria-controls={open ? menuId : undefined}
           onClick={() => setOpen((v) => !v)}
           className={
-            "hidden h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border md:flex border-[#2A3A60] text-[#C9D3E6] transition hover:bg-white/5 hover:text-white " +
+            "hidden h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[#2A3A60] text-[#C9D3E6] transition hover:bg-white/5 hover:text-white md:flex " +
             (open ? "bg-white/10 text-white" : "")
           }
         >
