@@ -66,6 +66,10 @@ const config: Config = {
         rajdhani: ["var(--font-rajdhani)", "sans-serif"],
       },
       keyframes: {
+        "sheet-up": {
+          "0%": { transform: "translateY(100%)" },
+          "100%": { transform: "translateY(0)" },
+        },
         "glow-pulse": {
           "0%, 100%": { boxShadow: "0 0 18px 2px rgba(168,85,247,0.55)" },
           "50%": { boxShadow: "0 0 34px 6px rgba(168,85,247,0.9)" },
@@ -249,6 +253,7 @@ const config: Config = {
         },
       },
       animation: {
+        "sheet-up": "sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1)",
         "glow-pulse": "glow-pulse 2.2s ease-in-out infinite",
         "glow-pulse-compact": "glow-pulse-compact 2.2s ease-in-out infinite",
         "streak-pulse": "streak-pulse 1.3s ease-in-out infinite",
