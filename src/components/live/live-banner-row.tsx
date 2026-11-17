@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { ClipboardIcon, GridIcon } from "@/components/dashboard/cappers-icons";
 import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON, LIVE_PILL_ROW } from "@/components/live/live-pill-styles";
@@ -51,7 +50,9 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
       >
         {logo && (
           <span className={"flex flex-none items-center justify-center rounded-full " + (on ? "h-7 w-7 bg-white" : "h-6 w-6")}>
-            <Image src={logo} alt="" width={24} height={24} className={"object-contain " + (on ? "h-5 w-5" : "h-6 w-6")} />
+            {/* A plain <img>, not next/image: the pills work without the next.config images allowlist (jsdom tests). alt is empty because the league name is beside it. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logo} alt="" width={24} height={24} loading={on ? undefined : "lazy"} className={"object-contain " + (on ? "h-5 w-5" : "h-6 w-6")} />
           </span>
         )}
         <span>{l.label}</span>
