@@ -41,7 +41,10 @@ check("status-only edit leaves uniqueKey unchanged", mergedUniqueKey(tt, { statu
 check("capperId (capper merge) doesn't touch the key", touchesUniqueKey({ capperId: "c2" }) === false);
 check("undefined in a patch = unchanged (Prisma semantics)", mergedUniqueKey(tt, { gameTime: undefined, line: undefined }) === computeUniqueKey(tt) && !touchesUniqueKey({ line: undefined }));
 check("category restamp on a TOTAL changes the key (over/under)", mergedUniqueKey(STORED[3], { category: "GAME_TOTAL_UNDER" }) !== computeUniqueKey(STORED[3]));
-check("ML-side backfill (pickedSide on a text ML) changes the key", mergedUniqueKey(STORED[1], { pickedSide: "AWAY" }) !== computeUniqueKey(STORED[1]));
+// "Knicks ML" with no stored side already keys as AWAY from its text (unique-picks.ts textSide), so the backfill
+// writing the SAME side leaves the key alone, and a different side moves it.
+check("ML-side backfill writing the side the text named leaves the key alone", mergedUniqueKey(STORED[1], { pickedSide: "AWAY" }) === computeUniqueKey(STORED[1]));
+check("ML-side backfill writing another side changes the key", mergedUniqueKey(STORED[1], { pickedSide: "HOME" }) !== computeUniqueKey(STORED[1]));
 check("explicit null clears a field (line -> text fallback)", mergedUniqueKey(STORED[2], { line: null }) === uniquePickKey({ ...STORED[2], line: null }));
 
 // 4. Every field in UNIQUE_KEY_FIELDS can move some key (so the list holds no dead entries).
