@@ -2,10 +2,10 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 
-// Renders its children only below 1024px (Tailwind's lg), the width where the header's page tabs
-// appear: below it the pages live in the menu / bottom tab bar, and the Slate Bar stands in for them.
-// The server render includes the children (the viewport is unknown there) under `lg:hidden`, so a
-// desktop never paints them; once hydrated, a desktop drops them from the DOM. The data the children
+// Render-by-width wrappers around the 1024px (Tailwind's lg) line, where the header's page tabs
+// appear. MobileOnly: below it. DesktopOnly: from it. The server render includes the children (the
+// viewport is unknown there) under a class that hides them at the other width, so nothing paints
+// where it should not; once hydrated, the other width drops them from the DOM. The data the children
 // need is still loaded by the layout on the server (the cached score feed), which this cannot skip.
 const QUERY = "(max-width: 1023px)";
 
@@ -15,12 +15,16 @@ function subscribe(onChange: () => void) {
   return () => mq.removeEventListener("change", onChange);
 }
 
+function useBelowLg(serverValue: boolean) {
+  return useSyncExternalStore(subscribe, () => window.matchMedia(QUERY).matches, () => serverValue);
+}
+
 export function MobileOnly({ children }: { children: ReactNode }) {
-  const below = useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(QUERY).matches,
-    () => true
-  );
-  if (!below) return null;
+  if (!useBelowLg(true)) return null;
   return <div className="lg:hidden">{children}</div>;
+}
+
+export function DesktopOnly({ children, className = "" }: { children: ReactNode; className?: string }) {
+  if (useBelowLg(false)) return null;
+  return <div className={"hidden lg:block " + className}>{children}</div>;
 }
