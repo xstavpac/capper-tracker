@@ -9,7 +9,8 @@
 // "60 picks max" here.
 import Link from "next/link";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
-import { ClipboardIcon } from "@/components/dashboard/cappers-icons";
+import { ClipboardIcon, TicketIcon } from "@/components/dashboard/cappers-icons";
+import { LIVE_PILL, LIVE_PILL_OFF } from "@/components/live/live-pill-styles";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 // The /live banner's pills (40px, as in design/page-banners-reference.html).
@@ -23,9 +24,9 @@ export function ParlaySlipButton() {
 
   if (!slipMode) {
     return (
-      <div className="flex items-center gap-2">
-        <button type="button" onClick={enterSlipMode} className={BANNER_BUTTON + "gap-2 " + BANNER_IDLE + " hover:text-[color:var(--bv-h1)]"}>
-          <ClipboardIcon className="h-4 w-4 flex-none" />
+      <div className="flex h-11 items-center">
+        <button type="button" onClick={enterSlipMode} className={LIVE_PILL + LIVE_PILL_OFF + "!h-11"}>
+          <TicketIcon className="h-[18px] w-[18px] flex-none" />
           {"Parlay slip" + (slipSize > 0 ? " · " + slipSize : "")}
         </button>
       </div>
