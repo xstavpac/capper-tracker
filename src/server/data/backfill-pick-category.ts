@@ -6,6 +6,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { pickCategory, PICK_CATEGORY_VERSION } from "@/server/data/stats";
+import { restampUniqueKeys } from "@/server/data/pick-unique-key";
 
 export type BackfillOptions = {
   apply: boolean;
@@ -114,6 +115,8 @@ export async function backfillPickCategory(opts: BackfillOptions): Promise<Backf
           data: { category, categoryVersion: PICK_CATEGORY_VERSION },
         });
         written += count;
+        // category is a uniquePickKey input (TOTAL over/under, NRFI side): re-key these rows from their full row.
+        await restampUniqueKeys(ids);
       }
     }
     log(`  ...read ${read}/${toStamp}${opts.apply ? `, wrote ${written}` : ""}`);

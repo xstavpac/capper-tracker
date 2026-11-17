@@ -443,6 +443,10 @@ model Pick {
   categoryVersion Int     @default(0) // PICK_CATEGORY_VERSION at the time `category` was stamped; 0 = never stamped
     // (every pick predating this column until scripts/backfill-pick-category.ts runs). The backfill selects rows
     // below the current version, so bumping PICK_CATEGORY_VERSION and re-running it restamps everything.
+  uniqueKey       String? // uniquePickKey() (lib/unique-picks.ts) of this row, so SQL can group "the same bet" (Unique
+    // Picks) without re-running the TS key per row. Stamped at insert (insertPicksInTransaction) and recomputed from the
+    // full row by any write that changes a key field (restampUniqueKeys, lib/pick-unique-key.ts UNIQUE_KEY_FIELDS).
+    // null only for rows not yet backfilled (scripts/backfill-unique-key.ts). No index: readers filter userId + gameTime.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

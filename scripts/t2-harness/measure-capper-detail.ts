@@ -91,6 +91,7 @@ async function child() {
 
 async function makeSynthetic(n: number) {
   const { pickCategory, PICK_CATEGORY_VERSION } = await import("@/server/data/stats");
+  const { withUniqueKey } = await import("@/lib/pick-unique-key");
   const userId = `${PREFIX}user`;
   await prisma.user.create({ data: { id: userId, supabaseId: `${PREFIX}sb`, email: `${PREFIX}@example.invalid` } });
   const capperId = `${PREFIX}capper`;
@@ -112,7 +113,7 @@ async function makeSynthetic(n: number) {
     const x = r();
     const gameTime = new Date(now - Math.floor(r() * 400 * 86400000));
     const status = x < 0.45 ? "WIN" : x < 0.9 ? "LOSS" : "PUSH";
-    rows.push({
+    rows.push(withUniqueKey({
       id: `${PREFIX}p${String(i).padStart(6, "0")}`,
       userId,
       capperId,
@@ -132,7 +133,7 @@ async function makeSynthetic(n: number) {
       gradedAt: new Date(gameTime.getTime() + 3 * 3600000),
       category: pickCategory({ betType, period: "FULL_GAME", betDetail, odds, line, sportName: sport.name, pickedSide: null, mlFavoredSide: null, oddsSource: "STATED", propMarket: null }),
       categoryVersion: PICK_CATEGORY_VERSION,
-    });
+    }));
   }
   await prisma.pick.createMany({ data: rows });
   return { userId, capperId };

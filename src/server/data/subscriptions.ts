@@ -11,6 +11,7 @@ import {
   type SubscriptionState,
 } from "@/lib/entitlements";
 import { pickCategory, PICK_CATEGORY_VERSION } from "@/server/data/stats";
+import { computeUniqueKey } from "@/lib/pick-unique-key";
 
 function toSubscriptionState(
   sub: { plan: string; status: string; currentPeriodEnd: Date | null; cancelAtPeriodEnd: boolean } | null
@@ -262,7 +263,12 @@ export async function insertPicksInTransaction(
   // A sportId with no matching sport can't be stamped (and the insert below
   // will fail its foreign key anyway) - leave it at the unstamped default
   // rather than guess a sport for the category.
+  // uniqueKey (lib/pick-unique-key.ts) is keyed from the row plus the category stamped here, i.e. the row as stored.
   const stamp = (row: PickInsertData) => {
+    const cat = categoryStamp(row);
+    return { ...cat, uniqueKey: computeUniqueKey({ ...row, ...cat }) };
+  };
+  const categoryStamp = (row: PickInsertData) => {
     const sportName = sportNameById.get(row.sportId);
     return sportName
       ? {

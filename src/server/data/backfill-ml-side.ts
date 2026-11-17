@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { gradePick } from "@/server/data/grading";
 import { pickCategory, PICK_CATEGORY_VERSION } from "@/server/data/stats";
+import { restampUniqueKeys } from "@/server/data/pick-unique-key";
 import { resolveMlSides, type LedgerGame, type SideUnresolvedReason } from "@/server/data/ml-side-resolution";
 
 const MS_DAY = 86_400_000;
@@ -293,6 +294,8 @@ export async function backfillMlSide(opts: MlSideOptions): Promise<MlSideResult>
         data: { ...set, categoryVersion: PICK_CATEGORY_VERSION },
       });
       result.written += count;
+      // pickedSide and category are uniquePickKey inputs: re-key these rows from their full row.
+      await restampUniqueKeys(ids.slice(i, i + WRITE_CHUNK));
     }
   }
   log(`\nWrote ${result.written} row(s).`);
