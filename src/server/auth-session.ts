@@ -33,6 +33,9 @@ export async function resolveAuthUser(getClaims: GetClaims = supabaseGetClaims):
     const { data } = await getClaims();
     return authUserFromClaims(data?.claims);
   } catch (err) {
+    // Next's own "this render is dynamic" signal (thrown by cookies() while next build tries to prerender a
+    // route) is not an auth failure: let it propagate so the route is marked dynamic and nothing is logged.
+    if ((err as { digest?: unknown } | null)?.digest === "DYNAMIC_SERVER_USAGE") throw err;
     console.error("[auth] Supabase session check failed:", err);
     return null;
   }
