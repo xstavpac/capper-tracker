@@ -91,10 +91,10 @@ export function SiteHeader({
   return (
     <header className="relative z-40 bg-[#0A1530]">
     <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 lg:flex-nowrap"}>
-      <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 rounded-xl">
+      <Link href="/dashboard" aria-label="BettingView" className="flex shrink-0 items-center gap-2.5 rounded-xl">
         <LogoMark />
-        {/* 1024-1279px: the tile only. */}
-        <span className="whitespace-nowrap text-[18px] font-bold text-white lg:max-xl:hidden">BettingView</span>
+        {/* Below 640px and at 1024-1279px: the tile only (the phone header must hold one row beside the labeled Drop Catalog button). */}
+        <span className="hidden whitespace-nowrap text-[18px] font-bold text-white sm:inline lg:max-xl:hidden">BettingView</span>
       </Link>
 
       {/* From 1024px, in the header's single row (see TAB for the sizes per width). The nav fills the space between the logo and the right-hand buttons and centers the tab group in it.
@@ -117,7 +117,7 @@ export function SiteHeader({
       </nav>
 
       <div className="ml-auto flex items-center gap-3">
-        {/* Below 640px: the bolt only (plus the badge). 1024-1279px: the bolt and "Catalog", 14px.
+        {/* Below 640px: the bolt and the full label, 14px (plus the badge). 1024-1279px: the bolt and "Catalog", 14px.
             From 1280px: 15px. The link's accessible name is always the full one. */}
         <a
           href="/picks/import"
@@ -125,7 +125,7 @@ export function SiteHeader({
           className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] bg-[#7C3AED] px-3.5 text-[15px] font-bold text-white transition animate-glow-pulse-compact hover:bg-[#6D28D9] motion-reduce:animate-none sm:px-4 lg:max-xl:px-3 lg:max-xl:text-[14px]"
         >
           <LightningIcon />
-          <span aria-hidden="true" className="hidden sm:inline">
+          <span aria-hidden="true" className="whitespace-nowrap text-[14px] sm:text-[15px] lg:max-xl:text-[14px]">
             <span className="lg:max-xl:hidden">Drop </span>Catalog
           </span>
           {reviewCount > 0 && (
