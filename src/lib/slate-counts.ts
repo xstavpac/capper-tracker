@@ -20,6 +20,12 @@ export const SLATE_LEAGUES = [
   { key: "basketball_wnba", label: "WNBA", logo: "https://a.espncdn.com/i/teamlogos/leagues/500-dark/wnba.png" },
 ] as const;
 
+// The same logo for a light surface: ESPN's league images come in a "500-dark" variant (for navy,
+// the Slate Bar) and a "500" one; the NCAA icons have a single version and pass through.
+export function leagueLogoForLight(logo: string): string {
+  return logo.replace("/leagues/500-dark/", "/leagues/500/");
+}
+
 export type LeagueDayCount = {
   // Games that count toward "{n} games": every game on the day except postponed/cancelled ones.
   games: number;

@@ -298,3 +298,19 @@ export const LayersIcon = ({ className }: P) => (
     <path d="M3 16.5L12 21l9-4.5" />
   </svg>
 );
+
+export const TicketIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M12 3l9 9l-9 9l-9 -9z" />
+    <path d="M12 9v6M9 12h6" />
+  </svg>
+);
+
+export const GridIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" />
+    <rect x="13" y="4" width="7" height="7" rx="1.5" />
+    <rect x="4" y="13" width="7" height="7" rx="1.5" />
+    <rect x="13" y="13" width="7" height="7" rx="1.5" />
+  </svg>
+);
