@@ -604,7 +604,7 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "name": "Heavy Consensus history, all history (backfill script)",
     "run": "95c88d8+per-user",
     "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"userId\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"datePosted\", \"public\".\"picks\".\"sportId\" FROM \"public\".\"picks\" LEFT JOIN \"public\".\"cappers\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"picks\".\"capperId\") WHERE (\"public\".\"picks\".\"period\" = CAST($1::text AS \"public\".\"Period\") AND \"public\".\"picks\".\"betType\" IN (CAST($2::text AS \"public\".\"BetType\"),CAST($3::text AS \"public\".\"BetType\"),CAST($4::text AS \"public\".\"BetType\")) AND \"public\".\"picks\".\"status\" <> CAST($5::text AS \"public\".\"PickStatus\") AND \"public\".\"picks\".\"gameTime\" < $6 AND (\"j1\".\"isTest\" = $7 AND (\"j1\".\"id\" IS NOT NULL))) OFFSET $8",
-    "expectLabel": "Heavy Consensus history (nightly / backfill)",
+    "expectLabel": "Heavy Consensus history (manual all-history backfill)",
     "expectFlags": []
   },
   {
@@ -647,6 +647,34 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "run": "pr4-capture",
     "sql": "SELECT \"public\".\"platform_category_rates\".\"id\", \"public\".\"platform_category_rates\".\"league\", \"public\".\"platform_category_rates\".\"betType\", \"public\".\"platform_category_rates\".\"key\", \"public\".\"platform_category_rates\".\"wins\", \"public\".\"platform_category_rates\".\"losses\", \"public\".\"platform_category_rates\".\"impliedSum\", \"public\".\"platform_category_rates\".\"priced\" FROM \"public\".\"platform_category_rates\" WHERE 1=1 OFFSET $1",
     "expectLabel": "Platform rates read",
+    "expectFlags": []
+  },
+  {
+    "name": "DB Monitor self-read of pg_stat_statements (readCurrent)",
+    "run": "stub-capture-2026-11-16 (prod text differs only by pg_stat_statements swapping the two NOT LIKE literals for $n)",
+    "sql": "SELECT s.queryid::text AS queryid,\n           s.calls::float8 AS calls,\n           s.rows::float8 AS rows,\n           CASE WHEN b.queryid IS NULL THEN s.query END AS query\n    FROM extensions.pg_stat_statements s\n    LEFT JOIN query_stat_baselines b ON b.queryid = s.queryid::text\n    WHERE s.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())\n      AND s.queryid IS NOT NULL\n      AND s.query ~ $1\n      AND s.query NOT LIKE '%query_stat_baselines%'\n      AND s.query NOT LIKE '%query_stat_daily%'",
+    "expectLabel": "DB Monitor: self-read (pg_stat_statements)",
+    "expectFlags": []
+  },
+  {
+    "name": "DB Monitor self-write, baseline upsert (runQueryStatSnapshot)",
+    "run": "stub-capture-2026-11-16 (text identical to prod pg_stat_statements)",
+    "sql": "INSERT INTO query_stat_baselines (queryid, label, calls, rows, \"updatedAt\")\n            SELECT * FROM unnest($1::text[], $2::text[], $3::float8[]::bigint[], $4::float8[]::bigint[], $5::timestamp[])\n            ON CONFLICT (queryid) DO UPDATE SET label = EXCLUDED.label, calls = EXCLUDED.calls, rows = EXCLUDED.rows, \"updatedAt\" = EXCLUDED.\"updatedAt\"",
+    "expectLabel": "DB Monitor: self-write (baseline update)",
+    "expectFlags": []
+  },
+  {
+    "name": "DB Monitor self-read of the baselines (readBaselines)",
+    "run": "stub-capture-2026-11-16 (text identical to prod pg_stat_statements)",
+    "sql": "SELECT queryid, label, calls::float8 AS calls, rows::float8 AS rows FROM query_stat_baselines",
+    "expectLabel": "DB Monitor: self-read (baselines)",
+    "expectFlags": []
+  },
+  {
+    "name": "recent swings, stored lines (readStoredLines)",
+    "run": "stub-capture-2026-11-16",
+    "sql": "SELECT s.\"fetchDate\",\n           g.elem->>'id' AS \"eventId\",\n           g.elem->>'homeTeam' AS \"homeTeam\",\n           g.elem->>'awayTeam' AS \"awayTeam\",\n           g.elem->>'commenceTime' AS \"commenceTime\",\n           sp.point AS \"homeSpread\", sp.last_update AS \"spreadUpdatedAt\",\n           tt.point AS total, tt.last_update AS \"totalUpdatedAt\"\n    FROM odds_snapshots s\n    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(s.data) = 'array' THEN s.data ELSE '[]'::jsonb END) AS g(elem)\n    JOIN unnest($1::text[], $2::text[]) AS w(h, a)\n      ON btrim(regexp_replace(replace(translate(lower(g.elem->>'homeTeam'), 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ', 'aaaaaaceeeeiiiinooooouuuuyy'), '.', ''), '\\s+', ' ', 'g')) = w.h AND btrim(regexp_replace(replace(translate(lower(g.elem->>'awayTeam'), 'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ', 'aaaaaaceeeeiiiinooooouuuuyy'), '.', ''), '\\s+', ' ', 'g')) = w.a\n    LEFT JOIN LATERAL (\n      SELECT (o->>'point')::float8 AS point, m->>'last_update' AS last_update\n      FROM jsonb_path_query(g.elem, '$.bookmakers[*]') WITH ORDINALITY AS b(bk, ord)\n      CROSS JOIN LATERAL jsonb_path_query(b.bk, '$.markets[*] ? (@.key == \"spreads\")') AS m\n      CROSS JOIN LATERAL jsonb_path_query(m, '$.outcomes[*]') AS o\n      WHERE o->>'name' = g.elem->>'homeTeam' AND o->>'point' IS NOT NULL\n      ORDER BY (b.bk->>'key' = 'fanduel') DESC, b.ord\n      LIMIT 1\n    ) sp ON true\n    LEFT JOIN LATERAL (\n      SELECT (o->>'point')::float8 AS point, m->>'last_update' AS last_update\n      FROM jsonb_path_query(g.elem, '$.bookmakers[*]') WITH ORDINALITY AS b(bk, ord)\n      CROSS JOIN LATERAL jsonb_path_query(b.bk, '$.markets[*] ? (@.key == \"totals\")') AS m\n      CROSS JOIN LATERAL jsonb_path_query(m, '$.outcomes[*]') AS o\n      WHERE o->>'name' = 'Over' AND o->>'point' IS NOT NULL\n      ORDER BY (b.bk->>'key' = 'fanduel') DESC, b.ord\n      LIMIT 1\n    ) tt ON true\n    WHERE s.\"sportKey\" = $3 AND s.\"fetchDate\" >= $4 AND s.\"fetchDate\" <= $5\n      AND (sp.point IS NOT NULL OR tt.point IS NOT NULL)",
+    "expectLabel": "Recent swings (stored lines)",
     "expectFlags": []
   }
 ];

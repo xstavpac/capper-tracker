@@ -95,6 +95,9 @@ expect(
     "Capper roster",
     "Cappers with pick counts",
     "Category panel",
+    "DB Monitor: self-read (baselines)",
+    "DB Monitor: self-read (pg_stat_statements)",
+    "DB Monitor: self-write (baseline update)",
     "Day consensus",
     "Decay-delta persisted ids",
     "Final-score state",
@@ -108,6 +111,7 @@ expect(
     "Grading pending",
     "Grading pending legs",
     "Grading sport lookup",
+    "Heavy Consensus history (manual all-history backfill)",
     "Heavy Consensus history (nightly / backfill)",
     "Heavy Consensus rate (per user)",
     "Heavy Consensus stored ids",
@@ -118,6 +122,7 @@ expect(
     "Odds for tendencies",
     "Platform rates read",
     "Platform rates recompute",
+    "Recent swings (stored lines)",
     "Record bundle",
     "Roster cache (grading / import recovery)",
     "Roster refresh diff",
@@ -209,7 +214,7 @@ const fixture = (name: string) => {
 // ---- 4b. Expected-heavy cron reads (rows 1, 5, 8 of the 2026-10-19 prod top 30, and the roster refresh) ----
 {
   expect(
-    "exactly the five daily cron reads (four full-history, plus Heavy Consensus's nightly window) are expected-heavy, at the configured ceiling",
+    "exactly the five daily cron reads (four full-history, plus Heavy Consensus's nightly window) are expected-heavy at the configured ceiling, and the manual backfill is expected-heavy with no ceiling",
     STATEMENT_LABELS.filter((l) => l.expected).map((l) => [l.label, l.expected!.maxAvgRows, l.expected!.note]),
     [
       ["Odds for tendencies", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
@@ -217,6 +222,7 @@ const fixture = (name: string) => {
       ["Decay-delta persisted ids", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Roster refresh diff", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
       ["Heavy Consensus history (nightly / backfill)", EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE],
+      ["Heavy Consensus history (manual all-history backfill)", Infinity, "expected (manual script, all history)"],
     ]
   );
   expect("ceiling 5,000, note as agreed", [EXPECTED_HEAVY_MAX_AVG_ROWS, EXPECTED_HEAVY_NOTE], [5000, "expected (daily cron, full history)"]);
@@ -227,6 +233,21 @@ const fixture = (name: string) => {
     expect(`${name}: at the ceiling is not flagged`, flagCodes(sql, 5000), []);
     expect(`${name}: over the ceiling is flagged`, flagCodes(sql, 5000.5), ["ROW_THRESHOLD"]);
     expect(`${name}: ... and a lower ?threshold= doesn't apply to it`, flagCodes(asPgStatStatements(sql), 1000, 100), []);
+  }
+  // Heavy Consensus history: the bounded window keeps the 5,000 ceiling; the no-lower-bound
+  // backfill script has none (its rows are the whole qualifying history, 24k and growing).
+  {
+    const nightly = fixture("Heavy Consensus history, nightly window");
+    const backfill = fixture("Heavy Consensus history, all history");
+    expect("HC nightly: 1,691 avg (prod) is not flagged, at the ceiling is not, over it is", [flagCodes(nightly, 1691), flagCodes(nightly, 5000), flagCodes(nightly, 5000.5)], [[], [], ["ROW_THRESHOLD"]]);
+    expect("HC backfill: 11,016 avg (prod) and a full 24,269-row history are not flagged", [flagCodes(backfill, 11016), flagCodes(backfill, 24269), flagCodes(asPgStatStatements(backfill), 1e9, 100)], [[], [], []]);
+    expect("HC: the two shapes are told apart by the lower bound only", [labelFor(describeStatement(nightly)), labelFor(describeStatement(backfill))], ["Heavy Consensus history (nightly / backfill)", "Heavy Consensus history (manual all-history backfill)"]);
+    const view = buildMonitorView(
+      { statsReset: null, dealloc: 0, totalRows: 0, statementCount: 1, top: [{ queryid: "b", query: asPgStatStatements(backfill), calls: 3, rows: 33048, totalExecMs: 1 }] },
+      500,
+      new Date()
+    );
+    expect("view: the backfill row carries its note and no flag", [view.rows[0].expected, view.rows[0].flags.length, view.flaggedCount], ["expected (manual script, all history)", 0, 0]);
   }
   expect("an ordinary label still uses the threshold", flagCodes(fixture("tendency game results"), 501), ["ROW_THRESHOLD"]);
 
@@ -310,7 +331,7 @@ const fixture = (name: string) => {
   const report = formatClaudeReport(view);
   expect("report carries none of them", [/someone@example\.com|clx9k2m|3f2b8c1e|12345678/.test(report), report.includes("Since last stats reset: unknown")], [false, true]);
   const fixtureText = STATEMENT_FIXTURES.map((f) => f.sql).join("\n");
-  expect("fixtures carry no seeded ids or emails", /dbmon-|@/.test(fixtureText), false);
+  expect("fixtures carry no seeded ids or emails", /dbmon-|[\w.+-]+@[\w-]+\.[\w.-]+/.test(fixtureText), false);
 }
 
 // ---- 8. Admin gate wiring (source-level) ----
