@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getClientScoresForSport } from "@/server/data/odds";
 import { isSportInSeason } from "@/lib/sport-seasons";
 import { SLATE_LEAGUES, buildSlateCounts, type SlateCounts } from "@/lib/slate-counts";
@@ -7,7 +8,8 @@ import { SLATE_LEAGUES, buildSlateCounts, type SlateCounts } from "@/lib/slate-c
 // another surface just read the same league), so it issues no database statement and, within
 // that cache, no extra upstream call. A league whose feed throws is marked failed (its chip
 // shows no count) instead of failing the bar.
-export async function getSlateCounts(now: Date = new Date()): Promise<SlateCounts> {
+// React cache(): the mobile bar and the desktop chips row both ask in one render; that is one read.
+export const getSlateCounts = cache(async (now: Date = new Date()): Promise<SlateCounts> => {
   const feeds = await Promise.all(
     SLATE_LEAGUES.map(async ({ key }) => {
       try {
@@ -19,4 +21,4 @@ export async function getSlateCounts(now: Date = new Date()): Promise<SlateCount
     })
   );
   return buildSlateCounts(feeds, now);
-}
+});
