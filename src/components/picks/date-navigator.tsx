@@ -44,14 +44,14 @@ export function DateNavigator({
   const [pending, startTransition] = useTransition();
 
   const step = (days: number) =>
-    startTransition(() => router.push(dateStepHref(pathname, params.toString(), dateKey, days)));
+    startTransition(() => router.push(dateStepHref(pathname, params.toString(), dateKey, days), { scroll: false }));
 
   // Today is the page's default day: dropping the date params lands on it, other filters kept.
   const jumpToToday = () => {
     const next = new URLSearchParams(params.toString());
     for (const k of ["date", "startDate", "endDate"]) next.delete(k);
     const qs = next.toString();
-    startTransition(() => router.push(qs ? pathname + "?" + qs : pathname));
+    startTransition(() => router.push(qs ? pathname + "?" + qs : pathname, { scroll: false }));
   };
 
   return (
