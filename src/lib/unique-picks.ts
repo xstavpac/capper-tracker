@@ -2,7 +2,10 @@
 // it. Pure and client-safe (no prisma, no queries) - it runs over the rows the page already loaded.
 //
 // A unique pick is one group of picks with the same game + period + market + side + line (props add
-// player + stat; team totals add the team). Different lines are different picks. This is NOT the
+// player + stat; team totals add the team). Different lines are different picks. A pick with no stored side is
+// keyed from its text (textSide / teamSide): HOME / AWAY when the text names exactly one of the game's teams,
+// else TEXT:<cleaned text>. Pick.uniqueKey stores this key (lib/pick-unique-key.ts): changing it needs a backfill
+// (scripts/backfill-unique-key.ts --text-only when only TEXT-fallback keys can move). This is NOT the
 // badge's key (pick-display.ts sideGroupKey, which ignores the line and skips props): that key is
 // left untouched so the "N cappers on this over" pills never move.
 import { cleanPickText } from "@/lib/pick-display";
@@ -53,20 +56,74 @@ function overUnder(p: UniquePickInput): string {
   return totalSideFromText(p.betDetail) ?? "";
 }
 
+// ---- text fallback (only for picks with no structured side) ----------------------------------------
+// R0: lowercase, apostrophes and periods dropped, "&" -> "and". Applied to the pick's text AND to team names, so
+// "Hawai'i" / "Hawaii" and "Florida A&M" / "Florida A and M" compare equal.
+const normalizeText = (s: string) => s.toLowerCase().replace(/['‘’.]/g, "").replace(/&/g, " and ");
+const finish = (s: string) => norm(s.replace(/[^a-z0-9 ]+/g, " "));
+const teamNorm = (team: string) => finish(normalizeText(team));
+
+// R1: a number is stripped only when it stands alone (a line, odds, a count) - never inside a word, so f5, 1h,
+// 1st, 49ers and 76ers survive. (The old /[+-]?\d+/ turned "Mets F5" into "mets f" and "49ers" into "ers".)
+const stripNumbers = (s: string) => s.replace(/(^|[^a-z0-9])[+-]?\d+(?![a-z0-9])/g, "$1 ");
+
+const OVER_UNDER_WORDS = /\bo\/u\b|\bover\/under\b|\b(over|under|ov|un)\b|\b[ou]\s?(?=\d)/g;
+
+// The cleaned, normalized text with over/under words and the market words removed - numbers still in.
+function baseText(text: string | null, extra: RegExp): string {
+  return normalizeText(cleanPickText(text)).replace(OVER_UNDER_WORDS, " ").replace(extra, " ");
+}
+
 // The text of a team total / prop with the market words, numbers, odds and over/under removed.
 function subjectText(text: string | null, extra: RegExp): string {
-  return norm(
-    cleanPickText(text)
-      .toLowerCase()
-      .replace(/\bo\/u\b|\bover\/under\b|\b(over|under|ov|un)\b|\b[ou]\s?(?=\d)/g, " ")
-      .replace(extra, " ")
-      .replace(/[+-]?\d+(?:\.\d+)?/g, " ")
-      .replace(/[^a-z0-9.' ]+/g, " ")
-  );
+  return finish(stripNumbers(baseText(text, extra)));
+}
+
+// R4: period phrases a capper types, by the Period they name. FIRST_INNING is not a Period value, so text naming
+// it always conflicts with the stored period ("Braves Phillies first inning" stored as FULL_GAME stays TEXT).
+const W = (body: string) => new RegExp(`(?<![a-z0-9])(?:${body})(?![a-z0-9])`, "g");
+const PERIOD_PHRASES: [string, RegExp][] = [
+  ["FIRST_HALF", W("(?:first|1st)\\s+(?:5|five)(?:\\s+innings?)?|f5|1h|h1|(?:first|1st)\\s+half")],
+  ["SECOND_HALF", W("2h|h2|(?:second|2nd)\\s+half")],
+  ["FIRST_QUARTER", W("1q|q1|(?:first|1st)\\s+(?:quarter|qtr)")],
+  ["SECOND_QUARTER", W("2q|q2|(?:second|2nd)\\s+(?:quarter|qtr)")],
+  ["THIRD_QUARTER", W("3q|q3|(?:third|3rd)\\s+(?:quarter|qtr)")],
+  ["FOURTH_QUARTER", W("4q|q4|(?:fourth|4th)\\s+(?:quarter|qtr)")],
+  ["FIRST_PERIOD", W("1p|p1|(?:first|1st)\\s+period")],
+  ["SECOND_PERIOD", W("2p|p2|(?:second|2nd)\\s+period")],
+  ["THIRD_PERIOD", W("3p|p3|(?:third|3rd)\\s+period")],
+  ["FIRST_INNING", W("(?:first|1st)\\s+inning")],
+  ["REGULATION", W("regulation")],
+];
+
+// R3: HOME / AWAY only when the WHOLE remaining text is one team's full name, the end of it (nickname: "red sox")
+// or the start of it (school / city: "texas state"), and the other team doesn't match too. No fuzzy or shared-word
+// matching. null = keep the text.
+function exactTeamSide(subject: string, homeTeam: string, awayTeam: string): "HOME" | "AWAY" | null {
+  if (!subject) return null;
+  const is = (team: string) => {
+    const t = teamNorm(team);
+    return t !== "" && (subject === t || t.endsWith(" " + subject) || t.startsWith(subject + " "));
+  };
+  const h = is(homeTeam);
+  const a = is(awayTeam);
+  return h && !a ? "HOME" : a && !h ? "AWAY" : null;
+}
+
+// A MONEYLINE / SPREAD pick with no stored pickedSide: HOME / AWAY when its text names exactly one of the game's
+// teams, else TEXT:<the cleaned text>. Period words are stripped only when they agree with the stored period (R4);
+// a period that disagrees keeps the text as is and is never mapped to a team. `extra` = the market words (R5).
+function textSide(p: UniquePickInput, extra: RegExp): string {
+  let s = baseText(p.betDetail, extra); // digits still in, so "first 5" / "1st 5" are seen as periods
+  const named = PERIOD_PHRASES.filter(([, re]) => new RegExp(re.source).test(s));
+  if (named.some(([period]) => period !== p.period)) return "TEXT:" + finish(stripNumbers(s));
+  for (const [, re] of named) s = s.replace(re, " ");
+  const subject = finish(stripNumbers(s));
+  return exactTeamSide(subject, p.homeTeam, p.awayTeam) ?? "TEXT:" + subject;
 }
 
 function nameMatches(subject: string, team: string): number {
-  const t = norm(team);
+  const t = teamNorm(team);
   if (!subject || !t) return 0;
   if (subject.includes(t)) return 2;
   const last = t.split(" ").pop() ?? "";
@@ -87,17 +144,20 @@ export function uniquePickKey(p: UniquePickInput): string {
   const game = [p.homeTeam, p.awayTeam, p.gameTime.getTime(), p.gameNumber ?? ""].join("|");
   let market: string[];
   switch (p.betType) {
+    // R5: "ml" / "moneyline" / "money line" are market words; a bare "line" is not, so "Pirates 20 Line" stays text.
     case "MONEYLINE":
-      market = [p.pickedSide ?? "TEXT:" + subjectText(p.betDetail, /\b(ml|moneyline)\b/g)];
+      market = [p.pickedSide ?? textSide(p, /\b(ml|moneyline|money\s+line)\b/g)];
       break;
     case "SPREAD":
-      market = [p.pickedSide ?? "TEXT:" + subjectText(p.betDetail, /\b(spread)\b/g), lineOf(p)];
+      market = [p.pickedSide ?? textSide(p, /\b(spread)\b/g), lineOf(p)];
       break;
     case "TOTAL":
       market = [overUnder(p), lineOf(p)];
       break;
+    // R2: the stored side first (set at import from the matched game; it agreed with the text on 308/308 prod team
+    // totals that had both); the text only when it's missing.
     case "TEAM_TOTAL":
-      market = [teamSide(p), overUnder(p), lineOf(p)];
+      market = [p.pickedSide ?? teamSide(p), overUnder(p), lineOf(p)];
       break;
     case "NRFI": {
       const c = p.category ?? "";

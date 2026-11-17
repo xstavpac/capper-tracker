@@ -65,7 +65,7 @@ const ALLOWLIST: Record<string, string[]> = {
   "src/server/data/parlay-slip-picks.ts": ["id IN the slip's pick ids (<= MAX_POOL_REQUEST_PICKS)"],
   "src/server/data/pick-unique-key.ts": [
     "restampUniqueKeys: id IN the ids a backfill just wrote, chunks of 500, key columns only",
-    "backfillUniqueKeys: keyset batches by id, take: batchSize, key columns only (one-off CLI backfill)",
+    "backfillUniqueKeys: keyset batches by id, take: batchSize, key columns only, optionally only TEXT: keys (one-off CLI backfill)",
     "verifyUniqueKeys: id IN a stratified random sample, chunks of 500, read-only CLI check",
   ],
   "src/server/data/pick-dedup.ts": ["existingPicksWhere, inside the insert transaction"],

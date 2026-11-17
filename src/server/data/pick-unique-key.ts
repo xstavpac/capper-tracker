@@ -86,21 +86,28 @@ export async function verifyUniqueKeys(opts: { perType?: number; perTextType?: n
 
 export type UniqueKeyBackfillResult = { total: number; read: number; written: number; unchanged: number };
 
+// textOnly: only picks whose STORED key came from the text fallback (contains "||TEXT:"), for a change to that
+// fallback alone (unique-picks.ts textSide / teamSide). Keys built from structured fields can't move then.
+export const TEXT_KEY_SCOPE = { uniqueKey: { contains: "||TEXT:" } } satisfies Prisma.PickWhereInput;
+
 export async function backfillUniqueKeys(opts: {
   apply: boolean;
   batchSize?: number;
+  textOnly?: boolean;
   log?: (line: string) => void;
 }): Promise<UniqueKeyBackfillResult> {
   const batchSize = opts.batchSize ?? 1000;
   const log = opts.log ?? console.log;
-  const total = await prisma.pick.count();
-  log(`[unique-key] ${opts.apply ? "APPLY" : "DRY RUN"}: ${total} picks, batches of ${batchSize}`);
+  const scope: Prisma.PickWhereInput = opts.textOnly ? TEXT_KEY_SCOPE : {};
+  const total = await prisma.pick.count({ where: scope });
+  log(`[unique-key] ${opts.apply ? "APPLY" : "DRY RUN"}: ${total} picks${opts.textOnly ? " with a TEXT: key" : ""}, batches of ${batchSize}`);
   const result: UniqueKeyBackfillResult = { total, read: 0, written: 0, unchanged: 0 };
   let cursor: string | null = null;
   let batch = 0;
   for (;;) {
     const rows: Prisma.PickGetPayload<{ select: typeof UNIQUE_KEY_SELECT }>[] = await prisma.pick.findMany({
-      where: cursor ? { id: { gt: cursor } } : {},
+      // Keyset on id, not on the scope: a row re-keyed out of TEXT: in apply mode doesn't shift the next batch.
+      where: cursor ? { AND: [scope, { id: { gt: cursor } }] } : scope,
       orderBy: { id: "asc" },
       take: batchSize,
       select: UNIQUE_KEY_SELECT,
