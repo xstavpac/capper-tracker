@@ -71,12 +71,15 @@ export function PageBanner({
   title,
   icon,
   motto,
+  titleAside,
   children,
 }: {
   variant: BannerVariant;
   title: string;
   icon: ReactNode;
   motto?: string;
+  // Controls on the title line, after the title (20px gap; the caller adds its own margin).
+  titleAside?: ReactNode;
   children?: ReactNode;
 }) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
@@ -153,6 +156,7 @@ export function PageBanner({
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-center gap-x-5 gap-y-4">
               <h1 className="m-0 text-[34px] font-extrabold leading-none tracking-[-0.02em] text-[color:var(--bv-h1)]">{title}</h1>
+              {titleAside}
               {motto && (
                 <span className="flex items-center gap-4">
                   <span className="h-[30px] w-0.5 rounded-sm bg-[var(--bv-c4)]" aria-hidden="true" />
