@@ -148,14 +148,14 @@ export function GridLiveBoard({
   // The list shows today's and live games until "See more" is on (live-list-scope.tsx); the
   // category panel and Feed read the same toggle. Only what is DISPLAYED narrows - odds and
   // matchedPicksByGame above still cover the whole lookahead window.
-  const { showAll, setShowAll } = useLiveListScope();
+  const { showAll, setShowAll, statusFilter } = useLiveListScope();
   const sortedGames = useMemo(
-    () => orderBoardGames(gamesWithScores, easternDateKey(new Date()), new Date(), { todayOnly: !showAll }),
-    [gamesWithScores, showAll]
+    () => orderBoardGames(gamesWithScores, easternDateKey(new Date()), new Date(), { todayOnly: !showAll, status: statusFilter ?? undefined }),
+    [gamesWithScores, showAll, statusFilter]
   );
   const hiddenCount = useMemo(
-    () => hiddenLaterGameCount(gamesWithScores, easternDateKey(new Date())),
-    [gamesWithScores]
+    () => hiddenLaterGameCount(gamesWithScores, easternDateKey(new Date()), new Date(), statusFilter ?? undefined),
+    [gamesWithScores, statusFilter]
   );
   const sortedGameIds = useMemo(() => sortedGames.map(({ game }) => game.id), [sortedGames]);
 
@@ -173,6 +173,7 @@ export function GridLiveBoard({
     // shared links - see live/page.tsx's isGrid.
     const params = new URLSearchParams({ sport: activeSport, view: "advanced" });
     if (resolved.gameId) params.set("gameId", resolved.gameId);
+    if (statusFilter) params.set("status", statusFilter);
     router.replace("/live?" + params.toString(), { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sortedGameIds is the only thing that should re-trigger this check; selection is read, not depended on, to avoid re-running on the very setSelection this effect performs
   }, [sortedGameIds]);
@@ -187,7 +188,7 @@ export function GridLiveBoard({
     // the same render as the selection, so the poll-tick check below finds it on the board.
     if (!showAll && needsExpandToShow(gamesWithScores, easternDateKey(new Date()), gameId)) setShowAll(true);
     setSelection({ gameId });
-    router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId, { scroll: false });
+    router.replace("/live?sport=" + activeSport + "&view=advanced&gameId=" + gameId + (statusFilter ? "&status=" + statusFilter : ""), { scroll: false });
     setScrollTrigger((t) => t + 1);
   }
 

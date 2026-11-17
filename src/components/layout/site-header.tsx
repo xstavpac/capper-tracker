@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
@@ -49,11 +49,14 @@ export function SiteHeader({
   user,
   showAdminOps = false,
   reviewCount = 0,
+  slate,
 }: {
   user: HeaderUser;
   showAdminOps?: boolean;
   // Pending Telegram-ingest review items; a badge on Drop Catalog (the link to the Catalog Import page).
   reviewCount?: number;
+  // The Slate Bar: rendered under the header row, on the header's own navy background.
+  slate?: ReactNode;
 }) {
   const pathname = usePathname();
   const { slipSize } = useParlayPool();
@@ -97,7 +100,7 @@ export function SiteHeader({
       <Link href="/dashboard" aria-label="BettingView" className="flex shrink-0 items-center gap-2.5 rounded-xl">
         <LogoMark />
         {/* Below 640px and at 1024-1279px: the tile only (the phone header must hold one row beside the labeled Drop Catalog button). */}
-        <span className="hidden whitespace-nowrap text-[18px] font-bold text-white sm:inline lg:max-xl:hidden">BettingView</span>
+        <span className="hidden whitespace-nowrap text-[18px] font-bold text-white sm:inline lg:max-xl:hidden">Welcome back!</span>
       </Link>
 
       {/* From 1024px, in the header's single row (see TAB for the sizes per width). The nav fills the space between the logo and the right-hand buttons and centers the tab group in it.
@@ -177,6 +180,7 @@ export function SiteHeader({
 
       {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} slipSize={slipSize} onNavigate={() => setOpen(false)} />}
     </div>
+    {slate}
     </header>
   );
 }
