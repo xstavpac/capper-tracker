@@ -11,12 +11,15 @@ const STATUSES = ["PENDING", "WIN", "LOSS", "PUSH", "CANCELLED"];
 // Fired only when the viewer taps 7D or 30D (the Today view never calls it): one grouped query,
 // at most 30 rows. The window's end is the server's own "today" - a client can't ask for another one.
 // userId is the session's, so another user's capper or sport id matches nothing.
+// `unique` is the card's Unique Picks mode: each distinct bet counted once (getMomentumDaily explains the rule).
 export async function loadMomentumDailyAction(
   range: unknown,
-  filters: unknown
+  filters: unknown,
+  unique: unknown = false
 ): Promise<{ success: true; rows: DailyNet[] } | { success: false; error: string }> {
   const user = await requireUser();
   if (typeof range !== "string" || !(MOMENTUM_RANGES as readonly string[]).includes(range)) return { success: false, error: "Couldn't load the range." };
+  if (typeof unique !== "boolean") return { success: false, error: "Couldn't load the range." };
   const f: { capperId?: string; sportId?: string; status?: string } = {};
   if (filters && typeof filters === "object") {
     for (const [k, v] of Object.entries(filters as Record<string, unknown>)) {
@@ -28,7 +31,7 @@ export async function loadMomentumDailyAction(
     }
   }
   try {
-    const rows = await getMomentumDaily(user.id, range as MomentumRange, easternDefaultDayKey(new Date()), f);
+    const rows = await getMomentumDaily(user.id, range as MomentumRange, easternDefaultDayKey(new Date()), f, { unique });
     return { success: true, rows };
   } catch {
     return { success: false, error: "Couldn't load the range." };
