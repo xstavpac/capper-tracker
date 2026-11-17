@@ -71,7 +71,7 @@ export function StatCard({
   const m = compactMobile;
   const card =
     "flex items-center gap-3 px-4 py-[13px] min-[1700px]:gap-3.5 " +
-    (glass ? "glass-card " : "rounded-2xl bg-white shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none ") + +
+    (glass ? "glass-card " : "rounded-2xl bg-white shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none ") +
     // The phone layout is a two-column grid (tile | label) whose other rows span both columns; the
     // text column below dissolves into it (max-sm:contents).
     (m ? "max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-x-1.5 max-sm:gap-y-1 max-sm:px-3 max-sm:py-2.5 " : "") +
@@ -98,7 +98,7 @@ export function StatCard({
             overflow or clip. */}
         <div className={"mt-0.5 flex items-center justify-between gap-3 [container-type:inline-size]" + (m ? " max-sm:col-span-2 max-sm:mt-0 max-sm:gap-2 max-sm:[--value-max:24px]" : "")}>
           <p
-            className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (m ? "max-sm:font-bold " : "") + (valueClass ?? "text-foreground")}
+            className={"max-w-full shrink-0 font-semibold leading-[1.15] tracking-[-0.02em] tabular-nums [overflow-wrap:anywhere] " + (m ? "max-sm:whitespace-nowrap max-sm:font-bold " : "") + (valueClass ?? "text-foreground")}
             style={{ fontSize: "clamp(18px, calc(100cqw / " + (Math.max(1, value.length) * 0.62).toFixed(2) + "), var(--value-max, 22px))" }}
           >
             {value}
