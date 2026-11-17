@@ -24,7 +24,7 @@ import { DateNavigator } from "@/components/picks/date-navigator";
 import { AtAGlance, GlanceCapperCard, MostBackedCard, type MostBackedItem } from "@/components/picks/at-a-glance";
 import { getDayConsensus, getDayWinnersAndLosers, getLiveGameHrefs, getMostBacked } from "@/server/data/picks-glance";
 import { MomentumCard } from "@/components/picks/momentum-card";
-import { momentumEvents } from "@/lib/momentum";
+import { momentumEvents, uniqueMomentumEvents } from "@/lib/momentum";
 import { summarizeUniquePicks } from "@/lib/unique-picks";
 import { cumulativeUnitsSeries, resolveDateFilter, sportChipLayout, type HeaderPick } from "@/lib/picks-header";
 import {
@@ -216,6 +216,7 @@ export default async function PicksPage({
     gradedAt: p.gradedAt,
   }));
   const momentum = isRange ? { events: [], unstamped: 0 } : momentumEvents(headerPicks);
+  const uniqueMomentum = isRange ? { events: [], unstamped: 0 } : uniqueMomentumEvents(picks);
   const otherFiltersActive =
     Boolean(filters.capperId) || Boolean(filters.sportId) || Boolean(filters.status) || Boolean(betTypeFilter);
   const dateFilterActive = Boolean(searchParams.date) || isRange;
@@ -321,7 +322,7 @@ export default async function PicksPage({
 
           {/* One day only: a range has no single "today" to chart. Same rows and filters as the Net Units tile. */}
           {!isRange && (
-            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} dayEnd={easternDateRange(startDateKey, startDateKey).end.getTime()} />
+            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} uniqueEvents={uniqueMomentum.events} uniqueUnstamped={uniqueMomentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} dayEnd={easternDateRange(startDateKey, startDateKey).end.getTime()} />
           )}
 
           <AtAGlance label={dateChipLabel + " at a glance"} columns={backed ? 3 : 2}>

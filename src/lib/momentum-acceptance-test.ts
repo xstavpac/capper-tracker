@@ -9,6 +9,8 @@ import {
   localParts,
   momentumEvents,
   momentumMatchesTile,
+  uniqueMomentumEvents,
+  type UniqueMomentumPick,
   xTicksFor,
   yAxisFor,
 } from "@/lib/momentum";
@@ -154,6 +156,54 @@ const lateNight = past0([{ t: at("2026-11-05T04:30:00"), d: 1 }]);
 check("grade at 11:30 PM CT: axis never exceeds day end, keeps 2h span", [lateNight.xEnd <= DAY_END, lateNight.xEnd - lateNight.xStart >= 2 * 3600000], [true, true]);
 const todayEv = buildMomentum([{ t: at("2026-11-08T03:15:00"), d: 1 }], 0, { now: at("2026-11-08T06:00:00"), isToday: true, tz: CT, dayEnd: at("2026-11-08T05:00:00") });
 check("today ignores dayEnd: xEnd = max(last, now)", todayEv.xEnd, at("2026-11-08T06:00:00"));
+
+// ---- unique picks series: a bet shared by several cappers moves the line once ----
+let useq = 0;
+const upick = (o: Partial<UniqueMomentumPick>): UniqueMomentumPick => ({
+  id: "u" + ++useq,
+  homeTeam: "Chicago Bears",
+  awayTeam: "Green Bay Packers",
+  gameTime: new Date("2026-11-07T18:00:00Z"),
+  betType: "MONEYLINE",
+  period: "FULL_GAME",
+  betDetail: null,
+  pickedSide: "HOME",
+  line: null,
+  status: "LOSS",
+  units: 1,
+  odds: -110,
+  gradedAt: new Date("2026-11-07T22:00:00Z"),
+  ...o,
+});
+const tenOnBears = Array.from({ length: 10 }, (_, i) => upick({ gradedAt: new Date(at("2026-11-07T22:00:00") + i * 1000) }));
+const allSeries = momentumEvents(tenOnBears);
+const uniSeries = uniqueMomentumEvents(tenOnBears);
+check("10 cappers, one losing ML: all-picks line drops 10x", allSeries.events.reduce((a, e) => a + e.d, 0), -10);
+check("...unique line drops once, at the earliest grade", uniSeries.events, [{ t: at("2026-11-07T22:00:00"), d: -1 }]);
+const mixed = uniqueMomentumEvents([
+  ...tenOnBears,
+  upick({ pickedSide: "AWAY", status: "WIN", odds: 100, gradedAt: new Date("2026-11-07T22:00:30Z") }),
+  upick({ betType: "SPREAD", line: -3, status: "WIN", odds: -110, units: 2, gradedAt: new Date("2026-11-07T23:00:00Z") }),
+  upick({ betType: "SPREAD", line: -3, status: "WIN", odds: -110, units: 3, gradedAt: new Date("2026-11-07T22:50:00Z") }),
+  upick({ betType: "SPREAD", line: -7, status: "PUSH" }),
+  upick({ betType: "TOTAL", line: 44.5, betDetail: "Over 44.5", status: "PENDING", gradedAt: null }),
+  upick({ betType: "TOTAL", line: 40.5, betDetail: "Over 40.5", status: "LOSS", gradedAt: null }),
+]);
+check(
+  "different bets count once each; push and pending move nothing; the earliest copy sets units",
+  [mixed.events.map((e) => [e.t, e.d]), mixed.unstamped],
+  [[[at("2026-11-07T22:00:00"), -1], [at("2026-11-07T22:00:30"), 1], [at("2026-11-07T22:50:00"), 3 * (100 / 110)]], -1]
+);
+check(
+  "graded-copy disagreement: majority decides; a tie moves nothing",
+  [
+    uniqueMomentumEvents([upick({ status: "LOSS" }), upick({ status: "LOSS" }), upick({ status: "WIN" })]).events.map((e) => e.d),
+    uniqueMomentumEvents([upick({ status: "LOSS" }), upick({ status: "WIN" })]).events.length,
+  ],
+  [[-1], 0]
+);
+const uniBuilt = buildMomentum(uniSeries.events, uniSeries.unstamped, { now: at("2026-11-08T05:30:00"), isToday: true, tz: CT });
+check("unique series builds through buildMomentum: one step to -1u", [uniBuilt.points.length, uniBuilt.net], [2, -1]);
 
 if (failures > 0) {
   console.log(`\n${failures} FAILED`);

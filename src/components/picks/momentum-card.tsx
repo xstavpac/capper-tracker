@@ -24,12 +24,17 @@ const PILL = {
 export function MomentumCard({
   events,
   unstamped,
+  uniqueEvents,
+  uniqueUnstamped,
   tileNet,
   isToday,
   dayEnd,
 }: {
   events: MomentumEvent[];
   unstamped: number;
+  // The same series with each distinct bet counted once (uniqueMomentumEvents).
+  uniqueEvents: MomentumEvent[];
+  uniqueUnstamped: number;
   // The Net Units tile's number; the card's last point must equal it (dev-only warning otherwise).
   tileNet: number;
   isToday: boolean;
@@ -44,15 +49,21 @@ export function MomentumCard({
     setNow(Date.now());
   }, []);
 
-  const m = useMemo(() => (tz ? buildMomentum(events, unstamped, { now, isToday, tz, dayEnd }) : null), [events, unstamped, now, isToday, tz, dayEnd]);
+  const [mode, setMode] = useState<"all" | "unique">("all");
+  const unique = mode === "unique";
+  const m = useMemo(
+    () => (tz ? buildMomentum(unique ? uniqueEvents : events, unique ? uniqueUnstamped : unstamped, { now, isToday, tz, dayEnd }) : null),
+    [events, unstamped, uniqueEvents, uniqueUnstamped, unique, now, isToday, tz, dayEnd]
+  );
 
   useEffect(() => {
-    if (m && process.env.NODE_ENV !== "production" && !momentumMatchesTile(m.net, tileNet)) {
+    // The Net Units tile is the all-picks total; the unique line is expected to differ from it.
+    if (m && !unique && process.env.NODE_ENV !== "production" && !momentumMatchesTile(m.net, tileNet)) {
       console.warn("[momentum] last point " + m.net + "u differs from the Net Units tile " + tileNet + "u");
     }
-  }, [m, tileNet]);
+  }, [m, tileNet, unique]);
 
-  const net = m ? m.net : tileNet;
+  const net = m ? m.net : unique ? 0 : tileNet;
   const down = net < 0;
   const pill = PILL[m ? m.trend : "flat"];
 
@@ -85,12 +96,25 @@ export function MomentumCard({
           >
             {(net > 0 ? "+" : "") + net.toFixed(2) + "u"}
           </p>
-          <p className="mt-1.5 text-base text-foreground/80">Current Net Units</p>
+          <p className="mt-1.5 text-base text-foreground/80">{unique ? "Current Net Units (unique)" : "Current Net Units"}</p>
         </div>
       </div>
 
       <div className="flex min-w-0 flex-[999_1_340px] flex-col">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div role="group" aria-label="Momentum picks" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
+            {(["all", "unique"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={mode === k}
+                onClick={() => setMode(k)}
+                className={"rounded-full px-3 py-1 " + (mode === k ? "bg-foreground text-background" : "text-foreground/70 hover:text-foreground")}
+              >
+                {k === "all" ? "All Picks" : "Unique Picks"}
+              </button>
+            ))}
+          </div>
           <span className={"flex items-center gap-2 rounded-full px-3.5 py-[7px] text-sm font-semibold " + pill.cls}>
             <span className="h-[9px] w-[9px] rounded-full" style={{ background: pill.dot }} />
             {pill.label}

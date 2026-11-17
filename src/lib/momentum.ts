@@ -8,6 +8,7 @@
 // works in epoch ms and converts to the VIEWER's IANA zone explicitly (`tz`), never via the
 // machine's zone, so the server and the browser agree and the tests pin it.
 import { winUnits } from "@/lib/pick-display";
+import { uniquePickKey, type UniquePickInput } from "@/lib/unique-picks";
 
 const H = 3600000;
 const MIN = 60000;
@@ -40,6 +41,42 @@ export function momentumEvents(
     if (p.gradedAt) events.push({ t: p.gradedAt.getTime(), d });
     else unstamped += d;
   }
+  events.sort((a, b) => a.t - b.t);
+  return { events, unstamped };
+}
+
+export type UniqueMomentumPick = UniquePickInput & { units: number; odds: number; gradedAt: Date | null };
+
+// The same events, but each distinct bet counts ONCE (Unique Picks rule: uniquePickKey groups, the
+// tile's majority rule settles disagreements, a tied group moves nothing). One group moves the line
+// once, at its earliest grade, with that copy's units and odds - so ten cappers on one losing ML are
+// one loss, not ten. Pushes move nothing. A group whose winning copies are all unstamped goes to
+// `unstamped`, so the last point still equals the sum of the events.
+export function uniqueMomentumEvents(picks: UniqueMomentumPick[]): { events: MomentumEvent[]; unstamped: number } {
+  const groups = new Map<string, UniqueMomentumPick[]>();
+  for (const p of picks) {
+    if (!SETTLED.has(p.status)) continue;
+    const key = uniquePickKey(p);
+    const g = groups.get(key);
+    if (g) g.push(p);
+    else groups.set(key, [p]);
+  }
+  const events: MomentumEvent[] = [];
+  let unstamped = 0;
+  groups.forEach((members) => {
+    const counts: Record<string, number> = {};
+    for (const m of members) counts[m.status] = (counts[m.status] ?? 0) + 1;
+    const top = Math.max(...Object.values(counts));
+    const winners = Object.keys(counts).filter((k) => counts[k] === top);
+    if (winners.length !== 1 || winners[0] === "PUSH") return; // tie: no majority; push: no change
+    const side = members.filter((m) => m.status === winners[0]);
+    const stamped = side.filter((m) => m.gradedAt).sort((a, b) => (a.gradedAt as Date).getTime() - (b.gradedAt as Date).getTime());
+    const rep = stamped[0] ?? side[0];
+    const d = unitsDelta(rep);
+    if (d === 0) return;
+    if (rep.gradedAt) events.push({ t: rep.gradedAt.getTime(), d });
+    else unstamped += d;
+  });
   events.sort((a, b) => a.t - b.t);
   return { events, unstamped };
 }
