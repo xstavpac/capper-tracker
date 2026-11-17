@@ -169,7 +169,7 @@ export function PicksFilterBar({
       else next.delete(k);
     }
     const qs = next.toString();
-    startTransition(() => router.push(qs ? pathname + "?" + qs : pathname));
+    startTransition(() => router.push(qs ? pathname + "?" + qs : pathname, { scroll: false }));
   }
 
   function setSport(id: string) {
@@ -327,7 +327,7 @@ export function PicksFilterBar({
       {anyActive && (
         <button
           type="button"
-          onClick={() => startTransition(() => router.push(pathname))}
+          onClick={() => startTransition(() => router.push(pathname, { scroll: false }))}
           className="px-1 text-[13px] font-medium text-[#5B6275] hover:text-foreground dark:text-muted-foreground"
         >
           Clear
