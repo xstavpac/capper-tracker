@@ -43,6 +43,7 @@ export function StatCard({
   href,
   mobileLabel,
   compactMobile = false,
+  glass = false,
 }: {
   label: string;
   // A shorter label for the phone (below `sm`).
@@ -64,10 +65,13 @@ export function StatCard({
   className?: string;
   // Makes the whole card a link.
   href?: string;
+  // The frosted-glass surface (globals.css .glass-card) in place of the white card: the Parlay page.
+  glass?: boolean;
 }) {
   const m = compactMobile;
   const card =
-    "flex items-center gap-3 rounded-2xl bg-white px-4 py-[13px] shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none min-[1700px]:gap-3.5 " +
+    "flex items-center gap-3 px-4 py-[13px] min-[1700px]:gap-3.5 " +
+    (glass ? "glass-card " : "rounded-2xl bg-white shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none ") + +
     // The phone layout is a two-column grid (tile | label) whose other rows span both columns; the
     // text column below dissolves into it (max-sm:contents).
     (m ? "max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)] max-sm:gap-x-1.5 max-sm:gap-y-1 max-sm:px-3 max-sm:py-2.5 " : "") +

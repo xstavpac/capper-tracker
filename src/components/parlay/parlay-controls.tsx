@@ -13,17 +13,17 @@ import { MAX_PARLAY_LEGS, MAX_PARLAY_LEGS_MESSAGE } from "@/lib/parlay/leg-cap";
 export const LABEL = "text-[10.5px] font-semibold uppercase tracking-[0.07em] " + MUTED;
 
 // The white outlined surface every unselected control sits on (the panels' own control border).
-const OUTLINED = "border-[#DADDE5] bg-white text-foreground hover:bg-foreground/[0.035] dark:border-border dark:bg-card";
-const FILLED = "border-brand-600 bg-brand-600 text-white";
+const OUTLINED = "pill-inactive hover:bg-white/80";
+const FILLED = "pill-active border-transparent";
 
 // 44px tall: a full touch target.
 const PILL = "inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-full border px-5 text-sm font-semibold transition disabled:opacity-50 ";
-export const PILL_PRIMARY = PILL + FILLED + " hover:bg-brand-700";
+export const PILL_PRIMARY = PILL + FILLED + " hover:brightness-110";
 export const PILL_OUTLINE = PILL + OUTLINED;
 // The group a row of segments or tabs sits in.
-export const SEGMENT_GROUP = "rounded-2xl border border-[#DADDE5] bg-white p-1 dark:border-border dark:bg-card";
-export const SEGMENT_ON = "bg-brand-600 text-white";
-export const SEGMENT_OFF = "text-foreground hover:bg-foreground/[0.035]";
+export const SEGMENT_GROUP = "glass-card-soft rounded-2xl p-1";
+export const SEGMENT_ON = "pill-active";
+export const SEGMENT_OFF = "text-[#243a5e] hover:bg-white/50 dark:text-foreground dark:hover:bg-foreground/[0.035]";
 
 // One league's scope: filled blue when its games/picks are in, white outlined
 // when they are left out. `count` is how many it holds, where that is known.
@@ -83,10 +83,10 @@ export function LegStepper({
   // asking for one more is answered with the limit rather than with nothing.
   const [overCap, setOverCap] = useState(false);
   const atCap = value >= MAX_PARLAY_LEGS;
-  const step = "flex h-11 w-11 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-foreground/[0.035] disabled:opacity-30 disabled:hover:bg-transparent";
+  const step = "glass-card flex h-6 w-6 items-center justify-center rounded-full text-sm leading-none text-[#243a5e] transition hover:bg-white/80 disabled:opacity-30 disabled:hover:bg-white/55 dark:text-foreground";
   return (
     <>
-      <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
+      <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => {
@@ -136,7 +136,7 @@ export function NumberSegments<T extends number>({
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <span className={LABEL}>{label}</span>
-      <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
+      <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 glass-card-soft rounded-full p-0.5">
         {options.map((n) => (
           <button
             key={n}
@@ -172,7 +172,7 @@ export function TextSegments<T extends string>({
   disabled?: readonly T[];
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 rounded-full border border-[#DADDE5] bg-white p-0.5 dark:border-border dark:bg-card">
+    <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 glass-card-soft rounded-full p-0.5">
       {options.map((o) => (
         <button
           key={o.key}
@@ -244,9 +244,9 @@ export function StepperControl({
   step?: number;
   unit?: string;
 }) {
-  const step = "flex h-11 w-11 items-center justify-center rounded-full text-lg text-foreground transition hover:bg-foreground/[0.035] disabled:opacity-30 disabled:hover:bg-transparent";
+  const step = "glass-card flex h-6 w-6 items-center justify-center rounded-full text-sm leading-none text-[#243a5e] transition hover:bg-white/80 disabled:opacity-30 disabled:hover:bg-white/55 dark:text-foreground";
   return (
-    <div className="flex items-center rounded-full border border-[#DADDE5] bg-white dark:border-border dark:bg-card">
+    <div className="flex items-center gap-1">
       <button type="button" onClick={() => onChange(value - stepBy)} disabled={value <= min} aria-label={"Fewer: " + label} className={step}>
         &minus;
       </button>
@@ -327,7 +327,7 @@ export function FilterRow({ label, className = "", children }: { label: string; 
 // The tinted, rounded block the settings rows sit in, thin dividers between them.
 export function SettingsBlock({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-[#0F1420]/[0.06] rounded-[14px] border border-[#E1E7FA] bg-[#F6F8FF] px-3.5 dark:divide-white/10 dark:border-brand-500/30 dark:bg-brand-500/[0.06]">
+    <div className="glass-card-soft divide-y divide-[#0F1420]/[0.06] rounded-[14px] px-3.5 dark:divide-white/10">
       {children}
     </div>
   );

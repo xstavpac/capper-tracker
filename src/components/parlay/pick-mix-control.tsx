@@ -27,8 +27,8 @@ import {
 } from "@/lib/parlay/include-picks";
 
 const LINK = "text-[13px] font-semibold text-brand-600 hover:underline dark:text-brand-400";
-const CHIP_ON = SEGMENT_ON + " border-brand-600";
-const CHIP_OFF = SEGMENT_OFF + " border-[#DADDE5] bg-white dark:border-border dark:bg-card";
+const CHIP_ON = SEGMENT_ON + " border-transparent";
+const CHIP_OFF = "pill-inactive";
 
 const INCLUDE_OPTIONS: { key: "ALL" | BetCategory; label: string }[] = [
   { key: "ALL", label: "All Picks" },

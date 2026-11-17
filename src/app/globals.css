@@ -6,6 +6,45 @@ html {
   color-scheme: light;
 }
 
+/* Frosted-glass skin for the Parlay Generator page (components/parlay/*). Light mode only: in dark mode
+   each class falls back to the app's ordinary card / border colors. */
+@layer components {
+  .parlay-glass {
+    @apply overflow-hidden rounded-[28px] bg-[linear-gradient(160deg,#cfe4fb_0%,#e3edfb_45%,#f6f9fd_100%)] shadow-[0_20px_50px_rgba(20,40,80,0.14)];
+  }
+  .glass-card {
+    @apply rounded-2xl border border-white/75 bg-white/55 shadow-[0_10px_30px_rgba(20,40,80,0.10),inset_0_1px_0_rgba(255,255,255,0.6)] backdrop-blur-xl backdrop-saturate-[1.8];
+  }
+  .glass-card-soft {
+    @apply rounded-xl border border-white/65 bg-white/40 backdrop-blur-md backdrop-saturate-150;
+  }
+  .pill-active {
+    @apply bg-gradient-to-br from-[#3B7BF0] to-[#1F56D6] text-white shadow-[0_4px_10px_rgba(31,86,214,0.35)];
+  }
+  .pill-inactive {
+    @apply border border-white/85 bg-white/55 text-[#243a5e];
+  }
+  /* Muted gray-500 text washes out on the frosted blue; one shade darker keeps it at WCAG AA. */
+  .parlay-glass .text-muted-foreground {
+    color: #4b5563;
+  }
+  .dark .parlay-glass {
+    @apply bg-none shadow-none;
+  }
+  .dark .parlay-glass .text-muted-foreground {
+    color: rgb(var(--muted-foreground));
+  }
+  .dark .glass-card {
+    @apply border-border bg-card shadow-none backdrop-blur-none;
+  }
+  .dark .glass-card-soft {
+    @apply border-border bg-card/60 backdrop-blur-none;
+  }
+  .dark .pill-inactive {
+    @apply border-border bg-card text-foreground;
+  }
+}
+
 /* Semantic color tokens (RGB channels, so Tailwind's `/opacity` modifiers
    work - e.g. bg-background/50). Values are the existing gray shades already
    used across the app; the `.dark` scope isn't hung on <html> because it's

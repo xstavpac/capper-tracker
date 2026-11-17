@@ -346,7 +346,7 @@ async function main() {
   const labels = () => Array.from(el.querySelectorAll("span")).map((s) => (s.textContent ?? "").trim());
   const rowOrder = () => text().indexOf("Legs per game") < text().indexOf("Total legs");
   check("Total legs: a stepper below Legs per game, starting at 3", rowOrder() && totalShown() === "3", String(totalShown()));
-  check("Total legs: both rows sit in the same tinted block as Standard's", Boolean(totalMore().closest("div.bg-\\[\\#F6F8FF\\]")) && Boolean(button("Auto")?.closest("div.bg-\\[\\#F6F8FF\\]")));
+  check("Total legs: both rows sit in the same tinted block as Standard's", Boolean(totalMore().closest("div.glass-card-soft")) && Boolean(button("Auto")?.closest("div.glass-card-soft")));
   check("Total legs: the helper says cap, whole games, one box per game", text().includes("A cap, not a target: the parlay is built from whole games' boxes, one per game."));
   check("Target odds at 3 total legs is plain 'Target odds'", labels().includes("Target odds") && !text().includes("Target odds (per game)"));
   await click(totalMore());

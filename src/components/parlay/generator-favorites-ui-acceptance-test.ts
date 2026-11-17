@@ -162,7 +162,7 @@ async function main() {
   check("star: label and title", s0?.getAttribute("aria-label") === STAR && s0?.getAttribute("title") === STAR);
   check("star: off by default, aria-pressed=false", s0?.getAttribute("aria-pressed") === "false");
   check("star: round pill", s0!.className.includes("rounded-full"));
-  check("star off: white background, light gray border, outline star", /\bbg-white\b/.test(s0!.className) && s0!.className.includes("border-[#DADDE5]") && s0!.querySelector("svg")?.getAttribute("fill") === "none");
+  check("star off: pill-inactive (light surface, light border), outline star", s0!.className.split(/\s+/).includes("pill-inactive") && s0!.querySelector("svg")?.getAttribute("fill") === "none");
   check("star off: the usual subtitle and helper", text().includes("Choose which games to build around, or use the full slate.") && /from your cappers\./.test(text()));
   const panelOff = filters()!.textContent!;
 
