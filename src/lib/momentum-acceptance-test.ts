@@ -190,9 +190,9 @@ const mixed = uniqueMomentumEvents([
   upick({ betType: "TOTAL", line: 40.5, betDetail: "Over 40.5", status: "LOSS", gradedAt: null }),
 ]);
 check(
-  "different bets count once each; push and pending move nothing; the earliest copy sets units",
+  "different bets count once each; push and pending move nothing; units and odds are averaged across copies",
   [mixed.events.map((e) => [e.t, e.d]), mixed.unstamped],
-  [[[at("2026-11-07T22:00:00"), -1], [at("2026-11-07T22:00:30"), 1], [at("2026-11-07T22:50:00"), 3 * (100 / 110)]], -1]
+  [[[at("2026-11-07T22:00:00"), -1], [at("2026-11-07T22:00:30"), 1], [at("2026-11-07T22:50:00"), 2.5 * (100 / 110)]], -1]
 );
 check(
   "graded-copy disagreement: majority decides; a tie moves nothing",

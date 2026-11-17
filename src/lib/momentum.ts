@@ -49,7 +49,7 @@ export type UniqueMomentumPick = UniquePickInput & { units: number; odds: number
 
 // The same events, but each distinct bet counts ONCE (Unique Picks rule: uniquePickKey groups, the
 // tile's majority rule settles disagreements, a tied group moves nothing). One group moves the line
-// once, at its earliest grade, with that copy's units and odds - so ten cappers on one losing ML are
+// once, at its earliest grade, with the AVERAGE units and odds of the copies that agree with the result - so ten cappers on one losing ML are
 // one loss, not ten. Pushes move nothing. A group whose winning copies are all unstamped goes to
 // `unstamped`, so the last point still equals the sum of the events.
 export function uniqueMomentumEvents(picks: UniqueMomentumPick[]): { events: MomentumEvent[]; unstamped: number } {
@@ -72,7 +72,8 @@ export function uniqueMomentumEvents(picks: UniqueMomentumPick[]): { events: Mom
     const side = members.filter((m) => m.status === winners[0]);
     const stamped = side.filter((m) => m.gradedAt).sort((a, b) => (a.gradedAt as Date).getTime() - (b.gradedAt as Date).getTime());
     const rep = stamped[0] ?? side[0];
-    const d = unitsDelta(rep);
+    const avg = (k: "units" | "odds") => side.reduce((a, m) => a + m[k], 0) / side.length;
+    const d = unitsDelta({ status: rep.status, units: avg("units"), odds: avg("odds") });
     if (d === 0) return;
     if (rep.gradedAt) events.push({ t: rep.gradedAt.getTime(), d });
     else unstamped += d;
