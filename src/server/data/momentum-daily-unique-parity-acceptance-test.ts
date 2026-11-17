@@ -8,7 +8,8 @@
 //   - All mode (no `unique`) is unchanged: the plain per-day sum.
 //
 // Everything runs inside one interactive transaction that is rolled back - no row survives the test.
-//   npx tsx src/server/data/momentum-daily-unique-parity-acceptance-test.ts   (DATABASE_URL must be localhost)
+//   node --require ./scripts/server-only-stub.cjs --import tsx src/server/data/momentum-daily-unique-parity-acceptance-test.ts
+//   (DATABASE_URL must be localhost; npm test runs it the same way)
 import type { Prisma } from "@prisma/client";
 import { easternDateKey, easternWallTime } from "@/lib/dates";
 import { uniqueMomentumEvents, type UniqueMomentumPick } from "@/lib/momentum";
