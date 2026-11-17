@@ -118,7 +118,7 @@ import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { hasKickedOff, isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
-import { classifySwapCandidate } from "@/lib/parlay/swap-classify";
+import { categoryFavDog, classifySwapCandidate, teamFavDog } from "@/lib/parlay/swap-classify";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
 import { conflictSub, noRecordReason, pickRef, traceScoring, traceSelection, traceSlip, traceSwapLeg } from "@/lib/parlay/generator-trace";
 
@@ -1002,8 +1002,12 @@ export function legSwapOptions(snapshot: GeneratorSnapshot, settings: GeneratorS
   out.PRIMARY.push({ ...leg, current: true });
   const alts = legAlternatives(snapshot, settings, legs, legIndex, now);
   const legC = asCandidate(leg.pick);
+  // The game's teams' favorite / underdog status, from every full-game ML / spread pick on it.
+  const gamePicks = new Map<string, GeneratorPick>();
+  for (const p of [...(snapshot.games.find((g) => g.gameId === leg.gameId)?.picks ?? []), leg.pick, ...alts.thisGame.map((a) => a.pick)]) gamePicks.set(p.pickId, p);
+  const teams = teamFavDog(Array.from(gamePicks.values()));
   for (const a of alts.thisGame) {
-    const cls = classifySwapCandidate(legC, asCandidate(a.pick));
+    const cls = classifySwapCandidate(legC, asCandidate(a.pick), { own: categoryFavDog(a.pick.category), ...teams });
     if (cls.tab === null) continue;
     out[cls.tab].push(cls.note ? { ...a, note: cls.note } : a);
   }

@@ -107,14 +107,14 @@ function main() {
   check("Primary: the same team's ML for a spread leg", where("wmml") === "PRIMARY", where("wmml"));
   check("Hedge: the game total, both ways", where("over") === "HEDGE" && where("under") === "HEDGE", `${where("over")} ${where("under")}`);
   check("Hedge: a same-game player prop", where("prop") === "HEDGE", where("prop"));
-  check("Hedge: the opposing team's ML (another side market)", where("fauml") === "HEDGE", where("fauml"));
-  check("Contrarian: the opposing spread at the other side of the line", where("fau55") === "CONTRARIAN" && sorted(ids(o.CONTRARIAN)) === "fau55", ids(o.CONTRARIAN).join(","));
-  check("none: the opposing spread past contrarian's tolerance (-12.5)", where("fau125") === "none", where("fau125"));
+  check("Contrarian: the opposing team's ML (another side market), though it is the favorite", where("fauml") === "CONTRARIAN", where("fauml"));
+  check("Contrarian: the opposing team's spread, and the literal inverse (-5.5)", where("fau55") === "CONTRARIAN" && sorted(ids(o.CONTRARIAN)) === "fau125,fau55,fauml", ids(o.CONTRARIAN).join(","));
+  check("the opposing team's spread past contrarian's tolerance (-12.5) is placed by team: Contrarian", where("fau125") === "CONTRARIAN", where("fau125"));
   check("none: a below-gate pick on the game", where("wmlow") === "none");
   check("each candidate is in at most one tab", PICKS.every((x) => tabOf(o, x.pickId).length <= 1));
-  const note = o.HEDGE.find((r) => r.pick.pickId === "fauml")?.note;
-  check("Hedge note: both hit if the favorite wins by 1–5 (+5.5)", note === "Can win with your pick: both hit if Florida Atlantic Owls wins by 1–5", String(note));
-  check("Hedge note only where it can be worked out (none on the total or the prop)", o.HEDGE.filter((r) => r.note).length === 1);
+  const note = o.CONTRARIAN.find((r) => r.pick.pickId === "fauml")?.note;
+  check("Both-can-win note (on the opposing ML row): both hit if the favorite wins by 1–5 (+5.5)", note === "Can win with your pick: both hit if Florida Atlantic Owls wins by 1–5", String(note));
+  check("the note only where it can be worked out (none on the total or the prop)", [...o.HEDGE, ...o.CONTRARIAN].filter((r) => r.note).length === 1);
   check("Primary keeps the build's ranking after the current pick", ids(o.PRIMARY).slice(1).join() === ids(legAlternatives(snap, base, p.legs, 0, NOW).thisGame.filter((l) => tabOf(o, l.pick.pickId)[0] === "PRIMARY")).join());
 
   // ---- Other games ----------------------------------------------------------------
@@ -149,7 +149,7 @@ function main() {
   check("swap: the new leg is handSwapped and carries no modal fields", s!.legs[0].handSwapped === true && !("note" in s!.legs[0]) && !("current" in s!.legs[0]));
   check("swap: Hedge / Contrarian are the build's (not rebuilt)", JSON.stringify(s!.hedge) === JSON.stringify(p.hedge) && JSON.stringify(s!.contrarian) === JSON.stringify(p.contrarian));
   check("swap: the current pick is refused", applyLegSwap(snap, base, p, 0, "leg", NOW) === null);
-  check("swap: an unclassified same-game pick is refused", applyLegSwap(snap, base, p, 0, "fau125", NOW) === null);
+  check("swap: a pick in none of the tabs (below the gate) is refused; one the status rule now places (-12.5, Hedge) is allowed", applyLegSwap(snap, base, p, 0, "wmlow", NOW) === null && applyLegSwap(snap, base, p, 0, "fau125", NOW) !== null);
   check("swap: an Other-games pick works, and takes the leg's game out", applyLegSwap(snap, base, p, 0, "chiml2", NOW)?.legs.map((l) => l.gameId).join() === "G3,G4");
   const s2 = applyLegSwap(snap, base, s!, 1, "bosml", NOW);
   check("swap another leg: the first swap stays", s2?.legs[0].pick.pickId === "fauml" && s2?.legs[1].pick.pickId === "bosml");
@@ -178,7 +178,34 @@ function main() {
   check("prop: the other side of the same prop -> Contrarian", classifySwapCandidate(lebron, nba("LeBron James Under 25.5 Points", "PLAYER_PROP", 25.5)).tab === "CONTRARIAN");
   check("prop: another player -> Hedge", classifySwapCandidate(lebron, nba("Anthony Davis Over 10.5 Rebounds", "PLAYER_PROP", 10.5)).tab === "HEDGE");
   check("prop: the same player, another stat -> Hedge", classifySwapCandidate(lebron, nba("LeBron James Over 7.5 Assists", "PLAYER_PROP", 7.5)).tab === "HEDGE");
-  check("prop: a prop against a side -> Hedge (both ways)", classifySwapCandidate(lebron, nba("Los Angeles Lakers ML", "MONEYLINE")).tab === "HEDGE" && classifySwapCandidate(nba("Los Angeles Lakers ML", "MONEYLINE"), lebron).tab === "HEDGE");
+  check("prop: a prop against a side with no status known -> Hedge (both ways)", classifySwapCandidate(lebron, nba("Los Angeles Lakers ML", "MONEYLINE")).tab === "HEDGE" && classifySwapCandidate(nba("Los Angeles Lakers ML", "MONEYLINE"), lebron).tab === "HEDGE");
+
+  // ---- Favorite / underdog split (Hedge vs Contrarian) -----------------------------------
+  const FAV = { own: "FAVORITE", home: null, away: null } as const;
+  const DOG = { own: "UNDERDOG", home: null, away: null } as const;
+  const giannis = nba("Giannis Antetokounmpo Under 11.5 Rebounds", "PLAYER_PROP", 11.5);
+  check("rule 1: the literal inverse of a prop is Contrarian whatever its status", classifySwapCandidate(giannis, nba("Giannis Antetokounmpo Over 11.5 Rebounds", "PLAYER_PROP", 11.5), FAV).tab === "CONTRARIAN");
+  check("rule 2: a prop leg, favorite ML candidate -> Hedge", classifySwapCandidate(giannis, nba("Los Angeles Lakers ML", "MONEYLINE"), FAV).tab === "HEDGE");
+  check("rule 2: a prop leg, underdog ML candidate -> Contrarian", classifySwapCandidate(giannis, nba("Los Angeles Lakers ML", "MONEYLINE"), DOG).tab === "CONTRARIAN");
+  check("rule 2: a prop leg, favorite / underdog spread candidates", classifySwapCandidate(giannis, nba("Los Angeles Lakers -5.5", "SPREAD", -5.5), FAV).tab === "HEDGE" && classifySwapCandidate(giannis, nba("Los Angeles Lakers +5.5", "SPREAD", 5.5), DOG).tab === "CONTRARIAN");
+  check("rule 3: a prop whose text names its team inherits that team's status (home dog -> Contrarian)", classifySwapCandidate(lebron, nba("Celtics Jayson Tatum Over 27.5 Points", "PLAYER_PROP", 27.5), { own: null, home: "UNDERDOG", away: "FAVORITE" }).tab === "CONTRARIAN");
+  check("rule 3: ... and a favorite's team's prop -> Hedge", classifySwapCandidate(lebron, nba("Celtics Jayson Tatum Over 27.5 Points", "PLAYER_PROP", 27.5), { own: null, home: "FAVORITE", away: "UNDERDOG" }).tab === "HEDGE");
+  check("rule 3: a prop whose team can't be read -> Hedge", classifySwapCandidate(lebron, nba("Jabari Smith Jr Over 15.5 Points", "PLAYER_PROP", 15.5), { own: null, home: "UNDERDOG", away: "UNDERDOG" }).tab === "HEDGE");
+  check("rule 4: a game total candidate is Hedge, even with a status around", classifySwapCandidate(giannis, nba("Over 228.5", "TOTAL", 228.5), DOG).tab === "HEDGE");
+  check("rule 2 with a team leg: an underdog ML in another market of the game -> Contrarian", classifySwapCandidate(nba("Los Angeles Lakers -5.5", "SPREAD", -5.5), nba("Boston Celtics ML", "MONEYLINE"), DOG).tab === "CONTRARIAN");
+  // Team identity beats status: the same team in another scope is Hedge even as the underdog.
+  const lakersDog = nba("Los Angeles Lakers +5.5", "SPREAD", 5.5);
+  const lakers1h = { ...nba("Los Angeles Lakers +2.5 1H", "SPREAD", 2.5), pick: { ...nba("Los Angeles Lakers +2.5 1H", "SPREAD", 2.5).pick, period: "FIRST_HALF" } };
+  check("same team, another scope, underdog -> Hedge (not Contrarian)", classifySwapCandidate(lakersDog, lakers1h, DOG).tab === "HEDGE");
+  check("opposing team, favorite -> Contrarian (status not consulted)", classifySwapCandidate(lakersDog, nba("Boston Celtics -5.5", "SPREAD", -5.5), FAV).tab === "CONTRARIAN" && classifySwapCandidate(lakersDog, nba("Boston Celtics ML", "MONEYLINE"), FAV).tab === "CONTRARIAN");
+  const lakersProp = nba("Lakers LeBron James Over 25.5 Points", "PLAYER_PROP", 25.5);
+  check("prop leg whose team is read: same-team ML (underdog) Hedge, opposing ML (favorite) Contrarian", classifySwapCandidate(lakersProp, nba("Los Angeles Lakers ML", "MONEYLINE"), DOG).tab === "HEDGE" && classifySwapCandidate(lakersProp, nba("Boston Celtics ML", "MONEYLINE"), FAV).tab === "CONTRARIAN");
+  check("a game total stays Hedge when the leg's team is known", classifySwapCandidate(lakersDog, nba("Over 228.5", "TOTAL", 228.5), DOG).tab === "HEDGE");
+  // Through legSwapOptions: a favorite-ML leg sees the underdog-side picks of its game as Contrarian.
+  const fo = legSwapOptions(snap, base, parlayOf(["fauml", "nyy"]).legs, 0, NOW);
+  const fw = (id: string) => tabOf(fo, id).join("|") || "none";
+  check("favorite-ML leg: underdog spreads (+4.5, +6.5, +5.5) and the dog ML are Contrarian", ["wm45", "wm65", "leg", "wmml"].every((id) => fw(id) === "CONTRARIAN"), ["wm45", "wm65", "leg", "wmml"].map(fw).join(","));
+  check("favorite-ML leg: the totals stay Hedge", fw("over") === "HEDGE" && fw("under") === "HEDGE", `${fw("over")} ${fw("under")}`);
   check("prop: the same player the other way, past tolerance -> none", classifySwapCandidate(lebron, nba("LeBron James Under 31.5 Points", "PLAYER_PROP", 31.5)).tab === null);
 
   // ---- The modal's display helpers ---------------------------------------------------------

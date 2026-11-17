@@ -10,8 +10,8 @@ import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
 export const SWAP_TAB_LABELS: Record<SwapTabKey, string> = { PRIMARY: "Primary", HEDGE: "Hedge", CONTRARIAN: "Contrarian", OTHER_GAMES: "Other games" };
 export const SWAP_TAB_HELP: Record<SwapTabKey, string> = {
   PRIMARY: "Same side and market — alternate lines",
-  HEDGE: "Same game, different market — can win alongside this pick",
-  CONTRARIAN: "The direct opposite of this pick",
+  HEDGE: "Same game — this pick's own team and game totals",
+  CONTRARIAN: "Same game — the direct opposite and the opposing team",
   OTHER_GAMES: "Replace this leg with a pick from a game not in your parlay",
 };
 export const SWAP_EMPTY: Record<SwapTabKey, string> = {
