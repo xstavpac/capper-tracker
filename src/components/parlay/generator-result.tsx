@@ -303,7 +303,7 @@ export function SwapModal({
         aria-modal="true"
         aria-labelledby={titleId}
         data-swap-modal
-        className="flex max-h-[92vh] w-full max-w-[680px] flex-col overflow-hidden rounded-t-2xl bg-white shadow-[0_24px_60px_rgba(3,11,41,0.35)] outline-none dark:bg-card sm:rounded-2xl"
+        className="flex max-h-[92vh] w-full max-w-[680px] flex-col overflow-hidden rounded-t-2xl bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_24px_60px_rgba(3,11,41,0.35)] outline-none dark:bg-card sm:rounded-2xl sm:pb-0"
       >
         {/* Header */}
         <div className="flex items-start gap-3 border-b border-[#0F1420]/[0.07] px-5 pb-3.5 pt-4 dark:border-white/10">

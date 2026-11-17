@@ -1,5 +1,6 @@
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveTicker } from "@/components/marketing/live-ticker";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
 import { getLiveTickerGames } from "@/server/data/live-ticker";
@@ -34,8 +35,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             showAdminOps={showAdminOps}
             reviewCount={reviewCount}
           />
-          {/* Full width. Its padding (p-4, md:p-8) is what ThemedPage's backdrop cancels - see themed-page.tsx. */}
-          <main className="flex-1 bg-background p-4 md:p-8">{children}</main>
+          {/* Full width. Below md the bottom padding also clears the fixed tab bar. Its padding (p-4, md:p-8) is what ThemedPage's backdrop cancels - see themed-page.tsx. */}
+          <main className="flex-1 bg-background p-4 max-md:pb-[calc(56px+env(safe-area-inset-bottom)+16px)] md:p-8">{children}</main>
+          <MobileTabBar />
         </div>
       </ParlayPoolProvider>
     </ThemeProvider>

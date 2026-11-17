@@ -60,6 +60,8 @@ export function SiteHeader({
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const avatarRef = useRef<HTMLButtonElement>(null);
+  const triggerWrapRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close on a route change.
@@ -72,13 +74,14 @@ export function SiteHeader({
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
       const target = e.target as Node;
-      if (menuRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target) || triggerWrapRef.current?.contains(target)) return;
       setOpen(false);
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       setOpen(false);
-      buttonRef.current?.focus();
+      // The hamburger (md+) or the avatar (below md), whichever is showing.
+      (buttonRef.current?.offsetParent ? buttonRef.current : avatarRef.current)?.focus();
     }
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -138,6 +141,23 @@ export function SiteHeader({
           )}
         </a>
 
+        <div ref={triggerWrapRef} className="contents">
+        {/* Below 768px: the account avatar (the page links are in the bottom tab bar). */}
+        <button
+          ref={avatarRef}
+          type="button"
+          aria-label="Account menu"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
+          onClick={() => setOpen((v) => !v)}
+          className={
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[15px] font-semibold text-white transition hover:bg-brand-600 md:hidden " +
+            (open ? "ring-2 ring-white/60" : "")
+          }
+        >
+          <span aria-hidden="true">{(user.name ?? user.email).charAt(0).toUpperCase()}</span>
+        </button>
+
         <button
           ref={buttonRef}
           type="button"
@@ -146,12 +166,13 @@ export function SiteHeader({
           aria-controls={open ? menuId : undefined}
           onClick={() => setOpen((v) => !v)}
           className={
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[#2A3A60] text-[#C9D3E6] transition hover:bg-white/5 hover:text-white " +
+            "hidden h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[#2A3A60] text-[#C9D3E6] transition hover:bg-white/5 hover:text-white md:flex " +
             (open ? "bg-white/10 text-white" : "")
           }
         >
           <MenuIcon />
         </button>
+        </div>
       </div>
 
       {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} slipSize={slipSize} onNavigate={() => setOpen(false)} />}

@@ -124,8 +124,8 @@ export const HeaderMenu = forwardRef<HTMLDivElement, HeaderMenuProps>(function H
       id={id}
       className="absolute right-4 top-full z-50 mt-2 max-h-[calc(100dvh-140px)] w-[300px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-[#E3E8F0] bg-white p-2 shadow-[0_18px_40px_rgba(5,11,28,.28)] dark:border-border dark:bg-card sm:right-6"
     >
-      {/* Below 1024px the header's tabs are hidden; the same list leads the menu. */}
-      <nav aria-label="Main" className="lg:hidden">
+      {/* From 768 to 1023px the header's tabs are hidden; the same list leads the menu. Below 768px the bottom tab bar (mobile-tab-bar.tsx) carries it, so the menu is account items only. */}
+      <nav aria-label="Main" className="hidden md:block lg:hidden">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const active = isActiveHref(pathname, item.href);
