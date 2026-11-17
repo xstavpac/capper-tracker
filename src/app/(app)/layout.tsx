@@ -1,5 +1,6 @@
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveTicker } from "@/components/marketing/live-ticker";
+import { MobileOnly } from "@/components/layout/mobile-only";
 import { SlateBarLoader } from "@/components/layout/slate-bar-loader";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -35,7 +36,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={{ name: user.name, email: user.email, profilePictureUrl: user.profilePictureUrl }}
             showAdminOps={showAdminOps}
             reviewCount={reviewCount}
-            slate={<SlateBarLoader />}
+            slate={
+              <MobileOnly>
+                <SlateBarLoader />
+              </MobileOnly>
+            }
           />
           {/* Full width. Below md the bottom padding also clears the fixed tab bar. Its padding (p-4, md:p-8) is what ThemedPage's backdrop cancels - see themed-page.tsx. */}
           <main className="flex-1 bg-background p-4 max-md:pb-[calc(56px+env(safe-area-inset-bottom)+16px)] md:p-8">{children}</main>

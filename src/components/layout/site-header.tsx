@@ -99,9 +99,11 @@ export function SiteHeader({
     <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-sm:flex-nowrap max-sm:gap-x-3 max-[419px]:gap-x-2 max-[379px]:pl-3 max-[379px]:pr-3 lg:flex-nowrap"}>
       <Link href="/dashboard" aria-label="BettingView" className="flex min-w-0 items-center gap-2.5 rounded-xl max-[379px]:gap-2 sm:shrink-0">
         <LogoMark />
-        {/* Below 640px the header is one row: the greeting takes whatever room is left beside Drop Catalog and the avatar (both
-            shrink-0) and truncates with an ellipsis. Hidden at 1024-1279px, where the tabs need the room. */}
-        <span className="min-w-0 whitespace-nowrap text-[16px] font-bold text-white max-[419px]:text-[15px] max-[349px]:overflow-hidden max-[349px]:text-ellipsis sm:text-[18px] lg:max-xl:hidden">Welcome back!</span>
+        {/* Below 1024px (where the Slate Bar shows): the greeting, one row beside Drop Catalog and the avatar (both
+            shrink-0); it takes the room that is left and truncates with an ellipsis. From 1024px: the original wordmark,
+            hidden at 1024-1279px where the tabs need the room. */}
+        <span className="min-w-0 whitespace-nowrap text-[16px] font-bold text-white max-[419px]:text-[15px] max-[349px]:overflow-hidden max-[349px]:text-ellipsis sm:text-[18px] lg:hidden">Welcome back!</span>
+        <span className="hidden whitespace-nowrap text-[18px] font-bold text-white xl:inline">BettingView</span>
       </Link>
 
       {/* From 1024px, in the header's single row (see TAB for the sizes per width). The nav fills the space between the logo and the right-hand buttons and centers the tab group in it.
