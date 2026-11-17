@@ -185,14 +185,16 @@ const mixed = uniqueMomentumEvents([
   upick({ pickedSide: "AWAY", status: "WIN", odds: 100, gradedAt: new Date("2026-11-07T22:00:30Z") }),
   upick({ betType: "SPREAD", line: -3, status: "WIN", odds: -110, units: 2, gradedAt: new Date("2026-11-07T23:00:00Z") }),
   upick({ betType: "SPREAD", line: -3, status: "WIN", odds: -110, units: 3, gradedAt: new Date("2026-11-07T22:50:00Z") }),
+  upick({ betType: "TOTAL", line: 47.5, betDetail: "Over 47.5", status: "WIN", odds: 100, units: 1, gradedAt: new Date("2026-11-07T23:30:00Z") }),
+  upick({ betType: "TOTAL", line: 47.5, betDetail: "Over 47.5", status: "WIN", odds: -120, units: 1, gradedAt: new Date("2026-11-07T23:40:00Z") }),
   upick({ betType: "SPREAD", line: -7, status: "PUSH" }),
   upick({ betType: "TOTAL", line: 44.5, betDetail: "Over 44.5", status: "PENDING", gradedAt: null }),
   upick({ betType: "TOTAL", line: 40.5, betDetail: "Over 40.5", status: "LOSS", gradedAt: null }),
 ]);
 check(
-  "different bets count once each; push and pending move nothing; units and odds are averaged across copies",
+  "different bets count once each; push and pending move nothing; each copy's own net units are averaged (never the odds)",
   [mixed.events.map((e) => [e.t, e.d]), mixed.unstamped],
-  [[[at("2026-11-07T22:00:00"), -1], [at("2026-11-07T22:00:30"), 1], [at("2026-11-07T22:50:00"), 2.5 * (100 / 110)]], -1]
+  [[[at("2026-11-07T22:00:00"), -1], [at("2026-11-07T22:00:30"), 1], [at("2026-11-07T22:50:00"), (2 * (100 / 110) + 3 * (100 / 110)) / 2], [at("2026-11-07T23:30:00"), (1 + 100 / 120) / 2]], -1]
 );
 check(
   "graded-copy disagreement: majority decides; a tie moves nothing",
