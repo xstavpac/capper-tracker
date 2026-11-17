@@ -96,11 +96,12 @@ export function SiteHeader({
 
   return (
     <header className="relative z-40 bg-[#0A1530]">
-    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 lg:flex-nowrap"}>
-      <Link href="/dashboard" aria-label="BettingView" className="flex shrink-0 items-center gap-2.5 rounded-xl">
+    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-sm:flex-nowrap max-sm:gap-x-3 lg:flex-nowrap"}>
+      <Link href="/dashboard" aria-label="BettingView" className="flex min-w-0 items-center gap-2.5 rounded-xl sm:shrink-0">
         <LogoMark />
-        {/* Below 640px and at 1024-1279px: the tile only (the phone header must hold one row beside the labeled Drop Catalog button). */}
-        <span className="hidden whitespace-nowrap text-[18px] font-bold text-white sm:inline lg:max-xl:hidden">Welcome back!</span>
+        {/* Below 640px the header is one row: the greeting takes whatever room is left beside Drop Catalog and the avatar (both
+            shrink-0) and truncates with an ellipsis. Hidden at 1024-1279px, where the tabs need the room. */}
+        <span className="min-w-0 truncate whitespace-nowrap text-[16px] font-bold text-white sm:overflow-visible sm:text-[18px] lg:max-xl:hidden">Welcome back!</span>
       </Link>
 
       {/* From 1024px, in the header's single row (see TAB for the sizes per width). The nav fills the space between the logo and the right-hand buttons and centers the tab group in it.

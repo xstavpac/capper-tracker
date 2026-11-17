@@ -58,6 +58,39 @@ check("then the rest in chip order", order.slice(3).join() === ["americanfootbal
 check("every league has a logo URL on ESPN's CDN", SLATE_LEAGUES.every((l) => l.logo.startsWith("https://a.espncdn.com/")));
 check("chip order is NBA NFL NHL NCAAB NCAAF MLB WNBA", SLATE_LEAGUES.map((l) => l.label).join() === "NBA,NFL,NHL,NCAAB,NCAAF,MLB,WNBA");
 
+// A weekly scoreboard (ESPN returns the whole week for NFL and NCAAF): only the selected day's games count.
+// "Now" is Tuesday 2026-11-17 noon ET. Games on Sun 15th .. Sun 22nd, none on the 17th itself for NFL.
+const weekly = (sportKey: string, days: { iso: string; status: string; n: number }[]) => ({
+  sportKey,
+  inSeason: true,
+  failed: false,
+  games: days.flatMap((d) => Array.from({ length: d.n }, () => ({ status: d.status, commenceTime: d.iso }))),
+});
+const week = buildSlateCounts(
+  [
+    weekly("americanfootball_nfl", [
+      { iso: "2026-11-15T18:00:00Z", status: "final", n: 13 }, // Sunday (2 days back)
+      { iso: "2026-11-17T01:15:00Z", status: "final", n: 1 }, // Mon 8:15pm ET = yesterday
+      { iso: "2026-11-20T01:15:00Z", status: "preview", n: 1 }, // Thu 8:15pm ET (Nov 19: the day after tomorrow)
+      { iso: "2026-11-22T18:00:00Z", status: "preview", n: 13 }, // next Sunday
+    ]),
+    weekly("americanfootball_ncaaf", [
+      { iso: "2026-11-14T17:00:00Z", status: "final", n: 40 }, // last Saturday
+      { iso: "2026-11-18T01:00:00Z", status: "preview", n: 2 }, // Tue 8pm ET = today
+      { iso: "2026-11-19T01:00:00Z", status: "preview", n: 3 }, // Wed 8pm ET = tomorrow
+      { iso: "2026-11-21T17:00:00Z", status: "preview", n: 50 }, // Saturday
+    ]),
+  ],
+  now
+);
+const wk = (key: string) => week.leagues.find((l) => l.sportKey === key)!;
+check("weekly NFL: today has 0 games (no game on the 17th)", wk("americanfootball_nfl").days.today.games === 0, wk("americanfootball_nfl").days);
+check("weekly NFL: yesterday counts only the Monday-night game, not Sunday's 13", wk("americanfootball_nfl").days.yesterday.games === 1, wk("americanfootball_nfl").days);
+check("weekly NFL: tomorrow has 0 games (the Thursday game is 2 days out)", wk("americanfootball_nfl").days.tomorrow.games === 0, wk("americanfootball_nfl").days);
+check("weekly NCAAF: today 2, tomorrow 3, yesterday 0 (Saturdays never leak in)", (() => { const d = wk("americanfootball_ncaaf").days; return d.today.games === 2 && d.tomorrow.games === 3 && d.yesterday.games === 0; })(), wk("americanfootball_ncaaf").days);
+check("weekly leagues: totals use the selected day only", slateTotals(week, "today").pending === 2 && slateTotals(week, "tomorrow").pending === 3, [slateTotals(week, "today"), slateTotals(week, "tomorrow")]);
+check("weekly NFL with no game today is ordered after leagues that have games today", orderSlateLeagues(week, "today").map((l) => l.sportKey).join() === "americanfootball_ncaaf,americanfootball_nfl", orderSlateLeagues(week, "today").map((l) => l.sportKey));
+
 // ?status= filter on the Live board.
 check("status param parsing", parseBoardStatusFilter("live") === "live" && parseBoardStatusFilter("pending") === "pending" && parseBoardStatusFilter("x") === null && parseBoardStatusFilter(undefined) === null);
 const todayKey = "2026-11-17";
