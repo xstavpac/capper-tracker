@@ -4,6 +4,8 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildMomentum, clockLabel, momentumMatchesTile, type MomentumEvent, type MomentumPoint } from "@/lib/momentum";
 import { TrendingUpIcon } from "@/components/dashboard/cappers-icons";
+import { buildDailyMomentum, MOMENTUM_RANGES, type DailyNet, type MomentumRange } from "@/lib/momentum-daily";
+import { loadMomentumDailyAction } from "@/server/actions/momentum-daily";
 
 const GREEN_LINE = "#22a55a";
 const RED_LINE = "#dc2626";
@@ -29,6 +31,8 @@ export function MomentumCard({
   tileNet,
   isToday,
   dayEnd,
+  todayKey,
+  rangeFilters,
 }: {
   events: MomentumEvent[];
   unstamped: number;
@@ -40,6 +44,10 @@ export function MomentumCard({
   isToday: boolean;
   // Epoch ms of the selected Eastern day's end (exclusive); late grades fold into the last in-day point.
   dayEnd?: number;
+  // The 7D / 30D toggle shows only when both are given (today's view, bet-type chip off). todayKey ends the
+  // window; rangeFilters are the page's capper / sport / result chips, which the daily query honours too.
+  todayKey?: string;
+  rangeFilters?: { capperId?: string; sportId?: string; status?: string };
 }) {
   const uid = useId().replace(/:/g, "");
   const [tz, setTz] = useState<string | null>(null);
@@ -51,19 +59,44 @@ export function MomentumCard({
 
   const [mode, setMode] = useState<"all" | "unique">("all");
   const unique = mode === "unique";
-  const m = useMemo(
-    () => (tz ? buildMomentum(unique ? uniqueEvents : events, unique ? uniqueUnstamped : unstamped, { now, isToday, tz, dayEnd }) : null),
-    [events, unstamped, uniqueEvents, uniqueUnstamped, unique, now, isToday, tz, dayEnd]
-  );
+  const canRange = isToday && !!todayKey && !!rangeFilters;
+  const [range, setRange] = useState<"today" | MomentumRange>("today");
+  const activeRange: "today" | MomentumRange = canRange ? range : "today";
+  const ranged = activeRange !== "today";
+  const filterKey = JSON.stringify(rangeFilters ?? {}) + "|" + (todayKey ?? "");
+  // Daily rows per range, fetched on first tap only (one grouped query, <= 30 rows) and kept for the page's life.
+  const [daily, setDaily] = useState<Record<string, DailyNet[]>>({});
+  const [failed, setFailed] = useState<string | null>(null);
+  const dailyKey = activeRange + "|" + filterKey;
+  const dailyRows = ranged ? daily[dailyKey] : undefined;
+  useEffect(() => {
+    if (!ranged || daily[dailyKey]) return;
+    let live = true;
+    setFailed(null);
+    loadMomentumDailyAction(activeRange, rangeFilters ?? {}).then((r) => {
+      if (!live) return;
+      if (r.success) setDaily((d) => ({ ...d, [dailyKey]: r.rows }));
+      else setFailed(dailyKey);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ranged, dailyKey]);
+
+  const m = useMemo(() => {
+    if (ranged) return dailyRows && todayKey ? buildDailyMomentum(dailyRows, activeRange as MomentumRange, todayKey) : null;
+    return tz ? buildMomentum(unique ? uniqueEvents : events, unique ? uniqueUnstamped : unstamped, { now, isToday, tz, dayEnd }) : null;
+  }, [ranged, dailyRows, activeRange, todayKey, events, unstamped, uniqueEvents, uniqueUnstamped, unique, now, isToday, tz, dayEnd]);
 
   useEffect(() => {
     // The Net Units tile is the all-picks total; the unique line is expected to differ from it.
-    if (m && !unique && process.env.NODE_ENV !== "production" && !momentumMatchesTile(m.net, tileNet)) {
+    if (m && !ranged && !unique && process.env.NODE_ENV !== "production" && !momentumMatchesTile(m.net, tileNet)) {
       console.warn("[momentum] last point " + m.net + "u differs from the Net Units tile " + tileNet + "u");
     }
-  }, [m, tileNet, unique]);
+  }, [m, tileNet, unique, ranged]);
 
-  const net = m ? m.net : unique ? 0 : tileNet;
+  const net = m ? m.net : ranged || unique ? 0 : tileNet;
   const down = net < 0;
   const pill = PILL[m ? m.trend : "flat"];
 
@@ -85,7 +118,7 @@ export function MomentumCard({
       >
         <div className="flex items-center gap-2.5">
           <TrendingUpIcon className="h-[22px] w-[22px]" />
-          <h2 className="text-[19px] font-bold">{isToday ? "Today's Momentum" : "Day's Momentum"}</h2>
+          <h2 className="text-[19px] font-bold">{ranged ? (activeRange === "7D" ? "7-Day Momentum" : "30-Day Momentum") : isToday ? "Today's Momentum" : "Day's Momentum"}</h2>
         </div>
         <div>
           <p
@@ -96,24 +129,43 @@ export function MomentumCard({
           >
             {(net > 0 ? "+" : "") + net.toFixed(2) + "u"}
           </p>
-          <p className="mt-1.5 text-base text-foreground/80">{unique ? "Current Net Units (unique)" : "Current Net Units"}</p>
+          <p className="mt-1.5 text-base text-foreground/80">{ranged ? "Net Units, last " + (activeRange === "7D" ? "7" : "30") + " days" : unique ? "Current Net Units (unique)" : "Current Net Units"}</p>
         </div>
       </div>
 
       <div className="flex min-w-0 flex-[999_1_340px] flex-col">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div role="group" aria-label="Momentum picks" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
-            {(["all", "unique"] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={mode === k}
-                onClick={() => setMode(k)}
-                className={"rounded-full px-3 py-1 " + (mode === k ? "bg-foreground text-background" : "text-foreground/70 hover:text-foreground")}
-              >
-                {k === "all" ? "All Picks" : "Unique Picks"}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {canRange && (
+              <div role="group" aria-label="Momentum range" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
+                {(["today", ...MOMENTUM_RANGES] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={activeRange === k}
+                    onClick={() => setRange(k)}
+                    className={"rounded-full px-3 py-1 " + (activeRange === k ? "bg-foreground text-background" : "text-foreground/70 hover:text-foreground")}
+                  >
+                    {k === "today" ? "Today" : k}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!ranged && (
+            <div role="group" aria-label="Momentum picks" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
+              {(["all", "unique"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={mode === k}
+                  onClick={() => setMode(k)}
+                  className={"rounded-full px-3 py-1 " + (mode === k ? "bg-foreground text-background" : "text-foreground/70 hover:text-foreground")}
+                >
+                  {k === "all" ? "All Picks" : "Unique Picks"}
+                </button>
+              ))}
+            </div>
+            )}
           </div>
           <span className={"flex items-center gap-2 rounded-full px-3.5 py-[7px] text-sm font-semibold " + pill.cls}>
             <span className="h-[9px] w-[9px] rounded-full" style={{ background: pill.dot }} />
@@ -121,14 +173,18 @@ export function MomentumCard({
           </span>
         </div>
         <div className="-mt-2 h-[230px] w-full text-slate-600 dark:text-slate-300">
-          {m ? <Chart m={m} tz={tz as string} uid={uid} isToday={isToday} down={down} /> : null}
+          {m ? (
+            <Chart m={m} tz={tz ?? "UTC"} uid={uid} isToday={isToday} down={down} ranged={ranged} />
+          ) : ranged ? (
+            <p className="flex h-full items-center justify-center text-sm font-medium text-muted-foreground">{failed === dailyKey ? "Couldn't load this range" : "Loading…"}</p>
+          ) : null}
         </div>
       </div>
     </section>
   );
 }
 
-function Chart({ m, tz, uid, isToday, down }: { m: NonNullable<ReturnType<typeof buildMomentum>>; tz: string; uid: string; isToday: boolean; down: boolean }) {
+function Chart({ m, tz, uid, isToday, down, ranged }: { m: NonNullable<ReturnType<typeof buildMomentum>>; tz: string; uid: string; isToday: boolean; down: boolean; ranged: boolean }) {
   const tickLabel = new Map(m.xTicks.map((t) => [t.t, t.label]));
   const last = m.points[m.points.length - 1];
   const grid = down ? "#f2dfe1" : "#dcefe2";
@@ -204,7 +260,7 @@ function Chart({ m, tz, uid, isToday, down }: { m: NonNullable<ReturnType<typeof
       </ResponsiveContainer>
       {m.empty && (
         <p className="pointer-events-none absolute inset-0 flex items-center justify-center pb-6 text-sm font-medium text-muted-foreground">
-          {isToday ? "No picks graded yet today" : "No picks graded this day"}
+          {ranged ? "No picks graded in this range" : isToday ? "No picks graded yet today" : "No picks graded this day"}
         </p>
       )}
     </div>
@@ -238,12 +294,12 @@ function MomentumTip({ active, payload, tz }: { active?: boolean; payload?: { pa
   if (!p) return null;
   return (
     <div className="rounded-xl border border-border bg-card px-3 py-2 shadow-lg">
-      <p className="text-xs font-semibold text-muted-foreground">{clockLabel(p.t, tz)}</p>
+      <p className="text-xs font-semibold text-muted-foreground">{p.label ?? clockLabel(p.t, tz)}</p>
       <p className="mt-0.5 text-lg font-extrabold tabular-nums" style={{ color: dotColor(p.v) }}>
         {u2(p.v) + " net"}
       </p>
       <p className="mt-0.5 text-xs text-foreground/80 tabular-nums">
-        {p.prevT === null ? "Start" : u2(p.change) + " since " + clockLabel(p.prevT, tz)}
+        {p.label !== undefined ? u2(p.change) + " that day" : p.prevT === null ? "Start" : u2(p.change) + " since " + clockLabel(p.prevT, tz)}
       </p>
     </div>
   );

@@ -322,7 +322,7 @@ export default async function PicksPage({
 
           {/* One day only: a range has no single "today" to chart. Same rows and filters as the Net Units tile. */}
           {!isRange && (
-            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} uniqueEvents={uniqueMomentum.events} uniqueUnstamped={uniqueMomentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} dayEnd={easternDateRange(startDateKey, startDateKey).end.getTime()} />
+            <MomentumCard events={momentum.events} unstamped={momentum.unstamped} uniqueEvents={uniqueMomentum.events} uniqueUnstamped={uniqueMomentum.unstamped} tileNet={summary.netUnits} isToday={startDateKey === todayKey} dayEnd={easternDateRange(startDateKey, startDateKey).end.getTime()} todayKey={betTypeFilter ? undefined : todayKey} rangeFilters={betTypeFilter ? undefined : { capperId: filters.capperId, sportId: sportIdFilter, status: filters.status }} />
           )}
 
           <AtAGlance label={dateChipLabel + " at a glance"} columns={backed ? 3 : 2}>
