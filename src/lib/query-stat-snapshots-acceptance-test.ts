@@ -41,7 +41,8 @@ const src = (p: string) => readFileSync(join(root, p), "utf8");
   expect("tracked list = the named queries + the two recent-swings reads", TRACKED_LABELS, [...wanted, RECENT_SWINGS_SCORES_LABEL, RECENT_SWINGS_LINES_LABEL]);
   // Every real captured statement of a tracked monitor label is tracked; nothing else is.
   for (const fx of STATEMENT_FIXTURES) {
-    const expected = fx.expectLabel && wanted.includes(fx.expectLabel) ? fx.expectLabel : null;
+    // The recent-swings stored-lines read has a monitor label too; its as-sent text still matches its own tracked fingerprint.
+    const expected = fx.expectLabel && (wanted.includes(fx.expectLabel) || fx.expectLabel === RECENT_SWINGS_LINES_LABEL) ? fx.expectLabel : null;
     expect(`fixture ${fx.name}: tracked as ${expected}`, trackedLabelFor(fx.sql), expected);
   }
   for (const label of wanted) expect(`a captured fixture exists for "${label}"`, STATEMENT_FIXTURES.some((f) => f.expectLabel === label), true);

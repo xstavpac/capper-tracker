@@ -173,6 +173,14 @@ const ROSTER_DIFF_COLUMNS = /^SELECT "(?:nfl|mlb|nhl|nba)_roster_players"\."id",
 // maxAvgRows it is shown with `note` instead of a row-threshold flag.
 export type ExpectedHeavy = { maxAvgRows: number; note: string };
 const DAILY_FULL_HISTORY: ExpectedHeavy = { maxAvgRows: EXPECTED_HEAVY_MAX_AVG_ROWS, note: EXPECTED_HEAVY_NOTE };
+// A manual script that reads every qualifying pick on purpose. Its row count is the
+// whole history, which grows with the table, so no fixed ceiling fits it: nothing is
+// ever above Infinity, so the row-threshold flag never fires.
+const MANUAL_ALL_HISTORY: ExpectedHeavy = { maxAvgRows: Infinity, note: "expected (manual script, all history)" };
+
+// Shared with query-stat-snapshots.ts (which imports this module), so the DB Monitor and
+// the trend panel name the readStoredLines statement the same way.
+export const RECENT_SWINGS_LINES_LABEL = "Recent swings (stored lines)";
 
 export type StatementLabel = {
   label: string;
@@ -528,11 +536,55 @@ export const STATEMENT_LABELS: StatementLabel[] = [
   },
   {
     // Every user's full-game ML / spread / total picks that have started, test cappers
-    // left out: the last few Eastern dates nightly, all history from the backfill script.
+    // left out, from the last few Eastern dates: the bounded window (gameTime >= $n) the
+    // refresh-scores cron sends nightly. The name keeps "/ backfill" so the trend's stored
+    // label (query_stat_daily, and the baselines' label column) stays this exact string;
+    // the backfill script has its own label below.
     label: "Heavy Consensus history (nightly / backfill)",
-    source: "loadHeavyConsensusInstances (heavy-consensus.ts, refresh-scores cron; scripts/backfill-heavy-consensus.ts)",
-    matches: (s) => reads(s, "picks") && has(s, /LEFT JOIN "cappers" AS "j1" ON/) && has(s, /"j1"\."isTest" = \$\d+/) && has(s, GAME_TIME_LT),
+    source: "loadHeavyConsensusInstances (heavy-consensus.ts, refresh-scores cron, bounded window)",
+    matches: (s) =>
+      reads(s, "picks") && has(s, /LEFT JOIN "cappers" AS "j1" ON/) && has(s, /"j1"\."isTest" = \$\d+/) && has(s, GAME_TIME_LT) && has(s, GAME_TIME_GTE),
     expected: DAILY_FULL_HISTORY,
+  },
+  {
+    // The same read with no lower bound: loadHeavyConsensusInstances(now, null), sent only by
+    // scripts/backfill-heavy-consensus.ts (dry run and --apply). Its row count is every
+    // qualifying pick in the table, so it scales with total history and is not a
+    // fixed-ceiling case: MANUAL_ALL_HISTORY has no ceiling, so no row-threshold flag.
+    label: "Heavy Consensus history (manual all-history backfill)",
+    source: "loadHeavyConsensusInstances with no fromDate (scripts/backfill-heavy-consensus.ts, run by hand)",
+    matches: (s) =>
+      reads(s, "picks") && has(s, /LEFT JOIN "cappers" AS "j1" ON/) && has(s, /"j1"\."isTest" = \$\d+/) && has(s, GAME_TIME_LT) && !has(s, GAME_TIME_GTE),
+    expected: MANUAL_ALL_HISTORY,
+  },
+  // ---- The DB Monitor's own reads and writes (db-stats-snapshot cron; query-stat-snapshots.ts) ----
+  {
+    // The one statement that reads the counters: pg_stat_statements LEFT JOIN query_stat_baselines,
+    // prefiltered by `s.query ~ $1` and two NOT LIKE exclusions (the shape in production's own
+    // pg_stat_statements, checked 2026-11-16).
+    label: "DB Monitor: self-read (pg_stat_statements)",
+    source: "readCurrent (query-stat-snapshots.ts, db-stats-snapshot cron)",
+    matches: (s) => has(s, /FROM extensions\.pg_stat_statements s LEFT JOIN query_stat_baselines b ON b\.queryid = s\.queryid::text/),
+  },
+  {
+    // $executeRaw sends the table name unquoted (Prisma's own writes quote it).
+    label: "DB Monitor: self-write (baseline update)",
+    source: "runQueryStatSnapshot (query-stat-snapshots.ts, db-stats-snapshot cron): the baseline upsert",
+    matches: (s) => /^INSERT INTO "?query_stat_baselines"? /.test(s.text) && has(s, /ON CONFLICT \(queryid\) DO UPDATE/),
+  },
+  {
+    label: "DB Monitor: self-read (baselines)",
+    source: "readBaselines (query-stat-snapshots.ts, db-stats-snapshot cron)",
+    matches: (s) => reads(s, "query_stat_baselines") && s.where === "",
+  },
+  // ---- Hybrid generator ----
+  {
+    // The main spread / total of every stored snapshot game on the teams a Hybrid run asks
+    // about; the jsonb_path_query laterals run in Postgres. Cached per sport and Eastern day.
+    label: RECENT_SWINGS_LINES_LABEL,
+    source: "readStoredLines (recent-swings.ts, via getRecentSwings in the Hybrid generator)",
+    // pg_stat_statements stores the literal key as a parameter (g.elem->>$6); the as-sent text has 'id'.
+    matches: (s) => /^SELECT s\."fetchDate", g\.elem->>(?:'id'|\$\d+) AS "eventId"/.test(s.text) && /FROM odds_snapshots s\b/.test(s.text),
   },
 ];
 

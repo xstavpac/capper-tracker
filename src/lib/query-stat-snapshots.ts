@@ -1,4 +1,6 @@
-import { describeStatement, labelFor, normalizeSql, formatNumber, formatAvg } from "@/lib/db-monitor";
+import { describeStatement, labelFor, normalizeSql, formatNumber, formatAvg, RECENT_SWINGS_LINES_LABEL } from "@/lib/db-monitor";
+
+export { RECENT_SWINGS_LINES_LABEL };
 
 // Pure half of the daily pg_stat_statements snapshot (cron db-stats-snapshot).
 //
@@ -29,13 +31,12 @@ const monitorLabel = (label: string, source: string): TrackedQuery => ({
   matches: (text) => labelFor(describeStatement(text)) === label,
 });
 
-// The recent-swings reads have no DB Monitor label (it would need a captured fixture
-// per label). Their fingerprints are the opening of each statement in
-// src/server/data/recent-swings.ts, as pg_stat_statements stores it (literals -> $n).
-// Not yet checked against a production capture: until a prod snapshot shows a
-// non-zero row for each, treat "no calls" as "not matched" rather than "not run".
+// The recent-swings scores read still has no DB Monitor label; the stored-lines read has
+// one in db-monitor.ts (same name, imported above). Their fingerprints are the opening of
+// each statement in src/server/data/recent-swings.ts, as pg_stat_statements stores it
+// (literals -> $n). Not yet checked against a production capture: until a prod snapshot
+// shows a non-zero row for each, treat "no calls" as "not matched" rather than "not run".
 export const RECENT_SWINGS_SCORES_LABEL = "Recent swings (scores)";
-export const RECENT_SWINGS_LINES_LABEL = "Recent swings (stored lines)";
 
 export const TRACKED_QUERIES: TrackedQuery[] = [
   monitorLabel("Board window", "boardPicksInWindow (picks.ts; /live board, game detail)"),
