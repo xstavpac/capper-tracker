@@ -2,7 +2,7 @@
 // generator.ts, and the session's swapOptions / swapLeg). The modal's tabs have their own
 // proof (swap-modal-acceptance-test.ts). Pinned:
 //   - This game: only picks on the swapped leg's game; Other games: never a game already in the parlay;
-//   - no alternative is in the parlay or the slip, opposes a same-game leg, or breaks max legs per game;
+//   - no alternative is in the parlay or a generated copy of a slip pick (slip picks come in ungated, after the gated ones), opposes a same-game leg, or breaks max legs per game;
 //   - every alternative clears the win-rate gate and the star; ordered by the build's ranking;
 //   - repeated swaps (the same leg, other legs) stay valid against the current legs;
 //   - SGP / no-odds states follow the legs (an Other-games swap that breaks a pair), priced by combineOdds;
@@ -94,7 +94,7 @@ function validAgainst(snapshot: GeneratorSnapshot, settings: GeneratorSettings, 
   for (const a of alts.otherGames) if (parlayGames.has(a.gameId)) bad.push(a.pick.pickId + " other-games on a parlay game");
   for (const a of all(alts)) {
     if (inParlay.has(a.pick.pickId)) bad.push(a.pick.pickId + " already in the parlay");
-    if (settings.fillFrom === "BEST_AVAILABLE" && slip.has(a.pick.pickId)) bad.push(a.pick.pickId + " is a slip pick");
+    if (settings.fillFrom === "BEST_AVAILABLE" && slip.has(a.pick.pickId) && a.source !== "SLIP") bad.push(a.pick.pickId + " is a slip pick, generated");
     const siblings = others.filter((l) => l.gameId === a.gameId);
     if (siblings.length >= settings.maxLegsPerGame) bad.push(a.pick.pickId + " breaks max legs per game");
     for (const s of siblings) if (sameGameConflict(asC(a.pick), asC(s.pick)) !== null) bad.push(a.pick.pickId + " conflicts with " + s.pick.pickId);
@@ -127,6 +127,20 @@ async function main() {
   check("swap options: Other games is exactly the alternatives' Other games", ids(o0.OTHER_GAMES).join() === ids(a0.otherGames).join());
   check("swap options: every same-game tab row is a This-game alternative", ["PRIMARY", "HEDGE", "CONTRARIAN"].every((t) => o0[t as "PRIMARY"].filter((x) => !x.current).every((x) => a0.thisGame.some((l) => l.pick.pickId === x.pick.pickId))));
   check("swap options: the opposing ML is Contrarian, the totals Hedge (an ML leg)", ids(o0.CONTRARIAN).join() === "g" + p0.legs[0].gameId.slice(1) + "a" && o0.HEDGE.length === 2, JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(o0[t])]))));
+
+  // ---- Best available: your unused slip picks, ungated, after the gated ones ----
+  const slipSnap = snapshotOf(["g0low", "g4low"]);
+  const sba = legAlternatives(slipSnap, base, p0.legs, 0, NOW);
+  const sbo = legSwapOptions(slipSnap, base, p0.legs, 0, NOW);
+  const slipOf = (ls: EngineLeg[]) => ls.filter((l) => l.source === "SLIP");
+  check("Best available: a below-gate slip pick is offered (This game and Other games)", ids(slipOf(sba.thisGame)).join() === "g0low" && ids(slipOf(sba.otherGames)).join() === "g4low", ids(all(sba)).join(","));
+  check("Best available: slip picks come after every gate-qualifying pick in each list", [sba.thisGame, sba.otherGames].every((ls) => ls.findIndex((l) => l.source === "SLIP") === ls.length - slipOf(ls).length));
+  check("Best available: the gated rows are exactly what they were with no slip", ids(sba.thisGame.filter((l) => l.source !== "SLIP")).join() === ids(a0.thisGame).join() && ids(sba.otherGames.filter((l) => l.source !== "SLIP")).join() === ids(a0.otherGames).join());
+  check("Best available: the slip total classifies Hedge against the ML leg, last in the tab", sbo.HEDGE.length > 0 && sbo.HEDGE[sbo.HEDGE.length - 1].pick.pickId === "g0low" && !sbo.PRIMARY.some((l) => l.pick.pickId === "g0low") && !sbo.CONTRARIAN.some((l) => l.pick.pickId === "g0low"), JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(sbo[t])]))));
+  check("Best available: the slip pick carries no marker (no note)", sbo.HEDGE.every((l) => l.pick.pickId !== "g0low" || l.note === undefined));
+  check("Best available: a slip pick already in the parlay is not offered twice", !all(legAlternatives(snapshotOf(ids(p0.legs)), base, p0.legs, 0, NOW)).some((l) => ids(p0.legs).includes(l.pick.pickId)));
+  const ya = legAlternatives(snapshotOf(["g0low", "g4low"]), { ...base, fillFrom: "YOUR_PICKS_ONLY" }, p0.legs, 0, NOW);
+  check("Your picks only: unchanged (slip picks only, in slip order)", ids(all(ya)).join() === "g0low,g4low", ids(all(ya)).join(","));
 
   // ---- The star ----
   const fav: GeneratorSettings = { ...base, favoritesOnly: true };
