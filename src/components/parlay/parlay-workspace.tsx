@@ -21,6 +21,7 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
       <StatCard
+        glass
         label="Your picks"
         icon={<ClipboardIcon className={ICON} />}
         iconClass={TINTS.blue.iconWrap}
@@ -29,6 +30,7 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
         sub="always in the parlay"
       />
       <StatCard
+        glass
         label="Targeting"
         icon={<TargetIcon className={ICON} />}
         iconClass={TINTS.violet.iconWrap}
@@ -37,6 +39,7 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
         sub={targets.length === 0 ? "every unstarted game in your leagues" : "targeted games and your picks' games"}
       />
       <StatCard
+        glass
         label="Legs"
         icon={<ListChecksIcon className={ICON} />}
         iconClass={TINTS.green.iconWrap}
@@ -51,9 +54,9 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
 export function ParlayWorkspace({ leagues, hasFavorites = true }: { leagues: string[]; hasFavorites?: boolean }) {
   const [summary, setSummary] = useState<GeneratorSummary>(null);
   return (
-    <>
+    <div className="parlay-glass space-y-3.5 p-3.5 sm:p-5">
       <ParlayStatCards summary={summary} />
       <GeneratorCard leagues={leagues} hasFavorites={hasFavorites} onSummary={setSummary} />
-    </>
+    </div>
   );
 }

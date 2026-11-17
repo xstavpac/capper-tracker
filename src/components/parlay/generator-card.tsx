@@ -335,6 +335,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
       <PanelShell
         theme={{
           ...TINTS.neutral,
+          card: "glass-card p-3.5",
           title: "Parlay Generator",
           subtitle: "Build parlays using your picks or target games. The rest are the best qualified picks from your cappers.",
           icon: <BoltIcon className="h-[17px] w-[17px] stroke-[2.2]" />,
@@ -522,7 +523,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                   "inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition " +
                   (favoritesOnly
                     ? "border-[#f5c451] bg-[#fff7e0] text-[#b45309] dark:bg-amber-500/15 dark:text-amber-400"
-                    : "border-[#DADDE5] bg-white text-muted-foreground hover:text-[#f59e0b] dark:border-border dark:bg-card")
+                    : "pill-inactive hover:text-[#b45309]")
                 }
               >
                 <StarIcon filled={favoritesOnly} className="h-4 w-4" />
