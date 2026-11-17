@@ -7,6 +7,6 @@ export const LIVE_PILL_OFF =
 export const LIVE_PILL_ON =
   "border-transparent bg-[linear-gradient(180deg,#3b82f6,#1d4ed8)] text-white shadow-[0_6px_18px_rgba(37,99,235,.45),inset_0_1px_0_rgba(255,255,255,.35)] ";
 // A row of pills: 8px between them, scrolls sideways (no visible bar) when it overflows. The
-// vertical padding keeps the pills' shadows from being clipped by the overflow.
+// padding (and the matching negative margin) keeps the pills' shadows from being clipped by the overflow.
 export const LIVE_PILL_ROW =
-  "-my-2 flex gap-2 overflow-x-auto py-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+  "-mx-4 -my-5 flex gap-2 overflow-x-auto px-4 py-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";

@@ -64,7 +64,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   // is drawn twice: in the leagues' second row below 768px, and last in the row from 768px. The
   // hidden copy is display:none, so it is neither seen nor read.
   return (
-    <div className="flex max-w-full flex-col gap-[14px] md:flex-row md:flex-wrap md:items-center md:gap-3">
+    <div className="flex max-w-full flex-col gap-[14px] md:flex-row md:flex-wrap md:items-center md:gap-x-3 md:gap-y-[10px]">
       <nav aria-label="League" className="flex flex-col gap-[14px] md:flex-row md:flex-wrap md:gap-2">
         <div className={LIVE_PILL_ROW + " md:contents"}>{leagues.slice(0, FIRST_ROW).map(leaguePill)}</div>
         <div className={LIVE_PILL_ROW + " md:contents"}>
@@ -72,7 +72,8 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
           <div className="flex-none md:hidden">{children}</div>
         </div>
       </nav>
-      <nav aria-label="View" className={LIVE_PILL_ROW + " md:!my-0 md:!py-0"}>
+      <div className="flex flex-col gap-[14px] md:flex-none md:flex-row md:items-center md:gap-3">
+      <nav aria-label="View" className={LIVE_PILL_ROW + " md:!m-0 md:!overflow-visible md:!p-0"}>
         <div className="flex h-[46px] flex-none items-center gap-[3px] rounded-full border border-[#dbe5f6] bg-[rgba(255,255,255,.8)] p-[3px] shadow-[0_2px_10px_rgba(30,64,175,.08)]">
           {views.map((v) => {
             const on = v.key === shownView;
@@ -95,6 +96,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
         </div>
       </nav>
       <div className="hidden flex-none md:block">{children}</div>
+      </div>
     </div>
   );
 }
