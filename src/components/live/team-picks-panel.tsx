@@ -15,6 +15,7 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
 import type { GameClock } from "@/lib/parlay/game-over";
+import { GameNavRow } from "@/components/live/game-nav-row";
 import { HeavyConsensusBadge } from "@/components/live/heavy-consensus-badge";
 import { heavyBadgesForGame, type HeavyBadge, type HeavyConsensusRate } from "@/lib/heavy-consensus";
 
@@ -167,6 +168,7 @@ export function GameDetailPanel({
   firstHeaderRef,
   slipGame,
   heavyRate = null,
+  nav,
 }: {
   data: GridLiveGamePanelData;
   // The viewer's own Heavy Consensus hit rate; null / absent shows no pill.
@@ -185,6 +187,8 @@ export function GameDetailPanel({
   // desktop; mobile already has its own scroll-to-panel behavior and doesn't
   // pass this.
   firstHeaderRef?: Ref<HTMLDivElement>;
+  // Prev / Next game row pinned at the card's top; absent = no row.
+  nav?: { index: number; total: number; onPrev: () => void; onNext: () => void };
 }) {
   const [first, second] = orderTeamSections(data.away, data.home);
   // One game's Heavy Consensus pills, from every group's picks (the same picks the sections show).
@@ -204,6 +208,7 @@ export function GameDetailPanel({
   );
   return (
     <section className={"rounded-[18px] border p-3.5 " + TINTS.neutral.card}>
+      {nav && <GameNavRow {...nav} />}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
           {data.away.teamLogoUrl && <TeamMark logoUrl={data.away.teamLogoUrl} fallback={null} sizeClass="mr-1.5 inline-block h-5 w-5 align-text-bottom" />}

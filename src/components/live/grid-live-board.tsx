@@ -16,6 +16,7 @@ import { scoreLogos } from "@/lib/team-logo";
 import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
+import { GAME_NAV_ROW_HEIGHT } from "@/components/live/game-nav-row";
 import { useRegisterLiveGameJump } from "@/components/live/live-game-jump";
 
 // Grid Live's client shell: a compact game list beside a fixed
@@ -118,8 +119,15 @@ export function GridLiveBoard({
     const target = firstHeaderRef.current ?? emptyStateRef.current;
     if (!target) return;
 
+    // The pinned Prev/Next row covers the top of the viewport, so the header only counts as
+    // visible below it. When the row exists, land with the card's own top (row + matchup title)
+    // at the viewport top rather than the header at 16px: the row would otherwise sit on the title.
+    const card = target.closest("section");
+    if (card?.querySelector("[data-game-nav-row]")) {
+      target.style.scrollMarginTop = Math.max(16, target.getBoundingClientRect().top - card.getBoundingClientRect().top) + "px";
+    }
     const rect = target.getBoundingClientRect();
-    const alreadyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    const alreadyVisible = rect.top >= GAME_NAV_ROW_HEIGHT && rect.bottom <= window.innerHeight;
     if (alreadyVisible) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -251,6 +259,12 @@ export function GridLiveBoard({
             progress={selectedProgress}
             firstHeaderRef={firstHeaderRef}
             heavyRate={heavyRate}
+            nav={{
+              index: selectedIndex,
+              total: sortedGameIds.length,
+              onPrev: () => selectedIndex > 0 && handleSelectGame(sortedGameIds[selectedIndex - 1]),
+              onNext: () => selectedIndex < sortedGameIds.length - 1 && handleSelectGame(sortedGameIds[selectedIndex + 1]),
+            }}
             slipGame={{
               gameId: selectedEntry.game.id,
               gameLabel: panelData.away.teamLabel + " @ " + panelData.home.teamLabel,
