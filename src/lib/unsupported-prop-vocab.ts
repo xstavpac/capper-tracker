@@ -125,7 +125,8 @@ const ANY_WORDS = STRONG_WORDS + "|" + AMBIGUOUS_WORDS;
 const BOUNDARY_BEFORE = String.raw`(?<![\w.])`;
 
 // "over 5.5 K", "u4.5 Ks", "o 17.5 outs"
-const OVER_UNDER_THEN_WORD = new RegExp(`${BOUNDARY_BEFORE}(?:over|under|o|u)\\s*${NUM}\\s*(${ANY_WORDS})\\b`, "i");
+// An optional "total" before the word ("over 1.5 total hits"), never before "bases" ("total bases" is a word itself).
+const OVER_UNDER_THEN_WORD = new RegExp(`${BOUNDARY_BEFORE}(?:over|under|o|u)\\s*${NUM}\\s*(?:total\\s+(?!bases\\b))?(${ANY_WORDS})\\b`, "i");
 // "Ks over 5.5", "shots on goal o2.5"
 const WORD_THEN_OVER_UNDER = new RegExp(`\\b(${STRONG_WORDS})\\s+(?:over|under|o|u)\\s*${NUM}\\b`, "i");
 // "2+ shots on goal", "3+ Ks", "2+ points" - N+ threshold format. The lookbehind
