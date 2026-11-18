@@ -1,3 +1,4 @@
+import { stripTotalBeforeMarket } from "@/lib/prop-total-modifier";
 import { PERIOD_TOKEN_RE } from "@/lib/period-token";
 import { normalizeSpelledOutPropNumber } from "@/lib/number-words";
 // NHL player-prop text parsing - the NHL twin of bet-line.ts's NFL
@@ -115,11 +116,12 @@ export function normalizeNhlNPlus(text: string): string {
   if (/\b(?:over|under)\s+\d/i.test(text)) return text;
   // "1+ goals" IS the anytime goal-scorer market; consumed whole so no stray
   // "goals" is left behind in the player name.
-  text = text.replace(/(?<![\w.-])1\+\s*goals?\b/gi, "Anytime Goal");
+  text = text.replace(/(?<![\w.-])1\+\s*(?:total\s+)?goals?\b/gi, "Anytime Goal");
   return text.replace(/(?<![\w.-])(\d+)\+\s*(?=\S)/g, (whole, digits: string, offset: number) => {
     const n = parseInt(digits, 10);
     if (n < 1) return whole;
-    const after = text.slice(offset + whole.length);
+    // "4+ total shots on goal": a "total" before the market is part of it (prop-total-modifier.ts).
+    const after = text.slice(offset + whole.length).replace(/^total\s+/i, "");
     if (/^goals?\b/i.test(after)) return whole; // 2+ goals: multi-goal market, not graded
     const isLineMarket = [SHOTS_STRIP_RE, SAVES_RE, POINTS_RE, ASSISTS_RE].some((re) =>
       new RegExp("^(?:" + re.source + ")", "i").test(after)
@@ -146,7 +148,8 @@ export function parseNhlPlayerProp(
   const propMarket = classify(normalized, abbreviations);
   if (!propMarket) return null;
 
-  const playerName = normalized
+  // "over 0.5 total points": "total" belongs to the market, never to the name (prop-total-modifier.ts).
+  const playerName = stripTotalBeforeMarket(normalized, MARKET_STRIP[propMarket])
     .replace(/\([^)]*\)/g, " ")
     .replace(PERIOD_TOKEN_RE, " ")
     .replace(ANYTIME_NO_RE, " ")

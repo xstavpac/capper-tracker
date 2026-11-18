@@ -1,4 +1,5 @@
 import { PERIOD_TOKEN_RE } from "@/lib/period-token";
+import { stripTotalBeforeMarket } from "@/lib/prop-total-modifier";
 import { parseNhlPlayerProp, normalizeNhlNPlus, type NhlPropMarket } from "@/lib/nhl-prop";
 import { parseMlbPlayerProp, type MlbPropMarket } from "@/lib/mlb-prop";
 import { parseNbaPlayerProp, type NbaPropMarket } from "@/lib/nba-prop";
@@ -495,7 +496,7 @@ export function parseTouchdownProp(
   // shorthand and spelled-out numbers behave as they do for every other line market. The threshold is
   // returned as `count`; its presence is what makes a TD pick TD_COUNT, not TD.
   const isFirstTd = /\b(?:first|1st)\s+(?:touchdown|td)s?\b/i.test(text);
-  const nPlus = !isFirstTd ? /(?<![\w.])(\d+)\s*(?:\+|\s+or\s+more\b)\s*(?:rushing\s+|receiving\s+)*(?:touchdown|td)s?\b/i.exec(text) : null;
+  const nPlus = !isFirstTd ? /(?<![\w.])(\d+)\s*(?:\+|\s+or\s+more\b)\s*(?:total\s+)?(?:rushing\s+|receiving\s+)*(?:touchdown|td)s?\b/i.exec(text) : null;
   const nPlusN = nPlus ? parseInt(nPlus[1], 10) : 0;
   const lineInfo = !isFirstTd && !nPlus ? parsePlayerPropLine(text) : null;
   const count: TdCountLine | undefined =
@@ -523,6 +524,8 @@ export function parseTouchdownProp(
     // name. Only for a count pick, so every anytime / first-TD name reads exactly as it always has.
     .replace(count ? /\b(?:over|under)\b|\b[ou]\s*(?=\d)|\d+\.\d+/gi : /(?!)/g, " ")
     .replace(/\b\d+\+?/g, " ")
+    // "over 0.5 total touchdowns": "total" belongs to the market, never to the name.
+    .replace(/\btotal\s+(?=(?:(?:rushing|receiving|rush|rec)\s+)*(?:touchdowns?|tds?)\b)/gi, " ")
     .replace(/\b(rushing|rusher|rush|receiving|reception|receptions|rec|receiver|catches|catch|scorer|anytime)\b/gi, " ")
     .replace(/\btouchdowns?\b/gi, " ")
     .replace(/\btds?\b/gi, " ")
@@ -695,8 +698,9 @@ function normalizeNPlusNflPlayerProp(text: string): string {
     const n = parseInt(digits, 10);
     if (n < 1) return whole;
     const after = text.slice(offset + whole.length);
+    // "80+ total rushing yards": a "total" before the market is part of it (prop-total-modifier.ts).
     const isSupportedMarket = PLAYER_PROP_STAT_PATTERNS.some(([, pattern]) =>
-      new RegExp("^(?:" + pattern.source + ")", "i").test(after)
+      new RegExp("^(?:total\\s+)?(?:" + pattern.source + ")", "i").test(after)
     );
     return isSupportedMarket ? "Over " + (n - 0.5) + " " : whole;
   });
@@ -747,7 +751,8 @@ export function parsePlayerProp(rawText: string): { playerName: string; propMark
   if (!match) return null;
   const [propMarket, statPattern] = match;
 
-  const playerName = text
+  // "over 80.5 total rushing yards": "total" belongs to the market, never to the name (prop-total-modifier.ts).
+  const playerName = stripTotalBeforeMarket(text, statPattern)
     .replace(/\([^)]*\)/g, " ")
     .replace(PERIOD_TOKEN_RE, " ")
     .replace(statPattern, " ")
