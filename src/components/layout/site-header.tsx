@@ -50,7 +50,6 @@ export function SiteHeader({
   showAdminOps = false,
   reviewCount = 0,
   slate,
-  slateChips,
 }: {
   user: HeaderUser;
   showAdminOps?: boolean;
@@ -58,8 +57,6 @@ export function SiteHeader({
   reviewCount?: number;
   // The Slate Bar: rendered under the header row, on the header's own navy background.
   slate?: ReactNode;
-  // From 1024px: the league chips alone, a row under the nav column (the container is a grid from lg).
-  slateChips?: ReactNode;
 }) {
   const pathname = usePathname();
   const { slipSize } = useParlayPool();
@@ -98,8 +95,8 @@ export function SiteHeader({
   }, [open]);
 
   return (
-    <header className="relative z-40 bg-[#0A1530] lg:pb-4">
-    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-sm:flex-nowrap max-sm:gap-x-3 max-[419px]:gap-x-2 max-[379px]:pl-3 max-[379px]:pr-3 lg:grid lg:grid-cols-[auto_1fr_auto]"}>
+    <header className="relative z-40 bg-[#0A1530]">
+    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-sm:flex-nowrap max-sm:gap-x-3 max-[419px]:gap-x-2 max-[379px]:pl-3 max-[379px]:pr-3 lg:flex-nowrap"}>
       <Link href="/dashboard" aria-label="BettingView" className="flex min-w-0 items-center gap-2.5 rounded-xl max-[379px]:gap-2 sm:shrink-0">
         <LogoMark />
         {/* Below 1024px (where the Slate Bar shows): the greeting, one row beside Drop Catalog and the avatar (both
@@ -186,8 +183,6 @@ export function SiteHeader({
         </button>
         </div>
       </div>
-
-      {slateChips && <div className="hidden lg:col-start-2 lg:block">{slateChips}</div>}
 
       {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} slipSize={slipSize} onNavigate={() => setOpen(false)} />}
     </div>
