@@ -16,6 +16,7 @@ import { scoreLogos } from "@/lib/team-logo";
 import type { HeavyConsensusRate } from "@/lib/heavy-consensus";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { getLiveGameProgress } from "@/lib/live-game-progress";
+import { GAME_NAV_ROW_HEIGHT } from "@/components/live/game-nav-row";
 import { useRegisterLiveGameJump } from "@/components/live/live-game-jump";
 
 // Grid Live's client shell: a compact game list beside a fixed
@@ -119,7 +120,8 @@ export function GridLiveBoard({
     if (!target) return;
 
     const rect = target.getBoundingClientRect();
-    const alreadyVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+    // The pinned Prev/Next row covers the top of the viewport, so "visible" starts below it.
+    const alreadyVisible = rect.top >= GAME_NAV_ROW_HEIGHT && rect.bottom <= window.innerHeight;
     if (alreadyVisible) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -251,6 +253,12 @@ export function GridLiveBoard({
             progress={selectedProgress}
             firstHeaderRef={firstHeaderRef}
             heavyRate={heavyRate}
+            nav={{
+              index: selectedIndex,
+              total: sortedGameIds.length,
+              onPrev: () => selectedIndex > 0 && handleSelectGame(sortedGameIds[selectedIndex - 1]),
+              onNext: () => selectedIndex < sortedGameIds.length - 1 && handleSelectGame(sortedGameIds[selectedIndex + 1]),
+            }}
             slipGame={{
               gameId: selectedEntry.game.id,
               gameLabel: panelData.away.teamLabel + " @ " + panelData.home.teamLabel,
