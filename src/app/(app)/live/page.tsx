@@ -20,7 +20,7 @@ import { LiveScoresProvider } from "@/components/live/use-live-scores";
 import { LiveGameJumpProvider } from "@/components/live/live-game-jump";
 import type { LiveCategoryPick } from "@/lib/live-category-picks";
 
-const EMPTY = "rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none";
+const EMPTY = "live-panel rounded-[18px] border p-10 text-center";
 
 export default async function LivePage({
   searchParams,
@@ -168,9 +168,9 @@ export default async function LivePage({
     {/* The banner: league chips (links, like the view toggle - see isGrid above), the
         Feed/Grid toggle and the Parlay slip control. */}
     <LiveBanner activeSport={activeSport} isGrid={isGrid} />
-    <ThemedPage>
+    <ThemedPage frost>
       {statusFilter && (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#E1E7FA] bg-white px-3 py-2 text-[13px] font-semibold text-foreground dark:border-border dark:bg-card">
+        <div className="mb-3 flex items-center justify-between gap-3 live-panel rounded-xl border px-3 py-2 text-[13px] font-semibold text-foreground">
           <span>{statusFilter === "live" ? "Showing live games only" : "Showing games that have not started"}</span>
           <Link href={"/live?sport=" + activeSport + "&view=" + (isGrid ? "advanced" : "feed")} className="flex min-h-11 items-center text-brand-700 dark:text-brand-300">
             Show all

@@ -17,6 +17,12 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 export const CATEGORY_GRID = "grid grid-cols-2 gap-2.5 sm:grid-cols-3 min-[1100px]:grid-cols-4 min-[1500px]:grid-cols-6";
 
 const NEUTRAL ="bg-white shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] dark:border dark:border-border dark:bg-card dark:shadow-none";
+// `frost` (/live): the same win / loss / neutral meaning as frosted glass (.live-tile-* in globals.css).
+const FROST = {
+  green: "border live-tile-win",
+  red: "border live-tile-loss",
+  neutral: "border live-tile-neutral",
+};
 const TINT = {
   green: "border border-[#A9DFBC] bg-[#EEFAF2] dark:border-emerald-500/45 dark:bg-emerald-500/10",
   red: "border border-[#F0BCBC] bg-[#FFF1F1] dark:border-red-500/45 dark:bg-red-500/10",
@@ -41,6 +47,7 @@ export function CategoryCard({
   winPct,
   graded,
   tinted,
+  frost,
   active,
   onToggle,
   pickCount,
@@ -53,6 +60,7 @@ export function CategoryCard({
   // The number of graded picks behind the record: shown as a small "N graded" line under it.
   graded?: number;
   tinted?: boolean;
+  frost?: boolean;
   active?: boolean;
   onToggle?: () => void;
   pickCount?: number;
@@ -78,7 +86,11 @@ export function CategoryCard({
       }
       className={
         "flex h-full flex-col rounded-2xl px-4 py-[13px] " +
-        (tinted && decided ? TINT[good ? "green" : "red"] : NEUTRAL + (tinted ? " border border-[#E6E8EF] dark:border-border" : "")) +
+        (frost
+          ? FROST[tinted && decided ? (good ? "green" : "red") : "neutral"]
+          : tinted && decided
+            ? TINT[good ? "green" : "red"]
+            : NEUTRAL + (tinted ? " border border-[#E6E8EF] dark:border-border" : "")) +
         (active ? " ring-2 ring-brand-500 dark:ring-brand-400" : "") +
         (onToggle ? " cursor-pointer select-none outline-none transition hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400 dark:hover:brightness-110" : "")
       }

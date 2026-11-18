@@ -24,6 +24,101 @@ html {
   .pill-inactive {
     @apply border border-white/85 bg-white/55 text-[#243a5e];
   }
+  /* /live frosted-icy skin (components/live/*, only /live uses these). Same glass recipe as .glass-card and the
+     --bv-* banner palette: translucent white over an ice-blue page in light, navy glass in dark. */
+  .live-bg {
+    background: linear-gradient(180deg, #f1f6fd 0%, #eaf1fa 100%);
+  }
+  .live-panel {
+    @apply backdrop-blur-[18px];
+    background: rgba(255, 255, 255, 0.58);
+    border-color: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 6px 22px rgba(40, 80, 150, 0.22);
+  }
+  .live-card {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: #ffffff;
+  }
+  .live-ou {
+    background: rgba(226, 238, 253, 0.8);
+  }
+  .live-pick {
+    background: rgba(255, 255, 255, 0.78);
+    border-color: #ffffff;
+  }
+  .live-tile-win {
+    background: rgba(225, 247, 235, 0.85);
+    border-color: rgba(120, 200, 155, 0.45);
+  }
+  .live-tile-loss {
+    background: rgba(253, 232, 234, 0.85);
+    border-color: rgba(230, 140, 150, 0.42);
+  }
+  .live-tile-neutral {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: #ffffff;
+  }
+  .live-seg {
+    background: rgba(255, 255, 255, 0.62);
+    border-color: rgba(190, 212, 240, 0.7);
+  }
+  .live-seg-on {
+    background: #ffffff;
+    color: #1d4fd8;
+    box-shadow: 0 1px 4px rgba(40, 80, 150, 0.18);
+  }
+  .live-seg-off {
+    color: #475a78;
+  }
+  .live-seg-off:hover {
+    color: #1d4fd8;
+  }
+  .dark .live-bg {
+    background: linear-gradient(180deg, #0d1521 0%, #101b2e 100%);
+  }
+  .dark .live-panel {
+    background: rgba(20, 32, 58, 0.55);
+    border-color: rgba(140, 170, 220, 0.18);
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  }
+  .dark .live-card {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(140, 170, 220, 0.18);
+  }
+  .dark .live-ou {
+    background: rgba(110, 155, 214, 0.16);
+  }
+  .dark .live-pick {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(140, 170, 220, 0.18);
+  }
+  .dark .live-tile-win {
+    background: rgba(52, 211, 153, 0.1);
+    border-color: rgba(52, 211, 153, 0.4);
+  }
+  .dark .live-tile-loss {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: rgba(248, 113, 113, 0.4);
+  }
+  .dark .live-tile-neutral {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(140, 170, 220, 0.18);
+  }
+  .dark .live-seg {
+    background: rgba(20, 32, 58, 0.55);
+    border-color: rgba(140, 170, 220, 0.18);
+  }
+  .dark .live-seg-on {
+    background: rgba(140, 170, 220, 0.22);
+    color: #bcd4ff;
+    box-shadow: none;
+  }
+  .dark .live-seg-off {
+    color: #a9b8d0;
+  }
+  .dark .live-seg-off:hover {
+    color: #dbe7ff;
+  }
   /* Muted gray-500 text washes out on the frosted blue; one shade darker keeps it at WCAG AA. */
   .parlay-glass .text-muted-foreground {
     color: #4b5563;
