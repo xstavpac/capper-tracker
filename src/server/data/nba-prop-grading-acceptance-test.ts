@@ -196,9 +196,45 @@ async function main() {
     check("a box-score hit for a player who played does not read the roster", rosterReads, 0);
   }
 
+  console.log("\n########## PART D2: turnovers + 3pt field goals (Stirtz: 5 TO, 3PT 6-9) ##########");
+  {
+    // TURNOVERS, every phrasing, both sides of each edge: 5 turnovers.
+    for (const [text, want] of [
+      ["Bennett Stirtz over 4.5 turnovers", W],
+      ["Bennett Stirtz under 4.5 turnovers", L],
+      ["Bennett Stirtz over 5.5 total turnovers", L],
+      ["Bennett Stirtz under 5.5 total turnovers", W],
+      ["Bennett Stirtz over 5 turnovers", P],
+      ["Bennett Stirtz under 5 tov", P],
+      ["Bennett Stirtz 5+ turnovers", W],
+      ["Bennett Stirtz 6+ turnovers", L],
+    ] as const) {
+      check(`"${text}"`, await grade(pick(text)), want);
+    }
+    // THREES_MADE through the "3pt field goals" phrasings: 6 made (the made half of "6-9", never the 9 attempts).
+    for (const [text, want] of [
+      ["Bennett Stirtz over 5.5 3pt field goals", W],
+      ["Bennett Stirtz under 5.5 total 3pt field goals", L],
+      ["Bennett Stirtz over 6.5 3-point field goals made", L],
+      ["Bennett Stirtz under 6.5 three point field goals", W],
+      ["Bennett Stirtz over 6 3pt field goals", P],
+      ["Bennett Stirtz under 6 3pt made", P],
+      ["Bennett Stirtz over 8.5 total 3pt field goals", L],
+    ] as const) {
+      check(`"${text}"`, await grade(pick(text)), want);
+    }
+    // A stored propMarket wins over the text (the import path stamps it).
+    check("stored TURNOVERS market grades", await grade(pick("Bennett Stirtz over 4.5 turnovers", OKC_GAME, { propMarket: "TURNOVERS", playerName: "Bennett Stirtz" })), W);
+  }
+
   console.log("\n########## PART E: what stays pending ##########");
   {
-    check("turnovers: recognized, not graded", await grade(pick("Bennett Stirtz over 4.5 turnovers")), {
+    // Three-point ATTEMPTS are a different stat: never graded as threes made.
+    check("3pt field goals attempted: recognized, not graded", await grade(pick("Bennett Stirtz over 8.5 3pt field goals attempted")), {
+      outcome: null,
+      reason: "this NBA prop market isn't one this app grades automatically yet - needs manual grading",
+    });
+    check("3PA: recognized, not graded", await grade(pick("Bennett Stirtz over 8.5 3PA")), {
       outcome: null,
       reason: "this NBA prop market isn't one this app grades automatically yet - needs manual grading",
     });

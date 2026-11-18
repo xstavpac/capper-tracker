@@ -1,5 +1,5 @@
 // NBA player-prop grading: Over/Under and N+ lines on points, rebounds, assists,
-// threes made, steals, blocks and the four combined markets (PRA, P+R, P+A,
+// threes made, steals, blocks, turnovers and the four combined markets (PRA, P+R, P+A,
 // R+A); double-double (yes/no shaped). Wired into grading.ts's resolvePlayerProp
 // for sportName === "NBA" only - the NFL, NHL and MLB paths are untouched. The
 // NBA twin of nhl-prop-grading.ts, same resolution shape: { outcome } or
@@ -106,6 +106,8 @@ function statFor(row: NbaPlayerRow, market: Exclude<NbaPropMarket, "DOUBLE_DOUBL
       return row.steals;
     case "BLOCKS":
       return row.blocks;
+    case "TURNOVERS":
+      return row.turnovers;
     case "POINTS_REBOUNDS_ASSISTS":
       return row.points + row.rebounds + row.assists;
     case "POINTS_REBOUNDS":

@@ -140,6 +140,9 @@ enum PropMarket {
   // NBA defensive rebounds (2026-11): "defensive rebounds" / "dreb", graded from the box score's own
   // defensiveRebounds column - never total REBOUNDS.
   DEFENSIVE_REBOUNDS
+  // NBA turnovers (2026-11): "turnovers" / "tov", graded from the box score's own `turnovers` column
+  // (ESPN key verified live on three final games, 2026-11-18). No Odds API key mapped: default odds.
+  TURNOVERS
   // NHL markets (2026-10). Graded from ESPN's NHL summary box score / scoring
   // plays - see server/data/nhl-boxscore.ts and nhl-prop-grading.ts. Additive:
   // no NFL value or grading path changes. POINTS = goals + assists; SAVES is

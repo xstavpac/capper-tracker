@@ -48,7 +48,7 @@ export const NBA_SPORT_KEY = "basketball_nba";
 export const NBA_PROP_ODDS_CALLER = "nba-prop-odds";
 export const REUSE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-// PropMarket -> the Odds API main-market key. DEFENSIVE_REBOUNDS and DOUBLE_DOUBLE have none: never fetched.
+// PropMarket -> the Odds API main-market key. DEFENSIVE_REBOUNDS, TURNOVERS and DOUBLE_DOUBLE have none: never fetched.
 export const NBA_PROP_ODDS_MARKET_KEYS: Partial<Record<NbaPropMarket, string>> = {
   POINTS: "player_points",
   REBOUNDS: "player_rebounds",

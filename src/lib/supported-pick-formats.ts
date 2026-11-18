@@ -341,7 +341,7 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
       },
       {
         market: "Threes made",
-        examples: ["Stephen Curry over 4.5 threes", "Stephen Curry o4.5 3pm", "Stephen Curry 5+ 3s"],
+        examples: ["Stephen Curry over 4.5 threes", "Stephen Curry o4.5 3pm", "Stephen Curry 5+ 3s", "Stephen Curry over 4.5 3pt field goals"],
         status: "coming-soon",
         check: { via: "nba-prop", market: "THREES_MADE" },
       },
@@ -356,6 +356,12 @@ export const SUPPORTED_PICK_FORMATS: FormatGroup[] = [
         examples: ["Victor Wembanyama over 3.5 blocks", "Victor Wembanyama o3.5 blk"],
         status: "coming-soon",
         check: { via: "nba-prop", market: "BLOCKS" },
+      },
+      {
+        market: "Turnovers",
+        examples: ["Jaden McDaniels over 1.5 turnovers", "Jaden McDaniels o1.5 tov"],
+        status: "coming-soon",
+        check: { via: "nba-prop", market: "TURNOVERS" },
       },
       {
         market: "Points + rebounds + assists",
