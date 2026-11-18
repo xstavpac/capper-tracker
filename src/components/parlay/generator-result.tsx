@@ -615,7 +615,7 @@ export function UnusedPicks({ picks }: { picks: { pickId: string; label: string 
 // ---- The banner -----------------------------------------------------------------------
 // Regenerate on navy: a white outline pill with an invisible 10px above and below (a 44px target).
 const REGENERATE =
-  "relative inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-white/35 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
+  "relative inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full border border-white/35 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
 
 export const MODE_LABELS: Record<SelectionMode, string> = { BEST: "Best", DIVERSIFIED: "Diversified", EXPLORE: "Explore" };
 // One line under the banner per mode; Regenerate only (Generate stays the same parlay).
@@ -640,7 +640,7 @@ function ModePicker({ value, onChange, disabled }: { value: SelectionMode; onCha
           disabled={disabled}
           onClick={() => onChange(m)}
           className={
-            "relative flex h-[22px] items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold transition disabled:opacity-50 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] " +
+            "relative flex h-[22px] flex-1 items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-semibold transition disabled:opacity-50 sm:flex-none after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-[''] " +
             (m === value ? "bg-white text-banner" : "text-white/80 hover:text-white")
           }
         >
@@ -871,8 +871,9 @@ export function GeneratorResult({
     <section ref={cardRef} className="scroll-mt-4" aria-busy={busy || undefined}>
       {/* The navy banner */}
       <div className="relative overflow-hidden rounded-2xl bg-banner px-4 py-3.5 text-white shadow-[0_10px_28px_rgba(3,11,41,0.28)] sm:rounded-[20px] sm:px-5">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+        {/* Phones: stacked - title, meta line, then the mode picker and Regenerate. sm and up: one row. */}
+        <div className="flex flex-col gap-y-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
+          <div className="flex min-w-0 items-center gap-3 sm:flex-1">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#3B82F6] bg-[rgba(3,11,41,0.6)] text-[#9AD8FF] shadow-[0_0_12px_rgba(59,130,246,0.6)]">
               {building ? <ListChecksIcon className="h-[17px] w-[17px] stroke-[2.2]" /> : <ReadyCheck />}
             </span>
@@ -892,8 +893,12 @@ export function GeneratorResult({
                   <span className="rounded-full bg-white/10 px-2 py-px tabular-nums text-white">{`${revealed} / ${total}`}</span>
                 ) : (
                   <>
-                    <span>{`${legs.length} legs`}</span>
-                    {` · ${done!.gamesUsed} game${plural(done!.gamesUsed)} · ${leagues} league${plural(leagues)}`}
+                    {/* Each item unbroken: a narrow line wraps between items, never inside one. */}
+                    <span className="whitespace-nowrap">{`${legs.length} legs`}</span>
+                    {" · "}
+                    <span className="whitespace-nowrap">{`${done!.gamesUsed} game${plural(done!.gamesUsed)}`}</span>
+                    {" · "}
+                    <span className="whitespace-nowrap">{`${leagues} league${plural(leagues)}`}</span>
                   </>
                 )}
                 {analyzing && <span className="sr-only">{`0 / ${total}`}</span>}
@@ -901,7 +906,8 @@ export function GeneratorResult({
             </div>
           </div>
           {regenerate && (
-            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5">
+            // Phones: the picker full width, Regenerate full width under it (side by side doesn't fit at 360px). sm and up: as before.
+            <div className="flex flex-col gap-3 sm:ml-auto sm:shrink-0 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-x-2 sm:gap-y-1.5">
               <ModePicker value={selectionMode} onChange={onSelectionMode} disabled={busy} />
               <button type="button" onClick={onRegenerate} disabled={busy || regenerate.disabled} title={regenerate.hint} aria-label={"Regenerate: " + regenerate.hint} className={REGENERATE}>
                 <RefreshIcon className="h-3.5 w-3.5 stroke-[2.4]" />
