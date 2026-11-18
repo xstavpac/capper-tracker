@@ -113,6 +113,10 @@ async function main() {
   console.log("\n########## PART D: NBA - \"total\" (already stripped there) ##########");
   {
     check('"Stephen Curry over 4.5 total threes"', parseNbaProp("Stephen Curry over 4.5 total threes"), { playerName: "Stephen Curry", propMarket: "THREES_MADE" });
+    // The prod case (#493 added the "3pt field goals" wording): no "total" and no "pt" left on the name.
+    check('"Sandro Mamukelashvili over 1.5 total 3pt field goals"', parseNbaProp("Sandro Mamukelashvili over 1.5 total 3pt field goals"), { playerName: "Sandro Mamukelashvili", propMarket: "THREES_MADE" });
+    check('"Jaden McDaniels over 1.5 total turnovers"', parseNbaProp("Jaden McDaniels over 1.5 total turnovers"), { playerName: "Jaden McDaniels", propMarket: "TURNOVERS" });
+    check('"Jaden McDaniels 2+ total turnovers" parses like "2+ turnovers"', parseNbaProp("Jaden McDaniels 2+ total turnovers"), parseNbaProp("Jaden McDaniels 2+ turnovers"));
     check('"Nikola Jokic over 11.5 total rebounds"', parseNbaProp("Nikola Jokic over 11.5 total rebounds"), { playerName: "Nikola Jokic", propMarket: "REBOUNDS" });
     check('"Stephen Curry 4+ total threes" -> Over 3.5', normalizeNbaNPlus("Stephen Curry 4+ total threes"), "Stephen Curry Over 3.5 total threes");
     check('"Stephen Curry 4+ total threes" parses like "4+ threes"', parseNbaProp("Stephen Curry 4+ total threes"), parseNbaProp("Stephen Curry 4+ threes"));
