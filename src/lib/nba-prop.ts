@@ -217,8 +217,9 @@ function classify(text: string, abbreviations: boolean): Classified {
 
 // The text right after an "N+" that makes it an NBA threshold ("25+ points",
 // "3+ 3pm", "40+ PRA", "41+ PR").
+// An optional "total" first: "4+ total threes" is "4+ threes".
 const N_PLUS_MARKET_START = new RegExp(
-  "^(?:" + [...LINE_MARKETS.map(([, re]) => re.source), String.raw`(?:pr|pa|ra)\b`].join("|") + ")",
+  "^(?:total\\s+)?(?:" + [...LINE_MARKETS.map(([, re]) => re.source), String.raw`(?:pr|pa|ra)\b`].join("|") + ")",
   "i"
 );
 
