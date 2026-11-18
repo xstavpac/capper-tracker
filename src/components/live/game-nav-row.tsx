@@ -22,7 +22,7 @@ function Chevron({ dir }: { dir: "left" | "right" }) {
   );
 }
 
-const BTN = "inline-flex min-h-11 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] px-3.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed";
+const BTN = "inline-flex min-h-11 items-center justify-center gap-1 whitespace-nowrap rounded-[10px] px-3 text-[13px] min-[400px]:gap-1.5 min-[400px]:px-3.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed";
 
 export function GameNavRow({
   index,
@@ -57,6 +57,7 @@ export function GameNavRow({
     <>
       <div ref={sentinelRef} aria-hidden="true" className="-mt-3.5 h-px" />
       <div
+        data-game-nav-row
         className={
           "sticky top-0 z-20 -mx-3.5 mb-3 flex items-center justify-between gap-2 rounded-t-[18px] border-b border-[#E3E6EE] bg-white px-3.5 py-2.5 transition-shadow dark:border-border dark:bg-card " +
           (stuck ? "shadow-[0_6px_12px_-6px_rgba(15,20,32,0.18)]" : "")
@@ -71,8 +72,9 @@ export function GameNavRow({
           <Chevron dir="left" />
           Prev game
         </button>
-        <span className="min-w-0 text-center text-xs font-medium text-muted-foreground">
-          Game {index + 1} of {total}
+        <span className="shrink-0 whitespace-nowrap text-center text-xs font-medium text-muted-foreground">
+          <span className="max-[359px]:hidden">Game {index + 1} of {total}</span>
+          <span className="min-[360px]:hidden" aria-label={"Game " + (index + 1) + " of " + total}>{index + 1}/{total}</span>
         </span>
         <button
           type="button"

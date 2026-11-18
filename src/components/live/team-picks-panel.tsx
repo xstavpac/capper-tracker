@@ -15,7 +15,7 @@ import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
 import type { GameClock } from "@/lib/parlay/game-over";
-import { GameNavRow, GAME_NAV_ROW_HEIGHT } from "@/components/live/game-nav-row";
+import { GameNavRow } from "@/components/live/game-nav-row";
 import { HeavyConsensusBadge } from "@/components/live/heavy-consensus-badge";
 import { heavyBadgesForGame, type HeavyBadge, type HeavyConsensusRate } from "@/lib/heavy-consensus";
 
@@ -47,14 +47,11 @@ function TeamPickSection({
   picks,
   tone,
   headerRef,
-  headerScrollMt,
   orderClass,
   splitBySide = false,
   heavy,
 }: GridLiveTeamSideData & {
   headerRef?: Ref<HTMLDivElement>;
-  // Scroll margin (px) that clears the pinned nav row; default is the usual 16px.
-  headerScrollMt?: number;
   orderClass: string;
   splitBySide?: boolean;
   // Heavy Consensus pills: a team section's own, or Totals' Over / Under (see GameDetailPanel).
@@ -111,7 +108,6 @@ function TeamPickSection({
         // since selecting a game is a click) shows no ring, while a
         // keyboard-triggered selection still gets one.
         tabIndex={-1}
-        style={headerScrollMt ? { scrollMarginTop: headerScrollMt } : undefined}
         className="mb-2 flex scroll-mt-4 items-center gap-2 rounded-md px-1 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       >
         <TeamMark
@@ -202,7 +198,7 @@ export function GameDetailPanel({
   const column = (side: "left" | "right") => (
     <div className="contents min-[1200px]:block min-[1200px]:min-w-0">
       {side === "left" ? (
-        <TeamPickSection key="first" {...first} headerRef={firstHeaderRef} headerScrollMt={nav ? GAME_NAV_ROW_HEIGHT + 16 : undefined} orderClass="order-1" heavy={teamHeavy(first)} />
+        <TeamPickSection key="first" {...first} headerRef={firstHeaderRef} orderClass="order-1" heavy={teamHeavy(first)} />
       ) : (
         <TeamPickSection key="second" {...second} orderClass="order-2" heavy={teamHeavy(second)} />
       )}
