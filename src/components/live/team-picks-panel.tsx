@@ -11,7 +11,6 @@ import { LiveProgressBar } from "@/components/live/live-progress-bar";
 import type { LiveGameProgress } from "@/lib/live-game-progress";
 import { LocalGameTime } from "@/components/local-game-time";
 import { PicksCountPill } from "@/components/live/picks-count-pill";
-import { TINTS } from "@/components/dashboard/panel-shell";
 import { TargetGameCheckbox } from "@/components/parlay/target-game-checkbox";
 import type { SlipGame } from "@/components/parlay/parlay-pool-context";
 import type { GameClock } from "@/lib/parlay/game-over";
@@ -92,9 +91,9 @@ function TeamPickSection({
       className={
         orderClass +
         " mb-3 rounded-[14px] border p-2.5 " +
-        (violet ? TINTS.violet.card : teamColor ? "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" : "border-[#E3E6EE] bg-[#F5F6FA] dark:border-border dark:bg-white/[0.04]")
+        (violet ? "border-[#E7DDFA] bg-[#FAF7FF]/60 dark:border-violet-500/30 dark:bg-violet-500/[0.06]" : teamColor ? "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" : "border-[#E3E6EE]/70 bg-[#F5F6FA]/50 dark:border-border dark:bg-white/[0.04]")
       }
-      style={!violet && teamColor ? { backgroundColor: teamColor + "14", borderColor: teamColor + "47" } : undefined}
+      style={!violet && teamColor ? { backgroundColor: teamColor + "0D", borderColor: teamColor + "38" } : undefined}
     >
       {heavy?.team && <HeavyConsensusBadge badge={heavy.team} className="mb-1 ml-1" />}
       <div
@@ -207,7 +206,7 @@ export function GameDetailPanel({
     </div>
   );
   return (
-    <section className={"rounded-[18px] border p-3.5 " + TINTS.neutral.card}>
+    <section className="live-panel rounded-[18px] border p-3.5">
       {nav && <GameNavRow {...nav} />}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">

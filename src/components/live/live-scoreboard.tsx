@@ -156,7 +156,7 @@ export function LiveScoreboard({
           const staleOdds = isLive ? " opacity-50" : "";
 
           return (
-            <div key={game.id} id={liveGameCardId(game.id)} className="rounded-card bg-card p-4 shadow-soft transition-shadow hover:shadow-md">
+            <div key={game.id} id={liveGameCardId(game.id)} className="live-panel rounded-card border p-[15px] transition-shadow hover:shadow-md">
               {/* Slip mode only: target this game for the generator (outside the card's link). */}
               <TargetGameCheckbox
                 className="mb-1.5"
@@ -183,7 +183,7 @@ export function LiveScoreboard({
                           {score.inningHalf} {score.inningOrdinal}
                         </span>
                       )}
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
                     </span>
                   )}
                   {unplayed && (

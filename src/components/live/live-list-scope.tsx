@@ -49,7 +49,7 @@ export function SeeMoreGamesButton({ hiddenCount, className }: { hiddenCount: nu
       onClick={() => setShowAll(!showAll)}
       aria-expanded={showAll}
       className={
-        "w-full rounded-xl border border-[#E1E7FA] bg-white px-3 py-2.5 text-center text-[13px] font-semibold text-brand-700 transition-colors hover:border-brand-300 dark:border-border dark:bg-card dark:text-brand-300 dark:hover:border-brand-500/60 " +
+        "live-card w-full rounded-xl border px-3 py-2.5 text-center text-[13px] font-semibold text-brand-700 transition-colors hover:border-brand-300 dark:text-brand-300 dark:hover:border-brand-500/60 " +
         (className ?? "")
       }
     >

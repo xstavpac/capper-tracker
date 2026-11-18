@@ -139,7 +139,7 @@ export function PickCard({
         "rounded-[10px] border px-3 py-2 " +
         (isTopPerformer
           ? "border-[#86D5A4] bg-[#ECFAF1] ring-1 ring-[#86D5A4]/60 dark:border-emerald-500/60 dark:bg-emerald-500/[0.12] dark:ring-emerald-500/30"
-          : "border-[#E6E8EF] bg-white dark:border-border dark:bg-card")
+          : "live-pick")
       }
     >
       {/* The status and odds drop under the name in a narrow card rather than squeezing it. */}

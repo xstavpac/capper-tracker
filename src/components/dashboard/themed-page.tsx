@@ -14,9 +14,11 @@ const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", fallbac
 const BACKDROP =
   "-mx-4 -mb-4 bg-[#F5F6FA] pb-4 pt-4 first:-mt-4 dark:bg-transparent md:-mx-8 md:-mb-8 min-h-[calc(100vh-96px)] md:pb-6 md:pt-6 md:first:-mt-8 min-[1536px]:pb-8 min-[1536px]:pt-8";
 
-export function ThemedPage({ children }: { children: ReactNode }) {
+// `frost` (/live only): the icy gradient backdrop (.live-bg in globals.css) in place of the flat one, in both themes.
+const FROST_BACKDROP = BACKDROP.replace("bg-[#F5F6FA] ", "live-bg ").replace("dark:bg-transparent ", "");
+export function ThemedPage({ children, frost = false }: { children: ReactNode; frost?: boolean }) {
   return (
-    <div className={jakarta.className + " " + BACKDROP}>
+    <div className={jakarta.className + " " + (frost ? FROST_BACKDROP : BACKDROP)}>
       <div className={SHELL_CONTAINER + " space-y-3.5"}>{children}</div>
     </div>
   );

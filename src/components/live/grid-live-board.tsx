@@ -277,7 +277,7 @@ export function GridLiveBoard({
           <div
             ref={emptyStateRef}
             tabIndex={-1}
-            className="scroll-mt-4 rounded-[18px] bg-white p-10 text-center shadow-[0_1px_2px_rgba(15,20,32,0.05),0_6px_18px_rgba(15,20,32,0.04)] outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dark:border dark:border-border dark:bg-card dark:shadow-none"
+            className="live-panel scroll-mt-4 rounded-[18px] border p-10 text-center outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
           </div>

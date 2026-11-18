@@ -12,16 +12,15 @@ type Tab = { key: string; label: string; href: string };
 // A click the router takes, not one the browser does (a new tab or window).
 const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
-// The Feed / Grid toggle: one joined glass pill. In the banner (desktop) it is bare; under the banner
-// (below 1024px) it is a row that scrolls sideways. Lights the clicked option at once, before the
-// server answers.
-export function LiveViewToggle({ views, view, inBanner = false }: { views: Tab[]; view: string; inBanner?: boolean }) {
+// The Feed / Grid toggle: a frosted segmented control (.live-seg*, globals.css), at the right end of the
+// league row. Lights the clicked option at once, before the server answers.
+export function LiveViewToggle({ views, view }: { views: Tab[]; view: string }) {
   const [pendingView, setPendingView] = useState<string | null>(null);
   useEffect(() => setPendingView(null), [view]);
   const shownView = pendingView ?? view;
   return (
-    <nav aria-label="View" className={inBanner ? "flex" : LIVE_PILL_ROW + " md:!m-0 md:!overflow-visible md:!p-0"}>
-      <div className="flex h-[46px] flex-none items-center gap-[3px] rounded-full border border-[#dbe5f6] bg-[rgba(255,255,255,.8)] p-[3px] shadow-[0_2px_10px_rgba(30,64,175,.08)]">
+    <nav aria-label="View" className={LIVE_PILL_ROW + " md:!m-0 md:!overflow-visible md:!p-0 lg:ml-auto lg:flex-none"}>
+      <div className="live-seg flex h-[46px] flex-none items-center gap-[3px] rounded-full border p-[3px]">
         {views.map((v) => {
           const on = v.key === shownView;
           return (
@@ -33,7 +32,7 @@ export function LiveViewToggle({ views, view, inBanner = false }: { views: Tab[]
                 if (plainClick(e)) setPendingView(v.key);
               }}
               aria-current={v.key === view ? "page" : undefined}
-              className={"inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-none transition " + (on ? "bg-[linear-gradient(180deg,#3b82f6,#1d4ed8)] text-white shadow-[0_6px_18px_rgba(37,99,235,.45),inset_0_1px_0_rgba(255,255,255,.35)]" : "text-[#0b1838] hover:bg-white")}
+              className={"inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-full px-4 text-[14px] font-semibold leading-none transition " + (on ? "live-seg-on" : "live-seg-off")}
             >
               {v.key === "feed" ? <ClipboardIcon className="h-[18px] w-[18px] flex-none" /> : <GridIcon className="h-[18px] w-[18px] flex-none" />}
               <span>{v.label}</span>
@@ -105,12 +104,13 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
           <PhoneOnly className="flex-none">{children}</PhoneOnly>
         </div>
       </nav>
-      <MobileOnly>
-        <div className="flex flex-col gap-[14px] md:flex-none md:flex-row md:items-center md:gap-3">
-          <LiveViewToggle views={views} view={view} />
+      {/* The toggle: right end of this row (pills left); on a narrow row it wraps under the pills. */}
+      <div className="flex flex-col gap-[14px] md:ml-auto md:flex-none md:flex-row md:items-center md:gap-3">
+        <LiveViewToggle views={views} view={view} />
+        <MobileOnly>
           <TabletUp className="flex-none">{children}</TabletUp>
-        </div>
-      </MobileOnly>
+        </MobileOnly>
+      </div>
     </div>
   );
 }

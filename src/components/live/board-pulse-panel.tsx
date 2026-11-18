@@ -58,7 +58,7 @@ function Gauge({ count, expected, verdict }: { count: number; expected: number; 
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-card bg-muted p-4">
+    <div className="live-card rounded-card border p-[15px]">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-foreground">{value}</div>
     </div>
@@ -73,10 +73,10 @@ export function BoardPulsePanel({ stats }: { stats: BoardPulseStats }) {
   // good nor bad).
   const bannerClass =
     stats.verdict === "hot"
-      ? "border-red-200 bg-red-50 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300"
+      ? "border-red-200/70 bg-red-50/70 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300"
       : stats.verdict === "cold"
-        ? "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-500/25 dark:bg-orange-500/10 dark:text-orange-300"
-        : "border-border-subtle bg-muted text-muted-foreground";
+        ? "border-orange-200/70 bg-orange-50/70 text-orange-800 dark:border-orange-500/25 dark:bg-orange-500/10 dark:text-orange-300"
+        : "live-card text-muted-foreground";
   const dotClass =
     stats.verdict === "hot" ? "bg-red-500" : stats.verdict === "cold" ? "bg-orange-500" : "bg-muted-foreground/50";
   const bannerTitle =
@@ -103,7 +103,7 @@ export function BoardPulsePanel({ stats }: { stats: BoardPulseStats }) {
         : "running " + (stats.verdict === "hot" ? "above" : "below") + " average";
 
   return (
-    <div className="mb-6 rounded-card bg-card p-6 shadow-soft">
+    <div className="live-panel mb-6 rounded-card border p-[23px]">
       <h2 className="text-base font-semibold text-foreground">Board pulse &middot; live</h2>
       <p className="mt-0.5 text-sm text-muted-foreground">
         {stats.gameCount} game{stats.gameCount === 1 ? "" : "s"} today &middot; {stats.decidedGames} final &middot; updates

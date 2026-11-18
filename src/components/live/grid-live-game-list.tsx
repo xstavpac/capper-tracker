@@ -60,14 +60,14 @@ export function GridLiveGameList({
 }) {
   if (sortedGames.length === 0) {
     return (
-      <div className={"rounded-[18px] border p-6 text-center " + TINTS.blue.card}>
+      <div className="live-panel rounded-[18px] border p-6 text-center">
         <p className="text-[13px] font-medium text-muted-foreground">No games found for this sport right now.</p>
       </div>
     );
   }
 
   return (
-    <section className={"rounded-[18px] border p-3 " + TINTS.blue.card}>
+    <section className="live-panel rounded-[18px] border p-3">
       <div className="mb-2.5 flex items-center gap-3 px-0.5">
         <span className={"flex h-[26px] w-[26px] shrink-0 items-center justify-center " + TINTS.blue.iconWrap}>
           <CalendarIcon className="h-[15px] w-[15px] stroke-[2.2]" />
@@ -98,10 +98,10 @@ export function GridLiveGameList({
           <div
             key={game.id}
             className={
-              "rounded-xl border bg-white transition-colors dark:bg-card " +
+              "live-card rounded-xl border transition-colors " +
               (isSelected
                 ? "border-brand-600 ring-1 ring-brand-600 dark:border-brand-400 dark:ring-brand-400"
-                : "border-[#E1E7FA] hover:border-brand-300 dark:border-border dark:hover:border-brand-500/60")
+                : "hover:border-brand-300 dark:hover:border-brand-500/60")
             }
           >
           <button
@@ -124,7 +124,7 @@ export function GridLiveGameList({
                       <LiveProgressLabel label={progress.label} />
                     </span>
                   )}
-                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-600 dark:bg-red-500/15 dark:text-red-400">
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-700 dark:bg-red-500/15 dark:text-red-400">
                     LIVE
                   </span>
                   {picksPill}
@@ -168,7 +168,7 @@ export function GridLiveGameList({
                 </div>
               )}
               {odds.total && (
-                <div className={"flex w-[72px] shrink-0 flex-col items-center justify-center rounded-lg bg-[#EEF2FF] px-2 py-1 dark:bg-brand-500/10" + staleOdds}>
+                <div className={"flex w-[72px] shrink-0 flex-col items-center justify-center rounded-lg live-ou px-2 py-1" + staleOdds}>
                   <span className="text-[10px] font-medium leading-none text-muted-foreground">O/U</span>
                   <span className="mt-0.5 text-[15px] font-semibold leading-tight tabular-nums text-foreground">{odds.total}</span>
                 </div>

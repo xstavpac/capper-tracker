@@ -137,7 +137,7 @@ export function LiveCategoryPanel({
 
   return (
     <PanelShell
-      theme={{ ...TINTS.neutral, title: sportLabel + " record by category", subtitle: "All-time, by market", icon: <TargetIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
+      theme={{ ...TINTS.neutral, card: "live-panel", title: sportLabel + " record by category", subtitle: "All-time, by market", icon: <TargetIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
       footer={undefined}
     >
       <div className={CATEGORY_GRID}>
@@ -151,6 +151,7 @@ export function LiveCategoryPanel({
             winPct={tile.winPct}
             pickCount={tile.slateCount}
             tinted
+            frost
             active={tile.key === activeTile?.key}
             onToggle={() => toggle(tile.key)}
           />
