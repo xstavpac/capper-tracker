@@ -155,7 +155,8 @@ export type LadderStatus = { eventId: string; gameLabel: string; markets: string
 // One leg or Hedge alternate as scoring.ts read it. A pick with no record has only
 // id, role and model.
 export const SCORING_ROLES = ["SLIP", "GENERATED", "HEDGE"] as const;
-export const SCORING_MODELS = ["EDGE", "WIN_RATE", "NO_RECORD"] as const;
+// RECORD: record-score.ts's combined win % (the Standard generator); shrunkWin is the combined probability.
+export const SCORING_MODELS = ["EDGE", "WIN_RATE", "RECORD", "NO_RECORD"] as const;
 export const SCORING_LEVELS = ["LEAGUE", "OTHER_LEAGUES"] as const;
 export type ScoringLegTrace = {
   id: string;

@@ -168,7 +168,11 @@ const slate = makeSlate(BASE);
     { id: "small", game: 0, bet: "HOME", wl: [3, 0] },
     { id: "large", game: 0, bet: "OVER", wl: [60, 30] },
   ]);
-  check("3-0 (100%) vs 60-30 (67%): the 60-30 is the leg", generatedIds(run(snap(s), { legCount: 1 })), ["large"]);
+  check("edge model: 3-0 (100%) vs 60-30 (67%): the 60-30 is the leg", generatedIds(run(snap(s), { legCount: 1, scoreModel: "EDGE" })), ["large"]);
+  // The record model (record-score.ts) shrinks K = 10 at each level, and the league level reads
+  // the league picks again on top of p_cat. With every pick in this league, 3-0 is 70.4% and
+  // 60-30 66.5%, so the small record leads. Pinned so a change to K or the formula shows here.
+  check("record model: 3-0 all in-league (70.4%) beats 60-30 (66.5%)", generatedIds(run(snap(s), { legCount: 1 })), ["small"]);
 }
 
 // ============================================================================

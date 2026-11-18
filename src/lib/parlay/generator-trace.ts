@@ -169,7 +169,7 @@ function scoringLeg(id: string, role: ScoringLegTrace["role"], s: PickScore): Sc
   return {
     id,
     role,
-    model: s.model === "edge model" ? "EDGE" : "WIN_RATE",
+    model: s.model === "edge model" ? "EDGE" : s.model === "record model" ? "RECORD" : "WIN_RATE",
     ...(s.fallback ? { fallback: s.fallback } : {}),
     level: s.levels.league.wins + s.levels.league.losses > 0 ? "LEAGUE" : "OTHER_LEAGUES",
     tier: s.levels.platform.tier,

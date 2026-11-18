@@ -28,11 +28,19 @@ import { combineOdds, decimalToAmerican, formatAmericanOdds, formatPayout, hasUs
 import { ANALYZING_STATUS, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
 import { prefersReducedMotion, type Reveal } from "@/components/parlay/use-build-reveal";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
-import { SWAP_TAB_KEYS, type EngineLeg, type GeneratedParlay, type LeagueSlice, type LegRecord, type LegSwapOptions, type SwapOption, type SwapTabKey } from "@/lib/parlay/generator";
+import { SWAP_TAB_KEYS, type BelowGate, type EngineLeg, type GeneratedParlay, type LeagueSlice, type LegRecord, type LegSwapOptions, type SwapOption, type SwapTabKey } from "@/lib/parlay/generator";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import { SELECTION_MODES, type SelectionMode } from "@/lib/parlay/selection";
 import { noAlternativeText, pickSummary, regenerateState, unusedLine, unusedPicks, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import {
+  BELOW_GATE_GROUP,
+  BELOW_GATE_TAG,
+  belowGateSwapNote,
+  belowGateText,
+  CLEARS_GATE_GROUP,
+  combinedText,
+  gateGroups,
+  SWAP_GAME_STARTED,
   isHot,
   leagueChips,
   leagueTagClass,
@@ -154,6 +162,11 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
               Swapped
             </span>
           )}
+          {leg.belowGate && (
+            <span data-below-gate-tag title={belowGateText(leg.belowGate)} className={TAG + " bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"}>
+              {BELOW_GATE_TAG} · {belowGateText(leg.belowGate)}
+            </span>
+          )}
           {isHot(pct) && (
             <span data-hot-tag className={TAG + " bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"}>
               <FlameIcon className="h-3 w-3" />
@@ -183,7 +196,8 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
 export const SWAP_OVERLAY_MS = 750;
 export const SWAP_FINDING = "Finding another eligible pick…";
 export const swappingStatus = (n: number) => `Re-scoring leg ${n} · ${SWAP_FINDING}`;
-export const swappedStatus = (n: number) => `Leg ${n} swapped · Combined odds updated`;
+// A pick from "Below your gate" says so: "Leg 3 swapped · below your gate (53% vs 55%) · Combined odds updated".
+export const swappedStatus = (n: number, below?: BelowGate) => `Leg ${n} swapped · ${below ? belowGateSwapNote(below) + " · " : ""}Combined odds updated`;
 
 function SwapArrowsIcon({ className }: { className?: string }) {
   return (
@@ -281,6 +295,54 @@ export function SwapModal({
   }, []);
 
   const rows = options ? tabRows(options, tab, league) : [];
+  // The same-game tabs: the rows that clear the gate, then "Below your gate" (collapsed).
+  const groups = gateGroups(rows);
+  const [showBelow, setShowBelow] = useState(false);
+  // The leg's game has started: a disabled "Game started" row in place of an empty tab.
+  const startedRow = Boolean(options?.gameStarted) && tab !== "OTHER_GAMES";
+  const row = (o: SwapOption) => {
+    const id = o.pick.pickId;
+    const on = selected === id;
+    return (
+      <li key={id}>
+        <label
+          data-swap-option={id}
+          data-below-gate={o.belowGate ? "" : undefined}
+          className={"flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 transition " + (on ? "bg-brand-600/[0.06] dark:bg-brand-400/[0.08]" : "hover:bg-[#0F1420]/[0.025] dark:hover:bg-white/[0.04]")}
+        >
+          <input type="radio" name={"swap-leg-" + index} value={id} checked={on} onChange={() => setSelected(id)} className="h-4 w-4 shrink-0 accent-brand-600" />
+          <div className="min-w-0 flex-1">
+            {tab === "OTHER_GAMES" && <GameLine pick={o.pick} gameLabel={o.gameLabel} gameTime={o.gameTime} />}
+            <p className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-foreground [overflow-wrap:anywhere]">
+              {o.pick.betDetail}
+              {o.current && (
+                <span data-current-badge className={TAG + " bg-banner text-white"}>
+                  Current
+                </span>
+              )}
+            </p>
+            <p className="text-[11.5px] font-medium text-muted-foreground">
+              {o.pick.capperIsFavorite && (
+                <span className="mr-0.5 text-[#f59e0b]" aria-label="Favorite capper">
+                  ★
+                </span>
+              )}
+              {o.pick.capperName}
+              {capperLine(o.pick)}
+            </p>
+            {o.note && <p className="text-[11.5px] font-semibold text-[#15803D] dark:text-[#4ADE80]">{o.note}</p>}
+            <WinRate leg={o} className="mt-1" />
+            {o.combinedWinPct !== undefined && (
+              <p data-combined-win className={"mt-0.5 text-[11.5px] font-semibold tabular-nums " + (o.belowGate ? "text-amber-700 dark:text-amber-400" : "text-foreground")}>
+                {o.belowGate ? "Combined " + belowGateText(o.belowGate) : combinedText(o.combinedWinPct)}
+              </p>
+            )}
+          </div>
+          <span className={ODDS_PILL}>{formatOdds(o.pick.odds)}</span>
+        </label>
+      </li>
+    );
+  };
   const chosen: SwapOption | null = options && selected !== leg.pick.pickId ? (SWAP_TAB_KEYS.flatMap((t) => options[t]).find((o) => o.pick.pickId === selected) ?? null) : null;
   const priceLegs = legs.map((l) => ({ odds: l.pick.odds, oddsSource: l.pick.oddsSource ?? null, gameId: l.gameId }));
   const cmp = swapComparison(priceLegs, index, chosen ? { odds: chosen.pick.odds, oddsSource: chosen.pick.oddsSource ?? null, gameId: chosen.gameId } : null);
@@ -402,50 +464,46 @@ export function SwapModal({
             <p data-swap-loading className="py-6 text-center text-sm font-medium text-muted-foreground">
               Loading alternatives…
             </p>
-          ) : rows.length === 0 ? (
+          ) : rows.length === 0 && !startedRow ? (
             <p data-swap-empty className="py-6 text-center text-sm font-medium text-muted-foreground">
               {SWAP_EMPTY[tab]}
             </p>
           ) : (
-            <ul role="radiogroup" aria-label={SWAP_TAB_LABELS[tab]} className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
-              {rows.map((o) => {
-                const id = o.pick.pickId;
-                const on = selected === id;
-                return (
-                  <li key={id}>
-                    <label
-                      data-swap-option={id}
-                      className={"flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2.5 transition " + (on ? "bg-brand-600/[0.06] dark:bg-brand-400/[0.08]" : "hover:bg-[#0F1420]/[0.025] dark:hover:bg-white/[0.04]")}
-                    >
-                      <input type="radio" name={"swap-leg-" + index} value={id} checked={on} onChange={() => setSelected(id)} className="h-4 w-4 shrink-0 accent-brand-600" />
-                      <div className="min-w-0 flex-1">
-                        {tab === "OTHER_GAMES" && <GameLine pick={o.pick} gameLabel={o.gameLabel} gameTime={o.gameTime} />}
-                        <p className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-foreground [overflow-wrap:anywhere]">
-                          {o.pick.betDetail}
-                          {o.current && (
-                            <span data-current-badge className={TAG + " bg-banner text-white"}>
-                              Current
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-[11.5px] font-medium text-muted-foreground">
-                          {o.pick.capperIsFavorite && (
-                            <span className="mr-0.5 text-[#f59e0b]" aria-label="Favorite capper">
-                              ★
-                            </span>
-                          )}
-                          {o.pick.capperName}
-                          {capperLine(o.pick)}
-                        </p>
-                        {o.note && <p className="text-[11.5px] font-semibold text-[#15803D] dark:text-[#4ADE80]">{o.note}</p>}
-                        <WinRate leg={o} className="mt-1" />
-                      </div>
-                      <span className={ODDS_PILL}>{formatOdds(o.pick.odds)}</span>
-                    </label>
+            <div role="radiogroup" aria-label={SWAP_TAB_LABELS[tab]}>
+              {groups.below.length > 0 && groups.clears.length > 0 && (
+                <p data-swap-group="clears" className="px-2 pt-1 text-[10.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                  {CLEARS_GATE_GROUP}
+                </p>
+              )}
+              <ul className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
+                {groups.clears.map(row)}
+                {startedRow && (
+                  <li data-swap-game-started>
+                    <div aria-disabled="true" className="flex cursor-not-allowed items-center gap-3 rounded-xl px-2 py-2.5 opacity-60">
+                      <input type="radio" disabled aria-label={SWAP_GAME_STARTED} className="h-4 w-4 shrink-0" />
+                      <p className="text-sm font-semibold text-muted-foreground">{SWAP_GAME_STARTED}</p>
+                    </div>
                   </li>
-                );
-              })}
-            </ul>
+                )}
+              </ul>
+              {groups.below.length > 0 && (
+                <div data-swap-group="below" className="mt-1 border-t border-[#0F1420]/[0.06] dark:border-white/10">
+                  <button
+                    type="button"
+                    data-below-gate-toggle
+                    aria-expanded={showBelow}
+                    onClick={() => setShowBelow((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-[11.5px] font-semibold text-muted-foreground hover:bg-[#0F1420]/[0.025] dark:hover:bg-white/[0.04]"
+                  >
+                    <span>
+                      {BELOW_GATE_GROUP} <span className="tabular-nums">({groups.below.length})</span>
+                    </span>
+                    <span aria-hidden>{showBelow ? "▾" : "▸"}</span>
+                  </button>
+                  {showBelow && <ul className="divide-y divide-[#0F1420]/[0.06] opacity-60 dark:divide-white/10">{groups.below.map(row)}</ul>}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -462,6 +520,11 @@ export function SwapModal({
                 </>
               )}
             </p>
+            {chosen?.belowGate && (
+              <p data-swap-below-gate-note className="text-xs font-semibold text-amber-700 dark:text-amber-400">
+                This pick is {belowGateSwapNote(chosen.belowGate)}.
+              </p>
+            )}
             {shown.kind === "PRICED" && (
               <p className="text-xs">
                 ${SWAP_STAKE} pays <span className="font-semibold text-foreground">{(shown.estimated ? "≈ " : "") + formatPayout(shown.payout)}</span>
@@ -829,6 +892,8 @@ export function GeneratorResult({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the legs on screen and the leg open
   }, [modalIndex, parlay]);
   const chooseAlternative = (index: number, pickId: string) => {
+    const opts = modalData?.options;
+    const below = opts ? SWAP_TAB_KEYS.flatMap((t) => opts[t]).find((o) => o.pick.pickId === pickId)?.belowGate : undefined;
     setModal(null);
     const n = order.indexOf(index) + 1;
     const finish = () => {
@@ -838,7 +903,7 @@ export function GeneratorResult({
       if (!ok) ownSwap.current = false;
       setSwapping(null);
       setLanded(ok ? index : null);
-      setSwapStatus(ok ? swappedStatus(n) : null);
+      setSwapStatus(ok ? swappedStatus(n, below) : null);
     };
     // Reduced motion: replaced at once - no overlay, no tween.
     if (prefersReducedMotion()) {

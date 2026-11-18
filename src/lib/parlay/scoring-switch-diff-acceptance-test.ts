@@ -10,12 +10,12 @@ import { buildGeneratedParlay, type GeneratorSettings } from "@/lib/parlay/gener
 import { buildSnapshot, NOW } from "@/lib/parlay/scoring-switch-fixture";
 
 const CASES: [string, GeneratorSettings, string[]][] = [
-  ["6 legs, best available, default gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" }, []],
-  ["8 legs, 2 per game, default gate", { legCount: 8, maxLegsPerGame: 2, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" }, []],
-  ["6 legs, 60% gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 60 }, []],
-  ["6 legs, no gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 0 }, []],
-  ["slip competing on one game, 4 legs", { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" }, ["g2-heavy-fav", "g2-mid-under"]],
-  ["Your picks only, 2 of 5", { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "YOUR_PICKS_ONLY" }, ["g1-55-45", "g2-heavy-fav", "g3-thin", "g0-small-spread", "g5-away"]],
+  ["6 legs, best available, default gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, []],
+  ["8 legs, 2 per game, default gate", { legCount: 8, maxLegsPerGame: 2, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, []],
+  ["6 legs, 60% gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 60, scoreModel: "EDGE" }, []],
+  ["6 legs, no gate", { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 0, scoreModel: "EDGE" }, []],
+  ["slip competing on one game, 4 legs", { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, ["g2-heavy-fav", "g2-mid-under"]],
+  ["Your picks only, 2 of 5", { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "YOUR_PICKS_ONLY", scoreModel: "EDGE" }, ["g1-55-45", "g2-heavy-fav", "g3-thin", "g0-small-spread", "g5-away"]],
 ];
 
 const frozen: Record<string, unknown> = {};
