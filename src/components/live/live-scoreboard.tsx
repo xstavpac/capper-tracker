@@ -183,7 +183,7 @@ export function LiveScoreboard({
                           {score.inningHalf} {score.inningOrdinal}
                         </span>
                       )}
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-600 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-500/15 dark:text-red-400">LIVE</span>
                     </span>
                   )}
                   {unplayed && (

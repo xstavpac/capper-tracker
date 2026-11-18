@@ -124,7 +124,7 @@ export function GridLiveGameList({
                       <LiveProgressLabel label={progress.label} />
                     </span>
                   )}
-                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-600 dark:bg-red-500/15 dark:text-red-400">
+                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-700 dark:bg-red-500/15 dark:text-red-400">
                     LIVE
                   </span>
                   {picksPill}
