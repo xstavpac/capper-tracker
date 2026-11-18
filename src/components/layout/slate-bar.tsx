@@ -173,35 +173,6 @@ function StatsStrip({ counts, day }: { counts: SlateCounts; day: SlateDay }) {
   );
 }
 
-// The desktop (from 1024px) bar: the league chips only, for today, in one centered row that scrolls
-// sideways when it does not fit. Rendered inside the header's grid, under the nav column.
-export function SlateChipsRow({ counts }: { counts: SlateCounts }) {
-  const pathname = usePathname();
-  const activeSport = useSearchParams().get("sport");
-  const onLive = pathname === "/live" || pathname.startsWith("/live/");
-  return (
-    <div role="region" aria-label="Slate" className="overflow-x-auto py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <div className="mx-auto flex w-max gap-2">
-        {orderSlateLeagues(counts, "today").map((l) => (
-          <LeagueChip key={l.sportKey} league={l} day="today" active={onLive && activeSport === l.sportKey} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function SlateChipsSkeleton() {
-  return (
-    <div aria-hidden="true" className="overflow-hidden py-1">
-      <div className="mx-auto flex w-max gap-2">
-        {SLATE_LEAGUES.map((l) => (
-          <div key={l.key} className="h-[50px] w-[92px] shrink-0 animate-pulse rounded-xl border border-[#2a3c66] bg-[rgba(18,32,70,.85)] motion-reduce:animate-none" />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function SlateBar({ counts }: { counts: SlateCounts }) {
   const [day, setDay] = useState<SlateDay>("today");
   const pathname = usePathname();

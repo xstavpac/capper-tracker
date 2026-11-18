@@ -1,7 +1,7 @@
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveTicker } from "@/components/marketing/live-ticker";
-import { DesktopOnly, MobileOnly } from "@/components/layout/mobile-only";
-import { SlateBarLoader, SlateChipsLoader } from "@/components/layout/slate-bar-loader";
+import { MobileOnly } from "@/components/layout/mobile-only";
+import { SlateBarLoader } from "@/components/layout/slate-bar-loader";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { ParlayPoolProvider } from "@/components/parlay/parlay-pool-context";
@@ -40,11 +40,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <MobileOnly>
                 <SlateBarLoader />
               </MobileOnly>
-            }
-            slateChips={
-              <DesktopOnly>
-                <SlateChipsLoader />
-              </DesktopOnly>
             }
           />
           {/* Full width. Below md the bottom padding also clears the fixed tab bar. Its padding (p-4, md:p-8) is what ThemedPage's backdrop cancels - see themed-page.tsx. */}
