@@ -182,7 +182,7 @@ export function GamePicksExpander({
     <div onClick={(e) => e.preventDefault()}>
       <button
         onClick={toggle}
-        className="mt-3 flex w-full items-center gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-medium text-brand-700 transition hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
+        className="mt-3 flex w-full items-center gap-2 rounded-lg bg-brand-50/60 px-3 py-2.5 text-sm font-medium text-brand-700 transition hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:hover:bg-brand-500/20"
       >
         <ListIcon />
         <span className="flex-1 text-left">
@@ -212,7 +212,7 @@ export function GamePicksExpander({
                         // TOTALS and any unmapped team use the same faint
                         // neutral-gray tint.
                         backgroundColor: group.dotColor
-                          ? group.dotColor + "1F"
+                          ? group.dotColor + "14"
                           : "rgb(var(--muted-foreground) / 0.10)",
                       }
                 }

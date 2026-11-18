@@ -67,7 +67,8 @@ export function CategoryCard({
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
-  const tone = good ? GREEN : RED;
+  // frost (/live): a slightly deeper green so the text on the green glass tile clears 5:1 (#15803D is 4.5:1 there).
+  const tone = good ? (frost ? "text-[#14773A] dark:text-emerald-400" : GREEN) : RED;
   return (
     <div
       role={onToggle ? "button" : undefined}
