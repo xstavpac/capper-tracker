@@ -52,6 +52,7 @@ const BASKETBALL_PARSED: Record<NbaPropMarket, true> = {
   THREES_MADE: true,
   STEALS: true,
   BLOCKS: true,
+  TURNOVERS: true,
   POINTS_REBOUNDS_ASSISTS: true,
   POINTS_REBOUNDS: true,
   POINTS_ASSISTS: true,

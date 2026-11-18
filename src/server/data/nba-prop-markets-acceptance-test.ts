@@ -33,7 +33,7 @@ function check(label: string, actual: unknown, expected: unknown) {
 
 const NFL_MARKETS = ["PASS_YDS", "RUSH_YDS", "REC_YDS", "RECEPTIONS", "TD", "RUSH_REC_YDS", "PASS_RUSH_YDS", "PASS_TDS", "PASS_ATTEMPTS", "RUSH_ATTEMPTS", "PASS_INTERCEPTIONS", "PASS_COMPLETIONS", "TD_COUNT"];
 // DEFENSIVE_REBOUNDS (2026-11) was added later: it sits in the enum next to TD_COUNT, not in the NBA tail.
-const NEW_VALUES = ["REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
+const NEW_VALUES = ["REBOUNDS", "DEFENSIVE_REBOUNDS", "THREES_MADE", "STEALS", "BLOCKS", "TURNOVERS", "POINTS_REBOUNDS_ASSISTS", "POINTS_REBOUNDS", "POINTS_ASSISTS", "REBOUNDS_ASSISTS", "DOUBLE_DOUBLE"];
 
 const filterPick = (propMarket: PropMarket | null, betDetail: string) => ({ betType: "PLAYER_PROP" as const, period: "FULL_GAME" as const, betDetail, propMarket });
 const categoryPick = (sportName: string, propMarket: PropMarket | null, betDetail: string) => ({
@@ -64,12 +64,12 @@ async function main() {
   console.log("########## PART A: the enum ##########");
   {
     const all = Object.values(PropMarket) as string[];
-    const ORIGINAL_NINE = NEW_VALUES.filter((v) => v !== "DEFENSIVE_REBOUNDS");
+    const ORIGINAL_NINE = NEW_VALUES.filter((v) => v !== "DEFENSIVE_REBOUNDS" && v !== "TURNOVERS");
     check("the new values are in the Prisma enum", NEW_VALUES.filter((v) => !all.includes(v)), []);
     check("the enum's last nine values are the new ones, in order (additive, nothing moved)", all.slice(-9), ORIGINAL_NINE);
-    check("NBA_PROP_MARKETS is POINTS, ASSISTS and the ten new values", [...NBA_PROP_MARKETS], ["POINTS", "ASSISTS", ...NEW_VALUES]);
+    check("NBA_PROP_MARKETS is POINTS, ASSISTS and the eleven new values", [...NBA_PROP_MARKETS], ["POINTS", "ASSISTS", ...NEW_VALUES]);
     check("every NBA market is a real enum value", NBA_PROP_MARKETS.filter((m) => !all.includes(m)), []);
-    check("NBA_ONLY_PROP_MARKETS is exactly the ten new values", [...NBA_ONLY_PROP_MARKETS], NEW_VALUES);
+    check("NBA_ONLY_PROP_MARKETS is exactly the eleven new values", [...NBA_ONLY_PROP_MARKETS], NEW_VALUES);
 
     // Reuse: one value, one stat. POINTS / ASSISTS are the only shared ones.
     const shared = (a: readonly string[], b: readonly string[]) => a.filter((m) => b.includes(m));
@@ -101,7 +101,7 @@ async function main() {
     // Other sports' filter options are untouched.
     // Prop categories PR 2: every new NBA value has a /picks filter option now (36 before + 10).
     check("every new value has a filter option", NEW_VALUES.filter((v) => !BET_TYPE_FILTER_OPTIONS.some((o) => o.value === v)), []);
-    check("the option list is the 36 from before plus the 10 NBA markets", BET_TYPE_FILTER_OPTIONS.length, 46);
+    check("the option list is the 36 from before plus the 11 NBA markets", BET_TYPE_FILTER_OPTIONS.length, 47);
     check("hockey's filter options are exactly the six NHL markets (no NBA-only one)", [...betTypeOptionsForChipSet(chipSetForLeague("NHL"))].filter((k) => NEW_VALUES.includes(k)), []);
   }
 

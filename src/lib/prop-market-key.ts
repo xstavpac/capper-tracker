@@ -74,6 +74,7 @@ const MARKET_NOUNS = {
     THREES_MADE: "threes made",
     STEALS: "steals",
     BLOCKS: "blocks",
+    TURNOVERS: "turnovers",
     POINTS_REBOUNDS_ASSISTS: "points + rebounds + assists",
     POINTS_REBOUNDS: "points + rebounds",
     POINTS_ASSISTS: "points + assists",

@@ -9,9 +9,11 @@ import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 //   ASSISTS                   assists / ast / asts       - SHARED with the NHL
 //   REBOUNDS                  rebounds / rebs / reb / boards
 //   DEFENSIVE_REBOUNDS        defensive rebounds / def reb / dreb (NEVER total rebounds)
-//   THREES_MADE               threes / 3s / 3pm / 3pt / 3-pointers / three pointers
+//   THREES_MADE               threes / 3s / 3pm / 3pt / 3-pointers / three pointers /
+//                             3pt field goals / 3-point field goals (made) - never attempts (3PA)
 //   STEALS                    steals / stl
 //   BLOCKS                    blocks / blk
+//   TURNOVERS                 turnovers / turnover / tov (a player's own; a TEAM subject never reaches here)
 //   POINTS_REBOUNDS_ASSISTS   PRA / pts+reb+ast / points rebounds assists
 //   POINTS_REBOUNDS           P+R / PR / pts+reb / points and rebounds
 //   POINTS_ASSISTS            P+A / PA / pts+ast / points and assists
@@ -30,7 +32,7 @@ import { nbaPlayerAliasName } from "@/lib/nba-player-aliases";
 // both true, so anything that reads either value must know the sport too.
 //
 // Markets this app has no grader for (triple-double, first basket, a quarter-
-// or half-scoped stat, turnovers, steals+blocks, ...) are still recognized as
+// or half-scoped stat, steals+blocks, three-point attempts, ...) are still recognized as
 // NBA props - with `unsupported` set and no market - so they are never read as
 // a moneyline or a total, and never graded as the nearest supported market.
 
@@ -42,6 +44,7 @@ export type NbaPropMarket =
   | "THREES_MADE"
   | "STEALS"
   | "BLOCKS"
+  | "TURNOVERS"
   | "POINTS_REBOUNDS_ASSISTS"
   | "POINTS_REBOUNDS"
   | "POINTS_ASSISTS"
@@ -56,6 +59,7 @@ export const NBA_PROP_MARKETS: readonly NbaPropMarket[] = [
   "THREES_MADE",
   "STEALS",
   "BLOCKS",
+  "TURNOVERS",
   "POINTS_REBOUNDS_ASSISTS",
   "POINTS_REBOUNDS",
   "POINTS_ASSISTS",
@@ -104,7 +108,14 @@ const BARE_COMBO_RE = new RegExp(
 );
 const BARE_COMBO_MARKET: Record<string, NbaPropMarket> = { pr: "POINTS_REBOUNDS", pa: "POINTS_ASSISTS", ra: "REBOUNDS_ASSISTS" };
 
-const THREES_RE = word(String.raw`(?:made\s+)?(?:threes|3s|3pm|3ptm|3-?pts?|3[\s-]?pointers?|three[\s-]?pointers?)(?:\s+made)?`);
+// "3pt field goals", "3-point field goals made", "three point field goals": the same made-threes stat. Listed
+// first so the strip takes the whole phrase (a bare "3pt" match would leave "field goals" on the player's name).
+const THREE_FG = String.raw`(?:3[\s-]?(?:pt|point)|three[\s-]?point)\s+field[\s-]?goals?`;
+const THREES_RE = word(String.raw`(?:made\s+)?(?:${THREE_FG}|threes|3s|3pm|3ptm|3-?pts?|3[\s-]?pointers?|three[\s-]?pointers?)(?:\s+made)?`);
+// Three-point ATTEMPTS ("3PA", "3pt attempts", "3pt field goals attempted"): a different stat - never threes made.
+const THREES_ATTEMPTED_RE = word(
+  String.raw`3pa|3ptas?|(?:${THREE_FG}|3[\s-]?pt|3[\s-]?pointers?|three[\s-]?pointers?|threes)\s+(?:attempted|attempts?)|(?:3[\s-]?pt|three[\s-]?point)\s+(?:field[\s-]?goal\s+)?attempts?`
+);
 const REBOUNDS_RE = word(R);
 // "defensive rebounds", "defensive boards", "def reb", "def. rebs", "dreb(s)", "d-reb". Checked BEFORE
 // REBOUNDS_RE (see LINE_MARKETS): REBOUNDS_RE alone would read these as total rebounds.
@@ -112,6 +123,7 @@ const DEFENSIVE_REBOUNDS_RE = word(String.raw`(?:defensive|def\.?)\s+(?:rebounds
 const ASSISTS_RE = word(A);
 const STEALS_RE = word(S);
 const BLOCKS_RE = word(B);
+const TURNOVERS_RE = word(String.raw`turnovers?|tov`);
 const POINTS_RE = word(P);
 
 const DOUBLE_DOUBLE_RE = /\bdouble[\s-]?doubles?\b/i;
@@ -131,7 +143,7 @@ const STEALS_BLOCKS_RE = word(String.raw`${S}${JOIN}${B}|${B}${JOIN}${S}|stocks|
 // A combined market mixing steals or blocks with another stat ("pts+stl").
 const OTHER_COMBO_RE = word(String.raw`(?:${P}|${R}|${A})\s*(?:\+|&|/)\s*(?:${S}|${B})|(?:${S}|${B})\s*(?:\+|&|/)\s*(?:${P}|${R}|${A})`);
 const OTHER_STAT_RE = word(
-  String.raw`turnovers?|tov|fouls?|field\s+goals?(?:\s+(?:made|attempted))?|fgm|fga|free\s+throws?(?:\s+(?:made|attempted))?|ftm|fta|minutes|fantasy(?:\s+(?:points?|score))?|dunks?|offensive\s+rebounds?`
+  String.raw`fouls?|(?<!(?:3|three)[\s-]?(?:pt|point)\s+)field\s+goals?(?:\s+(?:made|attempted))?|fgm|fga|free\s+throws?(?:\s+(?:made|attempted))?|ftm|fta|minutes|fantasy(?:\s+(?:points?|score))?|dunks?|offensive\s+rebounds?`
 );
 
 const UNSUPPORTED_REASON = {
@@ -160,6 +172,7 @@ const LINE_MARKETS: [NbaPropMarket, RegExp][] = [
   ["ASSISTS", ASSISTS_RE],
   ["STEALS", STEALS_RE],
   ["BLOCKS", BLOCKS_RE],
+  ["TURNOVERS", TURNOVERS_RE],
   ["POINTS", POINTS_RE],
 ];
 
@@ -181,6 +194,7 @@ function classify(text: string, abbreviations: boolean): Classified {
       return { unsupported: UNSUPPORTED_REASON.OTHER, strip: DEFENSIVE_REBOUNDS_RE };
     }
   }
+  if (line && THREES_ATTEMPTED_RE.test(text)) return { unsupported: UNSUPPORTED_REASON.OTHER, strip: THREES_ATTEMPTED_RE };
   if (line && OTHER_STAT_RE.test(text)) return { unsupported: UNSUPPORTED_REASON.OTHER, strip: OTHER_STAT_RE };
 
   if (DOUBLE_DOUBLE_RE.test(text)) return { market: "DOUBLE_DOUBLE", strip: DOUBLE_DOUBLE_RE };

@@ -81,6 +81,7 @@ export type BetTypeFilterKey =
   | "THREES_MADE"
   | "STEALS"
   | "BLOCKS"
+  | "TURNOVERS"
   | "POINTS_REBOUNDS_ASSISTS"
   | "POINTS_REBOUNDS"
   | "POINTS_ASSISTS"
@@ -123,6 +124,7 @@ export const BET_TYPE_FILTER_OPTIONS: { value: BetTypeFilterKey; label: string }
   { value: "REBOUNDS_ASSISTS", label: "Reb + Ast" },
   { value: "STEALS", label: "Steals" },
   { value: "BLOCKS", label: "Blocks" },
+  { value: "TURNOVERS", label: "Turnovers" },
   { value: "DEFENSIVE_REBOUNDS", label: "Defensive Rebounds" },
   { value: "DOUBLE_DOUBLE", label: "Double-Double" },
   { value: "SAVES", label: "Goalie Saves" },

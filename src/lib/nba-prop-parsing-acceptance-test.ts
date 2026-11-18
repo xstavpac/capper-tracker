@@ -166,8 +166,14 @@ async function main() {
       "Jokic o1.5 stl+blk",
       "Jokic over 1.5 steals + blocks",
       "Jokic o30.5 pts+stl",
-      "Jokic over 3.5 turnovers",
       "Jokic over 22.5 fantasy points",
+      // Three-point ATTEMPTS are not threes made, and field goals made is not a market this app grades.
+      "Jokic over 4.5 3pt field goals attempted",
+      "Jokic over 6.5 3PA",
+      "Jokic over 5.5 3pt attempts",
+      "Jokic over 6.5 three point attempts",
+      "Jokic over 8.5 field goals made",
+      "Jokic 1st quarter over 1.5 turnovers",
     ]) {
       const prop = parseNbaProp(text);
       check(`"${text}" is an NBA prop with NO market and an unsupported reason`, { name: prop?.playerName, market: prop?.propMarket ?? null, flagged: Boolean(prop?.unsupported) }, { name: "Jokic", market: null, flagged: true });
@@ -186,6 +192,26 @@ async function main() {
       check(`"${text}" never grades as total rebounds`, parseNbaPlayerProp(text)?.propMarket === "REBOUNDS", false);
     }
     check("plain rebounds still REBOUNDS", parseNbaPlayerProp("Gobert over 11.5 rebounds")?.propMarket, "REBOUNDS");
+    // TURNOVERS (2026-11) and the "3pt field goals" family of THREES_MADE: every phrasing -> one canonical market,
+    // and no market word left on the player's name (the old parse stored "Sandro Mamukelashvili pt").
+    for (const [text, market, name] of [
+      ["Jaden McDaniels over 1.5 turnovers", "TURNOVERS", "Jaden McDaniels"],
+      ["Jaden McDaniels over 1.5 total turnovers", "TURNOVERS", "Jaden McDaniels"],
+      ["Jaden McDaniels under 0.5 turnover", "TURNOVERS", "Jaden McDaniels"],
+      ["Jaden McDaniels o1.5 tov", "TURNOVERS", "Jaden McDaniels"],
+      ["Jaden McDaniels 2+ turnovers", "TURNOVERS", "Jaden McDaniels"],
+      ["Sandro Mamukelashvili over 1.5 3pt field goals", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 total 3pt field goals", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 3-point field goals made", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 three point field goals", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 3pt made", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 threes", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili over 1.5 3-pointers made", "THREES_MADE", "Sandro Mamukelashvili"],
+      ["Sandro Mamukelashvili o1.5 3pm", "THREES_MADE", "Sandro Mamukelashvili"],
+    ] as const) {
+      check(`"${text}" -> ${market}, player "${name}"`, { m: parseNbaProp(text)?.propMarket, n: parseNbaProp(text)?.playerName }, { m: market, n: name });
+    }
+    check("N+ turnovers normalizes to Over N-0.5", normalizeNbaNPlus("Jaden McDaniels 2+ turnovers"), "Jaden McDaniels Over 1.5 turnovers");
     check("rebounds + assists still REBOUNDS_ASSISTS", parseNbaPlayerProp("Jokic over 20.5 rebounds + assists")?.propMarket, "REBOUNDS_ASSISTS");
     for (const text of ["Gobert defensive rebounds + assists o12.5", "Gobert o20.5 pts + dreb", "Gobert o9.5 defensive rebounds and rebounds", "Gobert 1st quarter over 3.5 defensive rebounds", "Gobert over 3.5 offensive rebounds"]) {
       const prop = parseNbaProp(text);
