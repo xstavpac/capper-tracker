@@ -1834,12 +1834,60 @@ export function explainDroppedNbaProp(text: string): string | null {
 // check reuses detectSport (explicit sport code or a team nickname before the
 // number), so game/team totals ("Yankees over 4.5 runs", "NBA LeBron James
 // over 25.5 points") keep flowing to their normal resolvers.
+// NHL player goals lines: "<player> over/under N goals" (also "o0.5", "total goals").
+//
+// The NHL parser has no goals-LINE market - only goal-scorer wording ("anytime goal", "1+ goals",
+// "goal scorer") - so these lines fell through to a game TOTAL. Over 0.5 goals IS the anytime-goal bet
+// and under 0.5 goals is its NO side, so a 0.5 line is rewritten to that wording before parsing (the
+// same way normalizeNhlNPlus rewrites "1+ goals"); every later reader - the NHL roster pass, market
+// stamping, grading, labels - then sees an anytime-goal pick. Any other number ("over 1.5 goals") is a
+// multi-goal bet this app does not grade: nhlPlayerGoalsLineIsUnsupported routes it to the
+// unsupported-prop list instead of a game total.
+//
+// The team guard is the team / city / alias data game matching uses (classifyTeamSide): only a subject
+// with NO recognized team or city in it is treated as a player. "Panthers over 3.5 goals",
+// "Florida over 3.5 goals" and "Panthers vs Oilers over 6.5 goals" keep reading as totals. Period- or
+// situation-scoped lines ("1st period over 0.5 goals") are left alone - they are a different market.
+const NHL_GOALS_LINE_RE = /^(.+?)\s+(over|under|[ou])\s*(\d+(?:\.\d+)?)\s+(?:total\s+)?goals?\b(.*)$/i;
+const NHL_GOALS_SCOPED_RE = /\b(?:1st|2nd|3rd|first|second|third)\s+(?:period|per)\b|\bp[123]\b|\b[123]p\b|\bpower\s*play\b|\bpp\b|\bshorthanded\b|\bperiod\b|\bregulation\b/i;
+
+function nhlPlayerGoalsLine(text: string): { subject: string; under: boolean; line: number; rest: string } | null {
+  const m = NHL_GOALS_LINE_RE.exec(text);
+  if (!m) return null;
+  if (NHL_GOALS_SCOPED_RE.test(text)) return null;
+  const [, subject, side, num, rest] = m;
+  // What the team guard reads: no parentheticals, sport code, leading emoji / punctuation.
+  const who = subject
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(?:NHL|MLB|NBA|NFL|WNBA)\b:?/gi, " ")
+    .replace(/^[^\p{L}]+/u, "")
+    .replace(/[:\-–]+\s*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!/\p{L}/u.test(who)) return null;
+  if (classifyTeamSide(who) !== "none") return null;
+  return { subject, under: /^u/i.test(side), line: parseFloat(num), rest };
+}
+
+export function normalizeNhlPlayerGoalsLine(text: string): string {
+  const g = nhlPlayerGoalsLine(text);
+  if (!g || g.line !== 0.5) return text;
+  return g.subject + (g.under ? " No Goal Scorer" : " Anytime Goal") + g.rest;
+}
+
+function nhlPlayerGoalsLineIsUnsupported(text: string): boolean {
+  const g = nhlPlayerGoalsLine(text);
+  return g !== null && g.line !== 0.5;
+}
+
 export function detectUnsupportedPropLine(text: string): UnsupportedPropInfo | null {
   // NFL stats with no grader ("3+ sacks", "5+ receiving targets") are checked
   // first: parsePlayerProp would otherwise claim "receiving targets" as
   // REC_YDS and let it import as a yardage pick.
   const nflUnsupported = detectUnsupportedNflStat(text);
   if (nflUnsupported) return nflUnsupported;
+  // "Connor McDavid over 1.5 goals": a multi-goal player bet, not a game total (see normalizeNhlPlayerGoalsLine).
+  if (nhlPlayerGoalsLineIsUnsupported(text)) return { sport: "NHL", reason: UNSUPPORTED_PROP_REASONS.NHL };
   if (parsePlayerProp(text)) return null;
   const info = detectUnsupportedProp(
     text,
@@ -2193,7 +2241,7 @@ export function parsePickText(description: string, sport?: string): {
   description = normalizeNPlusPlayerProp(description);
   // "NFRI" -> "NRFI", "TTO 3.5" -> "TT over 3.5". parseCatalog already does
   // this per line; repeated here for the callers that hand in their own text.
-  description = normalizeMarketShorthand(description);
+  description = normalizeNhlPlayerGoalsLine(normalizeMarketShorthand(description));
   // MLB N+ ("2+ hits" -> "Over 1.5 hits", "to hit a home run" -> "Over 0.5 Home Runs") only for a
   // line the importer positively identifies as an MLB prop - never a team's "8+ runs".
   if (parseSupportedMlbProp(description)) description = normalizeMlbNPlus(description);
@@ -3520,7 +3568,7 @@ export function parseCatalog(
   droppedAsHeaders: DroppedLine[];
 } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
-  const rawLines = normalizeTypography(text).split("\n").map((l) => normalizeMarketShorthand(l.trim()));
+  const rawLines = normalizeTypography(text).split("\n").map((l) => normalizeNhlPlayerGoalsLine(normalizeMarketShorthand(l.trim())));
 
   const results: ParsedPick[] = [];
   const parlays: ParsedParlay[] = [];

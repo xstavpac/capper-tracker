@@ -98,8 +98,11 @@ const NUM = String.raw`\d+(?:\.\d+)?`;
 // must end on a word boundary so "hits" never matches inside "hitsville".
 const WORD = String.raw`(?:runs\s+batted\s+in|runs\s+scored|home\s?runs?|total\s+bases|strike\s?outs?|outs\s+recorded|bases\s+on\s+balls|rbis?|hrs?|hits?|walks?|runs?|outs?|ks?|tb|bb)`;
 
-const LINE_THEN_WORD = new RegExp(String.raw`(?<![\w.])(?:over|under|o|u)\s*(${NUM})\s*(${WORD})\b`, "i");
-const WORD_THEN_LINE = new RegExp(String.raw`\b(${WORD})\s+(?:over|under|o|u)\s*(${NUM})\b`, "i");
+// "over 1.5 total hits" / "total hits over 1.5": an optional "total" before the stat word is part of the
+// market, never the name. Not before "bases" - "total bases" is its own market (TOTAL_BASES).
+const TOTAL_PREFIX = String.raw`(?:total\s+(?!bases\b))?`;
+const LINE_THEN_WORD = new RegExp(String.raw`(?<![\w.])(?:over|under|o|u)\s*(${NUM})\s*${TOTAL_PREFIX}(${WORD})\b`, "i");
+const WORD_THEN_LINE = new RegExp(String.raw`\b${TOTAL_PREFIX}(${WORD})\s+(?:over|under|o|u)\s*(${NUM})\b`, "i");
 
 // Different markets that share stat words - never read as the plain market.
 const SCOPED_VARIANT = new RegExp(
