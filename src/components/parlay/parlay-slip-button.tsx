@@ -1,6 +1,6 @@
 "use client";
 
-// Live's slip control, in the /live banner. Off: "Parlay slip · N" turns slip
+// Live's slip control, on the /live league row, left of the Feed / Grid toggle. Off: "Parlay slip · N" turns slip
 // mode on (the checkboxes on every pick card and "Target game" on every game
 // card). On: the slip-mode bar - "N picks · M games targeted", Exit, and
 // "Send to generator →", which turns slip mode off and opens /parlay. The
@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon, TicketIcon } from "@/components/dashboard/cappers-icons";
-import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
+import { LIVE_PILL, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 // The /live banner's pills (40px, as in design/page-banners-reference.html).
@@ -26,7 +26,7 @@ export function ParlaySlipButton() {
   if (!slipMode) {
     return (
       <div className="flex h-11 items-center">
-        <button type="button" onClick={enterSlipMode} className={LIVE_PILL + LIVE_PILL_OFF + "!h-11"}>
+        <button type="button" onClick={enterSlipMode} className={LIVE_PILL + "live-seg live-seg-off !h-11"}>
           <TicketIcon className="h-[18px] w-[18px] flex-none" />
           {"Parlay slip" + (slipSize > 0 ? " · " + slipSize : "")}
         </button>

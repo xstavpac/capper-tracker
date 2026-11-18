@@ -4,7 +4,6 @@ import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { ClipboardIcon, GridIcon } from "@/components/dashboard/cappers-icons";
 import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON, LIVE_PILL_ROW } from "@/components/live/live-pill-styles";
-import { MobileOnly, PhoneOnly, TabletUp } from "@/components/layout/mobile-only";
 import { SLATE_LEAGUES, leagueLogoForLight } from "@/lib/slate-counts";
 
 type Tab = { key: string; label: string; href: string };
@@ -13,13 +12,13 @@ type Tab = { key: string; label: string; href: string };
 const plainClick = (e: MouseEvent) => e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
 
 // The Feed / Grid toggle: a frosted segmented control (.live-seg*, globals.css), at the right end of the
-// league row. Lights the clicked option at once, before the server answers.
+// league row, right of the Parlay slip. Lights the clicked option at once, before the server answers.
 export function LiveViewToggle({ views, view }: { views: Tab[]; view: string }) {
   const [pendingView, setPendingView] = useState<string | null>(null);
   useEffect(() => setPendingView(null), [view]);
   const shownView = pendingView ?? view;
   return (
-    <nav aria-label="View" className={LIVE_PILL_ROW + " md:!m-0 md:!overflow-visible md:!p-0 lg:ml-auto lg:flex-none"}>
+    <nav aria-label="View" className="flex-none">
       <div className="live-seg flex h-[46px] flex-none items-center gap-[3px] rounded-full border p-[3px]">
         {views.map((v) => {
           const on = v.key === shownView;
@@ -46,10 +45,8 @@ export function LiveViewToggle({ views, view }: { views: Tab[]; view: string }) 
 
 // The /live pills under the banner, inside the banner's own container. The league pills are links
 // (a query param the page reads on the server); from 1024px they are one row (scrolling sideways when
-// it does not fit) and the Feed / Grid toggle and the Parlay slip (`children`) are in the banner, on
-// the title line. Below 1024px: from 768px one wrapping row (leagues, the toggle, then the Parlay slip);
-// under 768px three rows (NFL..WNBA / NCAAF NCAAB Parlay slip / Feed Grid), each scrolling sideways.
-// The Parlay slip is drawn in each place it can appear, and only the one for this width stays in the DOM.
+// it does not fit) with the Parlay slip (`children`) and the Feed / Grid toggle as a group at the right end.
+// Below 1024px the group wraps under the pills (under 768px: three rows, each scrolling sideways).
 // The links navigate client-side (next/link), so the layout above the page, and the Parlay slip it
 // holds (ParlayPoolProvider), stays mounted from one league to the next. Not prefetched: each is a
 // full per-user board. The logos are the Slate Bar's (SLATE_LEAGUES), in the light-surface variant.
@@ -99,17 +96,12 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
         className="flex flex-col gap-[14px] md:flex-row md:flex-wrap md:gap-2 lg:-mx-4 lg:-my-5 lg:min-w-0 lg:flex-nowrap lg:overflow-x-auto lg:px-4 lg:py-5 lg:[-ms-overflow-style:none] lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
       >
         <div className={LIVE_PILL_ROW + " md:contents"}>{leagues.slice(0, FIRST_ROW).map(leaguePill)}</div>
-        <div className={LIVE_PILL_ROW + " md:contents"}>
-          {leagues.slice(FIRST_ROW).map(leaguePill)}
-          <PhoneOnly className="flex-none">{children}</PhoneOnly>
-        </div>
+        <div className={LIVE_PILL_ROW + " md:contents"}>{leagues.slice(FIRST_ROW).map(leaguePill)}</div>
       </nav>
-      {/* The toggle: right end of this row (pills left); on a narrow row it wraps under the pills. */}
-      <div className="flex flex-col gap-[14px] md:ml-auto md:flex-none md:flex-row md:items-center md:gap-3">
+      {/* The right-hand group: [Parlay slip] [Feed | Grid]. Pills stay left; on a narrow row the group wraps under them together (a sideways-scrolling row on a phone), the slip still left of the toggle. */}
+      <div className={LIVE_PILL_ROW + " md:!m-0 md:!ml-auto md:!overflow-visible md:!p-0 md:flex-none md:items-center md:gap-3"}>
+        <div className="flex-none">{children}</div>
         <LiveViewToggle views={views} view={view} />
-        <MobileOnly>
-          <TabletUp className="flex-none">{children}</TabletUp>
-        </MobileOnly>
       </div>
     </div>
   );
