@@ -3,7 +3,7 @@ import { DesktopOnly } from "@/components/layout/mobile-only";
 import { SHELL_CONTAINER } from "@/components/layout/shell";
 import { LiveBannerRow, LiveViewToggle } from "@/components/live/live-banner-row";
 import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
-import { ParlaySlipButton } from "@/components/parlay/parlay-slip-button";
+import { ParlaySlipButton, ParlaySlipActionBar } from "@/components/parlay/parlay-slip-button";
 
 // The /live banner: the shared page banner, with the Feed/Grid toggle and Parlay slip on the title line from 1024px,
 // and the league pills under it. The league and the view are links (query params the page
@@ -40,6 +40,7 @@ export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGri
           </LiveBannerRow>
         </div>
       </div>
+      <ParlaySlipActionBar />
     </>
   );
 }
