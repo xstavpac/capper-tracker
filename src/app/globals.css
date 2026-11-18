@@ -169,3 +169,10 @@ html {
 @keyframes bvRowIn{0%,40%{opacity:0;transform:translateX(-14px)}50%,88%{opacity:1;transform:translateX(0)}96%,100%{opacity:0;transform:translateX(0)}}
 .bv-row{animation:bvRowIn 7s ease-out infinite both}
 @media (prefers-reduced-motion: reduce){.bv-scan,.bv-flow,.bv-row{animation:none}}
+
+/* /live phone slip action bar is up (ParlaySlipActionBar sets data-slip-bar on <body>): the page clears it as well as the tab bar. */
+@media (max-width: 767px) {
+  body[data-slip-bar] main {
+    padding-bottom: calc(56px + env(safe-area-inset-bottom) + 16px + 88px);
+  }
+}
