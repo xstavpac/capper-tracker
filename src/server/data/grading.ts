@@ -25,7 +25,7 @@ import type { RosterPlayer } from "@/server/data/nfl-roster";
 import { closestByTime, sameEasternDay } from "@/lib/dates";
 import { isPreseasonGame } from "@/lib/sport-seasons";
 import { gradeThreeWay, threeWayWording } from "@/lib/nhl-three-way";
-import { teamNamesMatch } from "@/lib/team-name-match";
+import { teamOrientation } from "@/lib/score-orientation";
 import {
   extractLine,
   parseTouchdownProp,
@@ -74,7 +74,7 @@ function findMarket(game: OddsGame, key: string) {
 // uses. referenceTime should be the actual finished game's own commenceTime
 // (what the caller has on hand), not "now" - grading can run well after the
 // game itself.
-function deriveLedgerFields(
+export function deriveLedgerFields(
   oddsGames: OddsGame[],
   homeTeam: string,
   awayTeam: string,
@@ -82,13 +82,14 @@ function deriveLedgerFields(
 ): { favTeam: string | null; totalLine: number | null } {
   // teamNamesMatch, not ===: homeTeam/awayTeam come from the score source
   // (ESPN), oddsGames from The Odds API, and the two disagree on a few names
-  // (see team-name-match.ts).
-  const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, homeTeam) && teamNamesMatch(g.awayTeam, awayTeam)
-  );
+  // (see team-name-match.ts). Either orientation: a neutral-site game has no
+  // true home team and the two feeds pick differently (see score-orientation.ts).
+  const feed = { homeTeam, awayTeam };
+  const candidates = oddsGames.filter((g) => teamOrientation(feed, g) !== null);
   const sameDay = candidates.filter((g) => sameEasternDay(new Date(g.commenceTime), referenceTime));
   if (sameDay.length === 0) return { favTeam: null, totalLine: null };
   const match = closestByTime(sameDay, (g) => new Date(g.commenceTime).getTime(), referenceTime.getTime());
+  const reversed = teamOrientation(feed, match) === "reversed";
 
   const h2h = findMarket(match, "h2h");
   const homeOutcome = h2h?.outcomes.find((o) => o.name === match.homeTeam);
@@ -96,10 +97,10 @@ function deriveLedgerFields(
   // Return the caller's (score-source) spelling, not the odds game's - this
   // value is stored in GameResult.favTeam alongside GameResult.homeTeam/
   // awayTeam (also score-source), and downstream code (decay-delta-backtest,
-  // team-tendencies) assumes favTeam is string-equal to one of them. For the
-  // ~all teams whose two spellings agree this is identical to match.homeTeam.
-  const favTeam =
-    homeOutcome && awayOutcome ? (homeOutcome.price < awayOutcome.price ? homeTeam : awayTeam) : null;
+  // team-tendencies) assumes favTeam is string-equal to one of them. When the
+  // odds game is the reversed orientation its home side is the caller's away.
+  const oddsHomeIsFav = homeOutcome && awayOutcome ? homeOutcome.price < awayOutcome.price : null;
+  const favTeam = oddsHomeIsFav === null ? null : oddsHomeIsFav !== reversed ? homeTeam : awayTeam;
 
   const totals = findMarket(match, "totals");
   const totalLine = totals?.outcomes.find((o) => o.point !== undefined)?.point ?? null;

@@ -154,9 +154,13 @@ async function computeSportSwings(sportKey: string, day: string, n: number): Pro
     for (const home of oddsSpellings(s.homeTeam, sportKey)) {
       for (const away of oddsSpellings(s.awayTeam, sportKey)) {
         const pair = { home: normalizeTeamName(home), away: normalizeTeamName(away) };
-        if (!seen.has(pair.home + "|" + pair.away)) {
-          seen.add(pair.home + "|" + pair.away);
-          pairs.push(pair);
+        // Both orientations: a neutral-site game's odds event may list the teams
+        // the other way round (chooseLine flips its spread back).
+        for (const p of [pair, { home: pair.away, away: pair.home }]) {
+          if (!seen.has(p.home + "|" + p.away)) {
+            seen.add(p.home + "|" + p.away);
+            pairs.push(p);
+          }
         }
       }
     }

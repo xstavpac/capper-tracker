@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { OddsGame } from "@/server/data/odds";
 import { closestByTime, easternDateKey } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
+import { teamOrientation } from "@/lib/score-orientation";
 import { MAX_GAME_TIME_DRIFT_MS } from "@/server/data/grading";
 import { getOddsGamesForTendencies } from "@/server/data/odds-projections";
 
@@ -55,9 +56,11 @@ export function findOddsGameForResult(
   // teamNamesMatch, not ===: `game` is a GameResult (score-source spelling),
   // oddsGames come from The Odds API, which disagree on a few names (see
   // team-name-match.ts).
-  const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, game.homeTeam) && teamNamesMatch(g.awayTeam, game.awayTeam)
-  );
+  // Either orientation: a neutral-site game has no true home team and the two
+  // feeds pick differently (score-orientation.ts). The readers below
+  // (moneylinePrice, totalLine, spreadPoint) go by team name, so a reversed
+  // odds game needs no other change.
+  const candidates = oddsGames.filter((g) => teamOrientation(game, g) !== null);
   if (candidates.length === 0) return null;
 
   const withinDrift = candidates.filter(
