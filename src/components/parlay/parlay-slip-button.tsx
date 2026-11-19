@@ -17,6 +17,10 @@ import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 // The /live banner's pills (40px, as in design/page-banners-reference.html).
 const BANNER_PILL = "flex h-10 items-center rounded-full border text-[13px] transition ";
 const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 ";
+// The filled "slip on" chip: one style for phone and desktop (only the element and the breakpoint differ).
+// Colors come from LIVE_PILL_ON, not the --bv-* variables: those are defined under .pbanner only, and since
+// #496 the slip sits in the league row, outside the banner, where they resolve to nothing.
+const SLIP_ON_CHIP = LIVE_PILL + LIVE_PILL_ON + "!h-11 ";
 const BANNER_IDLE = "border-[color:var(--bv-pill-border)] bg-[var(--bv-pill-bg)] font-semibold text-[color:var(--bv-btn-text)]";
 
 export function ParlaySlipButton() {
@@ -38,12 +42,12 @@ export function ParlaySlipButton() {
   return (
     <div role="toolbar" aria-label="Slip mode" className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       {/* Phone (below 768px): the chip is the filled "on" pill and a tap on it leaves slip mode; Exit and Send are in the action bar (ParlaySlipActionBar). */}
-      <button type="button" aria-pressed="true" aria-label={"Slip mode on, " + summary + ". Tap to exit."} onClick={exitSlipMode} className={LIVE_PILL + LIVE_PILL_ON + "!h-11 md:hidden"}>
+      <button type="button" aria-pressed="true" aria-label={"Slip mode on, " + summary + ". Tap to exit."} onClick={exitSlipMode} className={SLIP_ON_CHIP + "md:hidden"}>
         <ClipboardIcon className="h-[18px] w-[18px] flex-none" />
         {summary}
       </button>
-      <span className={"max-md:hidden " + BANNER_PILL + "min-w-0 gap-2 border-[color:var(--bv-active)] bg-[var(--bv-active)] px-3.5 font-semibold text-white shadow-[0_0_14px_rgba(37,99,235,0.6)]"}>
-        <ClipboardIcon className="h-4 w-4 flex-none" />
+      <span className={SLIP_ON_CHIP + "min-w-0 max-md:hidden"}>
+        <ClipboardIcon className="h-[18px] w-[18px] flex-none" />
         <span className="truncate">{summary}</span>
       </span>
       {overCapBy !== null && (
