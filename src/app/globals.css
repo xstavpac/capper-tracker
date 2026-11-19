@@ -271,3 +271,10 @@ html {
     padding-bottom: calc(56px + env(safe-area-inset-bottom) + 16px + 88px);
   }
 }
+
+/* Desktop: the same bar floats at the bottom of the viewport (no tab bar), so the page clears just the bar. */
+@media (min-width: 768px) {
+  body[data-slip-bar] main {
+    padding-bottom: calc(16px + 88px + 32px);
+  }
+}

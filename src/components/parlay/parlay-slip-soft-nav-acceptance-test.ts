@@ -193,7 +193,7 @@ async function main() {
   const link = (label: string) => $$<HTMLAnchorElement>("a").find((a) => a.textContent === label)!;
   const button = (startsWith: string) => $$<HTMLButtonElement>("button").find((b) => (b.textContent ?? "").startsWith(startsWith));
   const slipLabel = () => button("Parlay slip")?.textContent ?? "(no slip button)";
-  const barText = () => container!.querySelector('[role="toolbar"] span span')?.textContent ?? "(not in slip mode)";
+  const barText = () => container!.querySelector('[aria-label="Slip mode"] button')?.textContent ?? "(not in slip mode)";
   const box = (pickId: string) => $$<HTMLInputElement>("input[type=checkbox]").find((i) => (i.getAttribute("aria-label") ?? "").includes("Capper " + pickId + " "));
   const boardLeague = () => container!.querySelector("[data-board]")?.getAttribute("data-board");
   const poolIds = () => ctx.pool.map((p) => p.pickId).join(",");
@@ -228,6 +228,7 @@ async function main() {
   await click(box("nfl2"));
   check("checked picks go straight into the slip (no Confirm)", poolIds() === "nfl1,nfl2" && box("nfl1")!.checked && box("nfl2")!.checked && !button("Confirm"), poolIds());
   check("...and their games are targeted via the picks", barText() === "2 picks · 2 games targeted", barText());
+  check("the bottom action bar (the only Exit + Send, phone and desktop) shows the same tally", $$("[aria-label=\"Slip actions\"]").length === 1 && $$("[aria-label=\"Slip actions\"] [aria-live]")[0]?.textContent === "2 picks · 2 games" && $$("button").filter((b) => (b.textContent ?? "").includes("Exit")).length === 1, $$("[aria-label=\"Slip actions\"] [aria-live]")[0]?.textContent ?? "(no bar)");
 
   await follow(link("NCAAF"));
   check("NFL -> NCAAF: the board is NCAAF's", boardLeague() === "americanfootball_ncaaf", String(boardLeague()));
@@ -281,7 +282,7 @@ async function main() {
   // 4. Exit, refresh, and Send to generator turn slip mode off - and it
   //    stays off (it used to come back on Live after sending)
   // ---------------------------------------------------------------------
-  await click(button("Exit"));
+  await click(button("✕"));
   check("Exit: slip mode off, the slip kept", !ctx.slipMode && poolIds() === "nfl1,ncaaf1" && slipLabel() === "Parlay slip · 2" && box("nfl1") === undefined, slipLabel());
   await click(button("Parlay slip"));
   await loadPage();
@@ -307,14 +308,14 @@ async function main() {
   respond = async (ids) => pending(ids);
   await start("user-4b");
   await click(button("Parlay slip"));
-  // Desktop banner and phone bar each render one Send control (no CSS here, so both are in the DOM).
+  // The bottom action bar (phone and desktop) is the only Send control; no inline desktop copy.
   const sendLinks = () => $$<HTMLAnchorElement>("a").filter((a) => a.textContent === "Send to generator →");
   const sendSpans = () => $$<HTMLElement>("span[aria-disabled=true]").filter((s) => s.textContent === "Send to generator →");
-  check("0 picks + 0 targets: both Send controls (banner + phone bar) disabled, no link", sendLinks().length === 0 && sendSpans().length === 2, `links=${sendLinks().length} spans=${sendSpans().length}`);
+  check("0 picks + 0 targets: the one Send control (bottom bar) disabled, no link", sendLinks().length === 0 && sendSpans().length === 1, `links=${sendLinks().length} spans=${sendSpans().length}`);
   const tBox = (gameId: string) => $$<HTMLInputElement>("input[type=checkbox]").find((i) => (i.getAttribute("aria-label") ?? "").endsWith("Away @ Home " + gameId));
   await click(tBox("game-nfl2"));
   check("setup: 0 picks, 1 targeted game", ctx.pool.length === 0 && ctx.targets.map((t) => t.gameId).join() === "game-nfl2", `pool=${ctx.pool.length}`);
-  check("0 picks + 1 targeted game: both Send controls enabled links to /parlay", sendSpans().length === 0 && sendLinks().length === 2 && sendLinks().every((a) => a.getAttribute("href") === "/parlay"), `links=${sendLinks().length}`);
+  check("0 picks + 1 targeted game: the one Send control enabled links to /parlay", sendSpans().length === 0 && sendLinks().length === 1 && sendLinks().every((a) => a.getAttribute("href") === "/parlay"), `links=${sendLinks().length}`);
   await follow(sendLinks()[sendLinks().length - 1]);
   check("phone-bar Send with 0 picks: slip mode off, went to /parlay, the target is carried", !ctx.slipMode && routerNavs[routerNavs.length - 1] === "/parlay" && ctx.generatorTargets().map((t) => t.gameId).join() === "game-nfl2" && ctx.pool.length === 0, `last=${routerNavs[routerNavs.length - 1]} targets=${ctx.generatorTargets().map((t) => t.gameId).join()}`);
   await act(() => clearParlaySlips());
