@@ -85,7 +85,7 @@ function makeSnapshot(specs: Spec[], last20: CapperLeagueRecords["last20"] = {})
   return { builtAt: NOW.toISOString(), games, slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
-const SETTINGS: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
 const swapOf = (p: GeneratedParlay["hedge"]["SUGGESTED"], pickId: string) => {
   const l = p.legs.find((x) => x.original.pick.pickId === pickId)!;

@@ -82,7 +82,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
-const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const pickOf = (snap: GeneratorSnapshot, id: string) => snap.games.flatMap((g) => g.picks).find((p) => p.pickId === id)!;
 const chosen = (snap: GeneratorSnapshot, id: string) => {
   const r = recordForGate(pickOf(snap, id), snap.leagueRecords, snap.categoryRecords);

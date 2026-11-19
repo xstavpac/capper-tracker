@@ -53,6 +53,9 @@ function mk(id: string, g: number, kind: "ML" | "OVER" | "UNDER", wins: number, 
 const PICKS = [
   ...TEAMS.flatMap((_, g) => [mk(`g${g}ml`, g, "ML", 32 - g * 2, -150 + g * 5), mk(`g${g}o`, g, "OVER", 29 - g * 2, -105 - g * 5), mk(`g${g}u`, g, "UNDER", 27 - g * 2, 100 + g * 10)]),
   mk("g3ml2", 3, "ML", 25, -120),
+  // A second Under on every game from a 12-28 capper: under the 55% gate. Same-game tabs list it
+  // under "Below your gate" (collapsed); Other games never does.
+  ...TEAMS.map((_, g) => mk(`g${g}low`, g, "UNDER", 12, 115)),
 ];
 const games: GeneratorGame[] = TEAMS.map(([home, away], g) => ({ gameId: "G" + g, gameLabel: away + " @ " + home, gameTime: FUTURE, leagueName: "MLB", picks: PICKS.filter((p) => p.gameId === "G" + g) }));
 
@@ -204,7 +207,10 @@ async function main() {
   check("Update Leg disabled while the current pick is selected", modalButton("Update Leg")!.disabled);
   for (const key of ["PRIMARY", "HEDGE", "CONTRARIAN", "OTHER_GAMES"]) {
     await click(tabByKey(key));
-    check(`${key}: the count is the rows shown (${rowIds().length})`, tabCount(key) === rowIds().length, `count=${tabCount(key)} rows=${rowIds().length}`);
+    // The count is every row, the collapsed "Below your gate" group included.
+    const hidden = Number((modal()!.querySelector("[data-below-gate-toggle]")?.textContent ?? "").match(/\((\d+)\)/)?.[1] ?? 0);
+    check(`${key}: the count is the rows shown plus the collapsed below-gate rows (${rowIds().length} + ${hidden})`, tabCount(key) === rowIds().length + hidden, `count=${tabCount(key)} rows=${rowIds().length} hidden=${hidden}`);
+    check(`${key}: every row shows its combined win %`, rowIds().every((id) => /Combined \d+(\.\d)?%/.test(modal()!.querySelector(`[data-swap-option="${id}"] [data-combined-win]`)?.textContent ?? "")));
     check(`${key}: its line`, (modal()!.querySelector("[data-swap-subtitle]")?.textContent ?? "") === SWAP_TAB_HELP[key as "PRIMARY"]);
   }
   await click(tabByKey("HEDGE"));
@@ -222,6 +228,7 @@ async function main() {
   );
   await click(tabByKey("OTHER_GAMES"));
   const og = rowIds().map((id) => PICKS.find((p) => p.pickId === id)!);
+  check("Other games: the gate only, no below-gate group", !og.some((p) => p.pickId.endsWith("low")) && modal()!.querySelector("[data-below-gate-toggle]") === null);
   check("Other games: never a game in the parlay, several per game", og.length > 0 && og.every((p) => ["G3", "G4"].includes(p.gameId)) && new Set(og.map((p) => p.gameId)).size < og.length, og.map((p) => p.pickId).join(","));
   check(
     "Other games: league chips (All + MLB) with counts, and the note",
@@ -317,6 +324,32 @@ async function main() {
     shownPicks().map((p) => p.pickId).join()
   );
   check("Reset all: disabled with nothing swapped; no request", (button("Reset all") as HTMLButtonElement).disabled && requests.length === requestsAfterBuild);
+
+  // ---- Below your gate: collapsed, dimmed, "NN% vs 55%", swappable and said so ----
+  {
+    await click(swapButtons()[0]);
+    const low = `g${pickOf(0).gameId.slice(1)}low`;
+    let lowTab: string | null = null;
+    for (const key of ["PRIMARY", "HEDGE", "CONTRARIAN"]) {
+      await click(tabByKey(key));
+      if (modal()!.querySelector("[data-below-gate-toggle]")) {
+        lowTab = key;
+        break;
+      }
+    }
+    check("below gate: the leg's game's 12-28 Under sits in one same-game tab's 'Below your gate' group, collapsed", lowTab !== null && !rowIds().includes(low) && modal()!.querySelector("[data-below-gate-toggle]")!.getAttribute("aria-expanded") === "false" && (modal()!.querySelector("[data-below-gate-toggle]")!.textContent ?? "").includes("Below your gate (1)"), String(lowTab));
+    await click(modal()!.querySelector("[data-below-gate-toggle]"));
+    const lowRow = modal()!.querySelector(`[data-swap-option="${low}"]`);
+    check("below gate: expanded, the row is dimmed and reads 'Combined NN% vs 55%'", lowRow !== null && lowRow.hasAttribute("data-below-gate") && Boolean(lowRow.closest(".opacity-60")) && /Combined \d+(\.\d)?% vs 55%/.test(lowRow.querySelector("[data-combined-win]")?.textContent ?? ""), lowRow?.textContent ?? "none");
+    await choose(low);
+    check("below gate: choosing it says so in the footer, Update Leg on", (modal()!.querySelector("[data-swap-below-gate-note]")?.textContent ?? "").includes("below your gate (") && !modalButton("Update Leg")!.disabled);
+    await click(modalButton("Update Leg"));
+    const status = el.querySelector("[data-swap-status]")?.textContent ?? "";
+    check("below gate: swapped in, the leg card tagged 'Below your gate · NN% vs 55%'", pickOf(0)?.pickId === low && /Below your gate · \d+(\.\d)?% vs 55%/.test(legRows()[0].querySelector("[data-below-gate-tag]")?.textContent ?? ""), legText(0));
+    check("below gate: the confirmation says 'below your gate (NN% vs 55%)'", /Leg 1 swapped · below your gate \(\d+(\.\d)?% vs 55%\) · Combined odds updated/.test(status), status);
+    await click(button("Reset all"));
+    check("Reset all clears the below-gate tag", el.querySelectorAll("[data-below-gate-tag]").length === 0);
+  }
 
   // ---- Regenerate clears the swap state ----
   await click(swapButtons()[2]);

@@ -104,13 +104,15 @@ function main() {
   const where = (id: string) => tabOf(o, id).join("|") || "none";
   check("the leg leads Primary, marked current", o.PRIMARY[0]?.pick.pickId === "leg" && o.PRIMARY[0].current === true && o.PRIMARY.filter((r) => r.current).length === 1);
   check("Primary: same-side alternate lines (+4.5, +6.5)", where("wm45") === "PRIMARY" && where("wm65") === "PRIMARY", `${where("wm45")} ${where("wm65")}`);
-  check("Primary: the same team's ML for a spread leg", where("wmml") === "PRIMARY", where("wmml"));
+  check("Hedge: the same team's ML for a spread leg (R1 across markets: another market on the game)", where("wmml") === "HEDGE", where("wmml"));
   check("Hedge: the game total, both ways", where("over") === "HEDGE" && where("under") === "HEDGE", `${where("over")} ${where("under")}`);
   check("Hedge: a same-game player prop", where("prop") === "HEDGE", where("prop"));
   check("Contrarian: the opposing team's ML (another side market), though it is the favorite", where("fauml") === "CONTRARIAN", where("fauml"));
   check("Contrarian: the opposing team's spread, and the literal inverse (-5.5)", where("fau55") === "CONTRARIAN" && sorted(ids(o.CONTRARIAN)) === "fau125,fau55,fauml", ids(o.CONTRARIAN).join(","));
   check("the opposing team's spread past contrarian's tolerance (-12.5) is placed by team: Contrarian", where("fau125") === "CONTRARIAN", where("fau125"));
-  check("none: a below-gate pick on the game", where("wmlow") === "none");
+  const low = o.PRIMARY.find((r) => r.pick.pickId === "wmlow");
+  check("below the gate: the same-side alternate line is in Primary, marked, after every row that clears", where("wmlow") === "PRIMARY" && low?.belowGate?.gate === 55 && o.PRIMARY[o.PRIMARY.length - 1].pick.pickId === "wmlow", JSON.stringify(low?.belowGate));
+  check("every row carries its combined win %", (["PRIMARY", "HEDGE", "CONTRARIAN", "OTHER_GAMES"] as const).every((t) => o[t].every((r) => typeof r.combinedWinPct === "number")));
   check("each candidate is in at most one tab", PICKS.every((x) => tabOf(o, x.pickId).length <= 1));
   const note = o.CONTRARIAN.find((r) => r.pick.pickId === "fauml")?.note;
   check("Both-can-win note (on the opposing ML row): both hit if the favorite wins by 1–5 (+5.5)", note === "Can win with your pick: both hit if Florida Atlantic Owls wins by 1–5", String(note));
@@ -149,7 +151,7 @@ function main() {
   check("swap: the new leg is handSwapped and carries no modal fields", s!.legs[0].handSwapped === true && !("note" in s!.legs[0]) && !("current" in s!.legs[0]));
   check("swap: Hedge / Contrarian are the build's (not rebuilt)", JSON.stringify(s!.hedge) === JSON.stringify(p.hedge) && JSON.stringify(s!.contrarian) === JSON.stringify(p.contrarian));
   check("swap: the current pick is refused", applyLegSwap(snap, base, p, 0, "leg", NOW) === null);
-  check("swap: a pick in none of the tabs (below the gate) is refused; one the status rule now places (-12.5, Hedge) is allowed", applyLegSwap(snap, base, p, 0, "wmlow", NOW) === null && applyLegSwap(snap, base, p, 0, "fau125", NOW) !== null);
+  check("swap: a below-gate row swaps in, marked below your gate; one the status rule now places (-12.5) is allowed", applyLegSwap(snap, base, p, 0, "wmlow", NOW)?.legs[0].belowGate?.gate === 55 && applyLegSwap(snap, base, p, 0, "fau125", NOW) !== null);
   check("swap: an Other-games pick works, and takes the leg's game out", applyLegSwap(snap, base, p, 0, "chiml2", NOW)?.legs.map((l) => l.gameId).join() === "G3,G4");
   const s2 = applyLegSwap(snap, base, s!, 1, "bosml", NOW);
   check("swap another leg: the first swap stays", s2?.legs[0].pick.pickId === "fauml" && s2?.legs[1].pick.pickId === "bosml");

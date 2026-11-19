@@ -3,7 +3,8 @@
 // proof (swap-modal-acceptance-test.ts). Pinned:
 //   - This game: only picks on the swapped leg's game; Other games: never a game already in the parlay;
 //   - no alternative is in the parlay or a generated copy of a slip pick (slip picks come in ungated, after the gated ones), opposes a same-game leg, or breaks max legs per game;
-//   - every alternative clears the win-rate gate and the star; ordered by the build's ranking;
+//   - every alternative clears the star; every Other-games one the win-rate gate; ordered by the build's ranking;
+//   - This game also lists the game's below-gate picks, marked belowGate, after the rest; one swapped in keeps the mark;
 //   - repeated swaps (the same leg, other legs) stay valid against the current legs;
 //   - SGP / no-odds states follow the legs (an Other-games swap that breaks a pair), priced by combineOdds;
 //   - Other games lists every eligible pick (several per game), in ranking order;
@@ -80,6 +81,8 @@ const base: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: ["ALL
 const ids = (ls: EngineLeg[]) => ls.map((l) => l.pick.pickId);
 const asC = (p: GeneratorPick) => toParlayCandidate(toParlayLeg(p));
 const all = (a: { thisGame: EngineLeg[]; otherGames: EngineLeg[] }) => [...a.thisGame, ...a.otherGames];
+// The rows that clear the gate (no belowGate mark).
+const clears = (a: { thisGame: EngineLeg[]; otherGames: EngineLeg[] }) => all(a).filter((l) => !l.belowGate);
 const optionIds = (o: LegSwapOptions) => SWAP_TAB_KEYS.flatMap((t) => o[t]).filter((x) => !x.current).map((x) => x.pick.pickId);
 const scoreOrdered = (ls: EngineLeg[]) => ls.every((l, i) => i === 0 || (ls[i - 1].score ?? 0) >= (l.score ?? 0));
 
@@ -99,8 +102,10 @@ function validAgainst(snapshot: GeneratorSnapshot, settings: GeneratorSettings, 
     if (siblings.length >= settings.maxLegsPerGame) bad.push(a.pick.pickId + " breaks max legs per game");
     for (const s of siblings) if (sameGameConflict(asC(a.pick), asC(s.pick)) !== null) bad.push(a.pick.pickId + " conflicts with " + s.pick.pickId);
     if (settings.fillFrom === "BEST_AVAILABLE" && settings.favoritesOnly && !a.pick.capperIsFavorite) bad.push(a.pick.pickId + " not a favorite");
-    if (settings.fillFrom === "BEST_AVAILABLE" && (a.record?.winPct ?? 0) < (settings.minWinPct ?? 55) - 1e-9 && a.pick.pickId.endsWith("low")) bad.push(a.pick.pickId + " below the gate");
+    if (settings.fillFrom === "BEST_AVAILABLE" && !a.belowGate && a.source !== "SLIP" && (a.record?.winPct ?? 0) < (settings.minWinPct ?? 55) - 1e-9 && a.pick.pickId.endsWith("low")) bad.push(a.pick.pickId + " below the gate, unmarked");
+    if (a.belowGate && a.belowGate.combinedWinPct >= (settings.minWinPct ?? 55)) bad.push(a.pick.pickId + " marked below the gate but clears it");
   }
+  for (const a of alts.otherGames) if (a.belowGate) bad.push(a.pick.pickId + " below the gate in Other games");
   return bad;
 }
 
@@ -116,17 +121,21 @@ async function main() {
   check("Other games: every eligible pick, several per game (no one-row-per-game cut)", new Set(otherGameIds).size < otherGameIds.length, otherGameIds.join(","));
   check("Other games: each game's best pick (the home ML) is among them", Array.from(new Set(otherGameIds)).every((gid) => a0.otherGames.some((row) => row.pick.pickId === "g" + gid.slice(1) + "h")), ids(a0.otherGames).join(","));
   check("every rule holds (in parlay, slip, conflicts, max per game, gate)", validAgainst(snap, base, p0.legs, 0, a0).length === 0, validAgainst(snap, base, p0.legs, 0, a0).join("; "));
-  check("the win-rate gate: no below-gate pick is offered", !all(a0).some((l) => l.pick.pickId.endsWith("low")));
+  check("the win-rate gate: Other games offers no below-gate pick", !a0.otherGames.some((l) => l.pick.pickId.endsWith("low") || l.belowGate));
+  const g0 = p0.legs[0].gameId.slice(1);
+  check("This game: the game's below-gate pick is listed, marked, last", a0.thisGame[a0.thisGame.length - 1]?.pick.pickId === `g${g0}low` && a0.thisGame.filter((l) => l.belowGate).length === 1 && a0.thisGame[a0.thisGame.length - 1].belowGate?.gate === 55, ids(a0.thisGame).join(","));
+  check("every row carries its combined win %", all(a0).every((l) => typeof (l as { combinedWinPct?: number }).combinedWinPct === "number"));
   check("each tab is in the engine's ranking order (score, best first)", scoreOrdered(a0.thisGame) && scoreOrdered(a0.otherGames));
   check("every alternative is a generated leg with its gated record", all(a0).every((l) => l.source === "GENERATED" && l.record !== null && l.basis !== null));
   const strict = legAlternatives(snap, { ...base, minWinPct: 70 }, p0.legs, 0, NOW);
-  check("a higher gate offers fewer, each clearing it", all(strict).length < all(a0).length && all(strict).every((l) => (l.record?.winPct ?? 0) >= 70), ids(all(strict)).join(","));
+  check("a higher gate: fewer clear it, each clearing it", clears(strict).length < clears(a0).length && clears(strict).every((l) => (l.record?.winPct ?? 0) >= 70), ids(clears(strict)).join(","));
+  check("a higher gate: the game's picks under it move to below the gate, still listed", strict.thisGame.length === a0.thisGame.length && strict.thisGame.some((l) => l.belowGate), ids(strict.thisGame).join(","));
 
   // ---- The modal's tabs are these alternatives, sorted ----
   const o0 = legSwapOptions(snap, base, p0.legs, 0, NOW);
   check("swap options: Other games is exactly the alternatives' Other games", ids(o0.OTHER_GAMES).join() === ids(a0.otherGames).join());
   check("swap options: every same-game tab row is a This-game alternative", ["PRIMARY", "HEDGE", "CONTRARIAN"].every((t) => o0[t as "PRIMARY"].filter((x) => !x.current).every((x) => a0.thisGame.some((l) => l.pick.pickId === x.pick.pickId))));
-  check("swap options: the opposing ML is Contrarian, the totals Hedge (an ML leg)", ids(o0.CONTRARIAN).join() === "g" + p0.legs[0].gameId.slice(1) + "a" && o0.HEDGE.length === 2, JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(o0[t])]))));
+  check("swap options: the opposing ML is Contrarian, the totals Hedge (an ML leg), the below-gate total last", ids(o0.CONTRARIAN).join() === "g" + g0 + "a" && o0.HEDGE.length === 3 && o0.HEDGE[2].pick.pickId === `g${g0}low` && o0.HEDGE[2].belowGate !== undefined, JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(o0[t])]))));
 
   // ---- Best available: your unused slip picks, ungated, after the gated ones ----
   const slipSnap = snapshotOf(["g0low", "g4low"]);
@@ -134,8 +143,8 @@ async function main() {
   const sbo = legSwapOptions(slipSnap, base, p0.legs, 0, NOW);
   const slipOf = (ls: EngineLeg[]) => ls.filter((l) => l.source === "SLIP");
   check("Best available: a below-gate slip pick is offered (This game and Other games)", ids(slipOf(sba.thisGame)).join() === "g0low" && ids(slipOf(sba.otherGames)).join() === "g4low", ids(all(sba)).join(","));
-  check("Best available: slip picks come after every gate-qualifying pick in each list", [sba.thisGame, sba.otherGames].every((ls) => ls.findIndex((l) => l.source === "SLIP") === ls.length - slipOf(ls).length));
-  check("Best available: the gated rows are exactly what they were with no slip", ids(sba.thisGame.filter((l) => l.source !== "SLIP")).join() === ids(a0.thisGame).join() && ids(sba.otherGames.filter((l) => l.source !== "SLIP")).join() === ids(a0.otherGames).join());
+  check("Best available: slip picks come after every gate-qualifying pick, before any below-gate one", [sba.thisGame, sba.otherGames].every((ls) => { const c = ls.filter((l) => !l.belowGate); return c.findIndex((l) => l.source === "SLIP") === c.length - slipOf(c).length && ls.slice(c.length).every((l) => l.belowGate); }));
+  check("Best available: the gated rows are exactly what they were with no slip", ids(sba.thisGame.filter((l) => l.source !== "SLIP" && !l.belowGate)).join() === ids(a0.thisGame.filter((l) => !l.belowGate)).join() && ids(sba.otherGames.filter((l) => l.source !== "SLIP")).join() === ids(a0.otherGames).join());
   check("Best available: the slip total classifies Hedge against the ML leg, last in the tab", sbo.HEDGE.length > 0 && sbo.HEDGE[sbo.HEDGE.length - 1].pick.pickId === "g0low" && !sbo.PRIMARY.some((l) => l.pick.pickId === "g0low") && !sbo.CONTRARIAN.some((l) => l.pick.pickId === "g0low"), JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(sbo[t])]))));
   check("Best available: the slip pick carries no marker (no note)", sbo.HEDGE.every((l) => l.pick.pickId !== "g0low" || l.note === undefined));
   check("Best available: a slip pick already in the parlay is not offered twice", !all(legAlternatives(snapshotOf(ids(p0.legs)), base, p0.legs, 0, NOW)).some((l) => ids(p0.legs).includes(l.pick.pickId)));
@@ -179,7 +188,13 @@ async function main() {
   const s3 = applyLegSwap(snap, base, s2, 0, r1.thisGame[0].pick.pickId, NOW)!;
   const a3 = legAlternatives(snap, base, s3.legs, 2, NOW);
   check("three swaps in: alternatives still valid", validAgainst(snap, base, s3.legs, 2, a3).length === 0, validAgainst(snap, base, s3.legs, 2, a3).join("; "));
-  check("a pick that isn't an alternative is refused", applyLegSwap(snap, base, s3, 0, s3.legs[1].pick.pickId, NOW) === null && applyLegSwap(snap, base, s3, 0, "g0low", NOW) === null);
+  const otherLow = "g" + ((Number(s3.legs[0].gameId.slice(1)) + 1) % 6) + "low";
+  check("a pick that isn't an alternative is refused (a leg, another game's below-gate pick)", applyLegSwap(snap, base, s3, 0, s3.legs[1].pick.pickId, NOW) === null && applyLegSwap(snap, base, s3, 0, otherLow, NOW) === null);
+  const ownLow = "g" + s3.legs[0].gameId.slice(1) + "low";
+  const sl = applyLegSwap(snap, base, s3, 0, ownLow, NOW);
+  check("a below-gate pick on the leg's game swaps in, marked below your gate", sl !== null && sl.legs[0].pick.pickId === ownLow && sl.legs[0].belowGate?.gate === 55 && (sl.legs[0].belowGate?.combinedWinPct ?? 99) < 55 && !("combinedWinPct" in sl.legs[0]), JSON.stringify(sl?.legs[0].belowGate));
+  const back = sl && applyLegSwap(snap, base, sl, 0, s3.legs[0].pick.pickId, NOW);
+  check("swapping a clearing pick back in drops the mark", back !== null && back !== undefined && back.legs[0].belowGate === undefined);
   check("the Regenerate history is untouched by a swap", s3.generatedKey === p0.generatedKey && s3.historyIds.join() === p0.historyIds.join());
 
   // ---- Combined price, SGP and no-odds ----
@@ -244,6 +259,20 @@ async function main() {
   const g5Index = peS.legs.findIndex((l) => l.gameId === "G5");
   const aeS = legAlternatives(seS, { ...base, maxLegsPerGame: 2 }, peS.legs, g5Index, NOW);
   check("started since the snapshot, a slip pick's game: its picks are offered", aeS.thisGame.length > 0, ids(aeS.thisGame).join(","));
+  // The leg's OWN game started since the build: the modal is told (gameStarted), its same-game tabs hold only the leg.
+  const ownEarly = PICKS.map((p) => (p.gameId === "G0" ? { ...p, gameTime: started } : p));
+  const so = { ...snapshotOf([], [], ownEarly), builtAt: se.builtAt };
+  const po = buildGeneratedParlay(so, base, null, new Date("2099-06-01T10:00:00.000Z"));
+  const g0Index = po.legs.findIndex((l) => l.gameId === "G0");
+  const oo = legSwapOptions(so, base, po.legs, g0Index, NOW);
+  check(
+    "the leg's own game started: gameStarted, same-game tabs hold only the leg",
+    g0Index >= 0 && oo.gameStarted === true && oo.PRIMARY.length === 1 && oo.PRIMARY[0].current === true && oo.HEDGE.length === 0 && oo.CONTRARIAN.length === 0 && oo.OTHER_GAMES.length > 0,
+    JSON.stringify({ g0Index, started: oo.gameStarted, counts: SWAP_TAB_KEYS.map((t) => oo[t].length) })
+  );
+  check("a leg whose game hasn't started: no gameStarted", legSwapOptions(so, base, po.legs, po.legs.findIndex((l) => l.gameId !== "G0"), NOW).gameStarted === undefined);
+  check("the leg's game started but targeted: no gameStarted (live picks still offered)", legSwapOptions({ ...so, targets: po.legs.map((l) => l.gameId) }, base, po.legs, g0Index, NOW).gameStarted === undefined);
+  check("before kickoff the same leg's options say nothing", legSwapOptions(so, base, po.legs, g0Index, new Date("2099-06-01T10:30:00.000Z")).gameStarted === undefined);
 
   // ---- The session: no request for a swap, Regenerate clears handSwapped ----
   let clock = NOW;

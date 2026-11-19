@@ -120,14 +120,15 @@ export function mixedSnapshot(slipIds: string[] = []): GeneratorSnapshot {
 const MIXED_CASES: ContrarianCase[] = MIXED_SPECS.map((s) => ({
   slate: "MIXED" as const,
   label: `MIXED · ${s.id} alone`,
-  settings: { legCount: 1, maxLegsPerGame: 1, include: "ALL" as const, mix: null, fillFrom: "YOUR_PICKS_ONLY" as const },
+  settings: { legCount: 1, maxLegsPerGame: 1, include: "ALL" as const, mix: null, fillFrom: "YOUR_PICKS_ONLY" as const, scoreModel: "EDGE" as const },
   slip: [s.id],
 }));
 
 // ---------------------------------------------------------------------------
+// Every case runs the edge model (scoreModel EDGE): these frozen diffs pin scoring.ts, kept for comparison.
 export const CONTRARIAN_CASES: ContrarianCase[] = [
   ...SELECTION_CASES.map((c) => ({ slate: "SWITCH" as const, label: `SWITCH · ${c.label}`, settings: c.settings, slip: c.slip })),
-  ...NFL_CASES,
+  ...NFL_CASES.map((c) => ({ ...c, settings: { ...c.settings, scoreModel: "EDGE" as const } })),
   ...MIXED_CASES,
 ];
 

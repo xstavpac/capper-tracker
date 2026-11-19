@@ -19,7 +19,7 @@ const check = (label: string, actual: unknown, expected: unknown) => {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label}${pass ? "" : ` -> actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`}`);
   if (!pass) failures++;
 };
-const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const ids = (legs: { pick: { pickId: string } }[]) => legs.map((l) => l.pick.pickId);
 const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   leagueRecords: snap.leagueRecords,
@@ -88,7 +88,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   check("Regenerate still varies", draws.some((d) => d.variety === "VARIED"), true);
   check("Regenerate never draws outside the gate", draws.every((d) => d.legs.every((l) => passesGate(scorePick(l.pick, ctxOf(snap)), 55))), true);
   const subset = buildSnapshot(undefined, ["g1-55-45", "g2-heavy-fav", "g3-thin", "g0-small-spread", "g5-away", "g4-no-record"]);
-  const your: GeneratorSettings = { ...BASE, legCount: 2, fillFrom: "YOUR_PICKS_ONLY" };
+  const your: GeneratorSettings = { ...BASE, legCount: 2, fillFrom: "YOUR_PICKS_ONLY", scoreModel: "EDGE" };
   const g = buildGeneratedParlay(subset, your, null, NOW);
   check("Your picks only, Generate: the two strongest by score", ids(g.legs).sort(), ["g2-heavy-fav", "g5-away"].sort());
   const seen = new Set<string>();

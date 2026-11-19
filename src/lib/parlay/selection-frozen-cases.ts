@@ -3,7 +3,8 @@
 // (PR 4, before selection.ts) on exactly these cases. Pure - no DB.
 import type { GeneratorSettings } from "@/lib/parlay/generator";
 
-const base: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+// scoreModel EDGE: these diffs pin the edge model (scoring.ts), kept beside the record model for comparison.
+const base: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 
 export const SELECTION_CASES: { label: string; settings: GeneratorSettings; slip: string[] }[] = [
   { label: "6 legs, best available, default gate", settings: base, slip: [] },

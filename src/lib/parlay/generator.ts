@@ -21,9 +21,10 @@
 //   2. Targets: with any, generated legs come only from the targeted games
 //      plus the games of your picks. Without, from every game in the snapshot.
 //   3. SCORING: a generated leg and a Hedge alternate are gated and ranked by
-//      lib/parlay/scoring.ts, and slip picks are ranked by it. Which gated legs
-//      are taken is lib/parlay/selection.ts, reading the edge (rankScore, in
-//      points) directly. The record a leg shows is shownRecord's (pick-record.ts):
+//      lib/parlay/record-score.ts's combined win % (category record, its league
+//      slice, the capper's Last 20; odds never gate or rank), and slip picks are
+//      ranked by it. Which gated legs are taken is lib/parlay/selection.ts, reading
+//      the combined win % (rankScore, in points) directly. The record a leg shows is shownRecord's (pick-record.ts):
 //      the capper's real record in its market across every league, with the
 //      in-league slice beside it, so the sample size shows and the label never
 //      names one slice the gate didn't use alone. Contrarian (PR 7) is
@@ -31,7 +32,7 @@
 //      at its own price and chosen by selection.ts like Hedge. A leg must also
 //      pass the Include Picks filter (include-picks.ts: All Picks, or any of
 //      Moneyline / Spread / Totals / Props - betCategory, period ignored). Slip
-//      picks are never gated or filtered. Last 20 is never a gate or a rank.
+//      picks are never gated or filtered. Last 20 feeds the combined win % (weight F).
 //   4. One generated leg per game first, best games first. Only when games run
 //      out are same-game legs added, up to "max legs per game" counted with any
 //      slip picks on that game - across every category and every period (a
@@ -74,6 +75,8 @@ import type { CategoryBreakdownItem } from "@/server/data/stats";
 import type { GeneratorGame, GeneratorPick, SwapMode } from "@/lib/parlay/auto-generate";
 import { bestAvailableRecord, rankPoolPicks, shownRecord, type RankRecordSource } from "@/lib/parlay/pick-record";
 import { compareScores, EMPTY_PLATFORM_RATES, passesGate, scorePick, type PickScore, type PlatformRates, type ScoredPick } from "@/lib/parlay/scoring";
+import { scorePickByRecord } from "@/lib/parlay/record-score";
+import { belowPriceFloor } from "@/lib/parlay/price-floor";
 import {
   betKeyOf,
   DEFAULT_SELECTION_MODE,
@@ -181,7 +184,13 @@ export type GeneratorSettings = {
   // (pick.capperIsFavorite, from the capper roster the pool is read with). Slip
   // picks are never filtered. Absent is off.
   favoritesOnly?: boolean;
+  // What gates and ranks: RECORD (record-score.ts's combined win %, the default) or EDGE
+  // (scoring.ts's price-aware edge, kept for comparison). The card never sets it; the
+  // edge model's frozen diffs and the backtest do.
+  scoreModel?: ScoreModelSetting;
 };
+
+export type ScoreModelSetting = "RECORD" | "EDGE";
 
 // The star's filter on one candidate. Off keeps every pick.
 export const keepsFavorite = (favoritesOnly: boolean, pick: Pick<GeneratorPick, "capperIsFavorite">): boolean => !favoritesOnly || pick.capperIsFavorite === true;
@@ -237,7 +246,12 @@ export type EngineLeg = {
   // count it as one of your picks (Swap: Suggested leaves it alone). Never set
   // by a build: Generate / Regenerate clear it.
   handSwapped?: true;
+  // Swapped in by hand from the Swap modal's "Below your gate" group: its combined win %
+  // and the gate it missed, both in points. Never set by a build.
+  belowGate?: BelowGate;
 };
+
+export type BelowGate = { combinedWinPct: number; gate: number };
 
 export type DroppedSlipPick = {
   pickId: string;
@@ -366,8 +380,11 @@ type Candidate = {
 
 const byRank = (a: Candidate, b: Candidate) => compareScores(a.pickScore, b.pickScore);
 
-// One score per pick per build. The gate and the fallback rates come from this build.
-function scorerFor(snapshot: GeneratorSnapshot, gate: number): (pick: GeneratorPick) => PickScore {
+// One score per pick per build: record-score.ts's combined win % (the capper's category
+// record, its league slice and their Last 20). Odds never gate or rank; they set the
+// payout. scoring.ts's edge model is kept for comparison and is not read here.
+function scorerFor(snapshot: GeneratorSnapshot, gate: number, model: ScoreModelSetting = "RECORD"): (pick: GeneratorPick) => PickScore {
+  const score = model === "EDGE" ? scorePick : scorePickByRecord;
   const ctx = {
     leagueRecords: snapshot.leagueRecords,
     categoryRecords: snapshot.categoryRecords,
@@ -378,7 +395,7 @@ function scorerFor(snapshot: GeneratorSnapshot, gate: number): (pick: GeneratorP
   const scores = new Map<string, PickScore>();
   return (pick) => {
     let s = scores.get(pick.pickId);
-    if (!s) scores.set(pick.pickId, (s = scorePick(pick, ctx)));
+    if (!s) scores.set(pick.pickId, (s = score(pick, ctx)));
     return s;
   };
 }
@@ -443,27 +460,55 @@ type QualifyContext = {
   snapshot: GeneratorSnapshot;
   gate: number;
   scoreOf: (pick: GeneratorPick) => PickScore;
+  // The leg price floor (price-floor.ts): on under the record model. Slip picks never reach qualifyPick.
+  priceFloor: boolean;
 };
-type Qualified = { ok: true; candidate: Candidate } | { ok: false; at: "INCLUDED" | "HAS_RECORD" | "PASSES_GATE"; drop: (t: TraceCollector) => void };
+// A gate failure still carries its candidate: the Swap modal lists same-game picks below
+// the gate (legAlternatives), marked belowGate. Nothing else reads it.
+type Qualified =
+  | { ok: true; candidate: Candidate }
+  | { ok: false; at: "INCLUDED" | "HAS_RECORD"; drop: (t: TraceCollector) => void }
+  | { ok: false; at: "PASSES_GATE"; drop: (t: TraceCollector) => void; candidate?: Candidate };
+
+// "win 53.2% < 55%": a record-model gate failure, as the run log and the modal say it.
+const winVsGate = (combined: number, gate: number) => `win ${(combined * 100).toFixed(1)}% < ${gate}%`;
 
 function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyContext): Qualified {
   const { include, favoritesOnly, snapshot, gate, scoreOf } = ctx;
   if (!keepsPick(include, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)) };
   if (!keepsFavorite(favoritesOnly, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)) };
+  // Shorter than the price floor: out entirely - INCLUDED, so never a below-gate row either.
+  if (ctx.priceFloor && belowPriceFloor(pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "PRICE_FLOOR", pickRef(pick), String(pick.odds)) };
   const gated = gateRecord(pick, snapshot);
   if (!gated) return { ok: false, at: "HAS_RECORD", drop: (t) => t.drop("HAS_RECORD", noRecordReason(pick), pickRef(pick), pick.propMarket ?? pick.category ?? undefined) };
   const pickScore = scoreOf(pick);
+  const { record, basis, leagueSlice, propMarket } = gated;
+  const candidateOf = (s: ScoredPick): Candidate => ({
+    pick,
+    game,
+    record: toLegRecord(record),
+    basis,
+    leagueSlice,
+    ...(propMarket ? { propMarket } : {}),
+    wilsonLowerBound: wilsonLowerBound(record.wins, record.losses, GENERATOR_Z),
+    score: s.rankScore * 100,
+    pickScore: s,
+    category: betCategory(pick),
+  });
   if (pickScore.status !== "SCORED" || !passesGate(pickScore, gate)) {
     return {
       ok: false,
       at: "PASSES_GATE",
+      ...(pickScore.status === "SCORED" ? { candidate: candidateOf(pickScore) } : {}),
       drop: (t) =>
         t.drop(
           "PASSES_GATE",
           "BELOW_GATE",
           pickRef(pick),
           pickScore.status === "SCORED"
-            ? pickScore.gate.raw && !pickScore.gate.raw.clears && pickScore.rankScore >= (pickScore.gate.requiredEdge ?? 0)
+            ? pickScore.model === "record model"
+              ? winVsGate(pickScore.rankScore, gate)
+              : pickScore.gate.raw && !pickScore.gate.raw.clears && pickScore.rankScore >= (pickScore.gate.requiredEdge ?? 0)
               ? // The long-shot rule (scoring.ts ls1): the edge clears, the raw record doesn't clear the price.
                 `raw ${pickScore.gate.raw.wins}-${pickScore.gate.raw.decided - pickScore.gate.raw.wins} ${((pickScore.gate.raw.wins / pickScore.gate.raw.decided) * 100).toFixed(1)}% < bar ${(pickScore.gate.raw.bar * 100).toFixed(1)}% (${gate}%)`
               : `edge ${(pickScore.rankScore * 100).toFixed(1)} < ${((pickScore.gate.requiredEdge ?? 0) * 100).toFixed(1)} (${gate}%)`
@@ -471,23 +516,7 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
         ),
     };
   }
-  const { record, basis, leagueSlice, propMarket } = gated;
-  const wilson = wilsonLowerBound(record.wins, record.losses, GENERATOR_Z);
-  return {
-    ok: true,
-    candidate: {
-      pick,
-      game,
-      record: toLegRecord(record),
-      basis,
-      leagueSlice,
-      ...(propMarket ? { propMarket } : {}),
-      wilsonLowerBound: wilson,
-      score: pickScore.rankScore * 100,
-      pickScore,
-      category: betCategory(pick),
-    },
-  };
+  return { ok: true, candidate: candidateOf(pickScore) };
 }
 
 // ---------------------------------------------------------------------------
@@ -502,7 +531,7 @@ export function buildGeneratedParlay(
   trace?: TraceCollector
 ): GeneratedParlay {
   const gate = effectiveGate(settings);
-  const scoreOf = scorerFor(snapshot, gate);
+  const scoreOf = scorerFor(snapshot, gate, settings.scoreModel);
   // A trace step that throws (even while building its arguments) is reported on the trace, never into the build.
   const traced = (fn: (t: TraceCollector) => void): void => {
     if (!trace) return;
@@ -631,7 +660,8 @@ export function buildGeneratedParlay(
   const slipOnGame = new Map<string, GeneratorPick[]>();
   for (const p of slipLegs) slipOnGame.set(p.gameId, [...(slipOnGame.get(p.gameId) ?? []), p]);
   const candidatesOf = new Map<string, Candidate[]>();
-  const qualifyCtx: QualifyContext = { include, favoritesOnly, snapshot, gate, scoreOf };
+  const priceFloor = settings.scoreModel !== "EDGE";
+  const qualifyCtx: QualifyContext = { include, favoritesOnly, snapshot, gate, scoreOf, priceFloor };
   // How many picks passed each step, for the run trace.
   const passed = { scope: 0, notSlip: 0, included: 0, record: 0, gate: 0, noConflict: 0 };
   for (const game of eligible) {
@@ -851,10 +881,10 @@ export function buildGeneratedParlay(
   // Hedge's alternates go through selection.ts: the top one on Generate, a
   // mode-weighted draw (one seed per leg) on Regenerate.
   const hedgeSelect: HedgeSelect = { draw: variation ? { seed: deriveSeed(variation.seed, "hedge"), beta } : null, picked: [] };
-  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, trace, hedgeSelect));
+  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, trace, hedgeSelect, priceFloor));
   // Contrarian's the same way, on its own sub-seed.
   const contrarianSelect: HedgeSelect = { draw: variation ? { seed: deriveSeed(variation.seed, "contrarian"), beta } : null, picked: [] };
-  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, trace, contrarianSelect));
+  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, trace, contrarianSelect, priceFloor));
   traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
   if (selectionTrace) {
     const tr: SelectionTrace = {
@@ -912,7 +942,14 @@ export function buildGeneratedParlay(
 // refetch: a game that has kicked off since the snapshot is only offered when
 // it's targeted or holds a slip pick. Runs on the held snapshot: no request.
 // legSwapOptions sorts them into the modal's four tabs (swap-classify.ts).
-export type LegAlternatives = { thisGame: EngineLeg[]; otherGames: EngineLeg[] };
+//
+// Below the gate: the swapped leg's own game also lists every pick that passes Include
+// Picks, the star, a record and the same-game rules but not the gate, marked belowGate,
+// after every pick that clears (they rank below it by construction). Other games never
+// does: it is the gate only.
+// Game started: when the swapped leg's own game has kicked off and isn't a target or a
+// slip pick's game, thisGame is empty and gameStarted is set, so the modal says so.
+export type LegAlternatives = { thisGame: SwapOption[]; otherGames: SwapOption[]; gameStarted?: true };
 
 export function legAlternatives(
   snapshot: GeneratorSnapshot,
@@ -932,9 +969,13 @@ export function legAlternatives(
   type Group = "THIS_GAME" | "OTHER_GAMES";
   const tabOf = (gameId: string): Group | null => (gameId === swapped.gameId ? "THIS_GAME" : parlayGames.has(gameId) ? null : "OTHER_GAMES");
   // Picks arrive best first; every one is kept (the modal lists them all).
-  const add = (tab: Group, leg: EngineLeg) => void (tab === "THIS_GAME" ? out.thisGame : out.otherGames).push(leg);
+  const add = (tab: Group, leg: SwapOption) => void (tab === "THIS_GAME" ? out.thisGame : out.otherGames).push(leg);
   const gate = effectiveGate(settings);
-  const scoreOf = scorerFor(snapshot, gate);
+  const scoreOf = scorerFor(snapshot, gate, settings.scoreModel);
+  const combinedOf = (p: GeneratorPick) => {
+    const s = scoreOf(p);
+    return s.status === "SCORED" ? { combinedWinPct: s.rankScore * 100 } : {};
+  };
 
   // The slip picks not in the parlay (game not over), ungated, in the slip's order.
   const addUnusedSlipPicks = () => {
@@ -945,7 +986,7 @@ export function legAlternatives(
       const onGame = legsOn(p.gameId);
       if (onGame.length >= maxPerGame) continue;
       if (onGame.some((l) => blocks(toBuildCandidate(p, snapshot.leagueRecords), toBuildCandidate(l, snapshot.leagueRecords)).blocked)) continue;
-      add(tab, slipLegOf(p, snapshot));
+      add(tab, { ...slipLegOf(p, snapshot), ...combinedOf(p) });
     }
   };
 
@@ -954,7 +995,7 @@ export function legAlternatives(
     return out;
   }
 
-  const ctx: QualifyContext = { include: toIncludeSelection(settings.include), favoritesOnly: settings.favoritesOnly === true, snapshot, gate, scoreOf };
+  const ctx: QualifyContext = { include: toIncludeSelection(settings.include), favoritesOnly: settings.favoritesOnly === true, snapshot, gate, scoreOf, priceFloor: settings.scoreModel !== "EDGE" };
   const slipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
   const targeted = snapshot.targets.length > 0;
   // A game that started is only in play as a target or a slip pick's game (snapshotIsStale's rule).
@@ -962,7 +1003,10 @@ export function legAlternatives(
   const inPlay = (g: GeneratorGame) => !hasKickedOff(g.gameTime, now) || kept.has(g.gameId);
   // With targets, generated legs come only from the targeted games and your picks' games (rule 2).
   const allowed = (g: GeneratorGame) => !targeted || kept.has(g.gameId) || g.gameId === swapped.gameId;
+  const swappedGame = snapshot.games.find((g) => g.gameId === swapped.gameId);
+  if (swappedGame && !isGameOver(swappedGame, now) && !inPlay(swappedGame)) out.gameStarted = true;
   const found: { tab: Group; c: Candidate }[] = [];
+  const below: Candidate[] = [];
   for (const game of snapshot.games) {
     if (isGameOver(game, now)) continue;
     const tab = tabOf(game.gameId);
@@ -972,15 +1016,21 @@ export function legAlternatives(
     for (const pick of game.picks) {
       if (inParlay.has(pick.pickId) || slipIds.has(pick.pickId)) continue;
       const q = qualifyPick(pick, game, ctx);
-      if (!q.ok) continue;
+      // Below the gate: kept for the swapped leg's own game only.
+      const c = q.ok ? q.candidate : q.at === "PASSES_GATE" && tab === "THIS_GAME" ? q.candidate : undefined;
+      if (!c) continue;
       if (onGame.some((l) => !(sureOfGame(game, l) && sureOfGame(game, pick)) || sameGameConflict(asCandidate(pick), asCandidate(l)) !== null)) continue;
-      found.push({ tab, c: q.candidate });
+      if (q.ok) found.push({ tab, c });
+      else below.push(c);
     }
   }
   found.sort((a, b) => byRank(a.c, b.c));
-  for (const { tab, c } of found) add(tab, generatedLegOf(c));
+  for (const { tab, c } of found) add(tab, { ...generatedLegOf(c), combinedWinPct: c.score });
   // Then your own unused slip picks, ungated, after every gate-qualifying candidate.
   addUnusedSlipPicks();
+  // Then the swapped leg's game's picks below the gate, best first.
+  below.sort(byRank);
+  for (const c of below) add("THIS_GAME", { ...generatedLegOf(c), combinedWinPct: c.score, belowGate: { combinedWinPct: c.score, gate } });
   return out;
 }
 
@@ -992,15 +1042,22 @@ export function legAlternatives(
 // build's ranking order. A Hedge row may carry a both-can-win note.
 export type SwapTabKey = "PRIMARY" | "HEDGE" | "CONTRARIAN" | "OTHER_GAMES";
 export const SWAP_TAB_KEYS: readonly SwapTabKey[] = ["PRIMARY", "HEDGE", "CONTRARIAN", "OTHER_GAMES"];
-export type SwapOption = EngineLeg & { current?: true; note?: string };
-export type LegSwapOptions = Record<SwapTabKey, SwapOption[]>;
+// combinedWinPct: the row's combined win % in points (record-score.ts), on every row with a
+// record. belowGate: a same-game row under the user's gate (swappable; the modal lists it
+// in a collapsed "Below your gate" group after the rows that clear).
+export type SwapOption = EngineLeg & { current?: true; note?: string; combinedWinPct?: number };
+// gameStarted: the leg's game has kicked off since the snapshot and isn't a target or a
+// slip pick's game, so its same-game tabs hold nothing but the leg (the build's live rule).
+export type LegSwapOptions = Record<SwapTabKey, SwapOption[]> & { gameStarted?: true };
 
 export function legSwapOptions(snapshot: GeneratorSnapshot, settings: GeneratorSettings, legs: readonly EngineLeg[], legIndex: number, now: Date): LegSwapOptions {
   const out: LegSwapOptions = { PRIMARY: [], HEDGE: [], CONTRARIAN: [], OTHER_GAMES: [] };
   const leg = legs[legIndex];
   if (!leg) return out;
-  out.PRIMARY.push({ ...leg, current: true });
+  const own = scorerFor(snapshot, effectiveGate(settings), settings.scoreModel)(leg.pick);
+  out.PRIMARY.push({ ...leg, current: true, ...(own.status === "SCORED" ? { combinedWinPct: own.rankScore * 100 } : {}) });
   const alts = legAlternatives(snapshot, settings, legs, legIndex, now);
+  if (alts.gameStarted) out.gameStarted = true;
   const legC = asCandidate(leg.pick);
   // The game's teams' favorite / underdog status, from every full-game ML / spread pick on it.
   const gamePicks = new Map<string, GeneratorPick>();
@@ -1066,6 +1123,8 @@ export function applyLegSwap(
   const picked: SwapOption = { ...chosen };
   delete picked.note;
   delete picked.current;
+  delete picked.combinedWinPct;
+  // belowGate travels: the leg card and the confirmation say the leg is below your gate.
   const legs: EngineLeg[] = parlay.legs.map((l, i) => (i === legIndex ? { ...picked, handSwapped: true as const } : { ...l }));
   const perGame = new Map<string, number>();
   for (const l of legs) perGame.set(l.gameId, (perGame.get(l.gameId) ?? 0) + 1);
@@ -1227,7 +1286,8 @@ function buildSwap(
   gate: number,
   scoreOf: (pick: GeneratorPick) => PickScore,
   trace: TraceCollector | undefined,
-  hedgeSelect: HedgeSelect
+  hedgeSelect: HedgeSelect,
+  priceFloor: boolean
 ): EngineSwap {
   // Contrarian: the other side of the same bet (contrarian-match.ts), gated by
   // scoring.ts at its own price. The leg's own score is never compared.
@@ -1240,7 +1300,8 @@ function buildSwap(
   const out: EngineSwapLeg[] = legs.map((leg) => {
     // A leg picked by hand from its swap tray counts as one of your picks.
     if (!inSwapScope(scope, leg.handSwapped ? "SLIP" : leg.source)) return { original: leg, swap: null, unchangedReason: "OUT_OF_SCOPE" };
-    const typePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p));
+    // The price floor (price-floor.ts) holds for alternates too: a capped pick is never one.
+    const typePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p) && !(priceFloor && belowPriceFloor(p)));
     // The star filters alternates the same way it filters generated legs.
     const gamePicks = favoritesOnly ? typePicks.filter((p) => keepsFavorite(true, p)) : typePicks;
     const siblings = legs.filter((l) => l !== leg && l.gameId === leg.gameId).map((l) => current.get(l.pick.pickId)!);

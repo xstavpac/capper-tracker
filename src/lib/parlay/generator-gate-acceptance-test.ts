@@ -78,7 +78,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
-const BASE: GeneratorSettings = { legCount: 5, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const BASE: GeneratorSettings = { legCount: 5, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const run = (snap: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}) => buildGeneratedParlay(snap, { ...BASE, ...over }, null, NOW);
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId).sort();
 

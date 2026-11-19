@@ -36,7 +36,7 @@ import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay
 import { reconcileMix, selectedCategories, toggleInclude, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, WIN_RATE_HELP, WIN_RATE_HELP_MORE, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, RECORD_WIN_RATE_HELP as WIN_RATE_HELP, RECORD_WIN_RATE_HELP_MORE as WIN_RATE_HELP_MORE, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { effectiveFillFrom, floorHint, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";

@@ -84,7 +84,7 @@ function makeSnapshot(specs: Spec[]): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: [], targets: [], leagueRecords, categoryRecords };
 }
 
-const settings = (legCount: number, maxLegsPerGame = 1): GeneratorSettings => ({ legCount, maxLegsPerGame, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" });
+const settings = (legCount: number, maxLegsPerGame = 1): GeneratorSettings => ({ legCount, maxLegsPerGame, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" });
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
 const lb = (w: number, l: number) => wilsonLowerBound(w, l, GENERATOR_Z);
 

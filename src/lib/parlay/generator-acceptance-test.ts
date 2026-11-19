@@ -168,7 +168,9 @@ const slate = makeSlate(BASE);
     { id: "small", game: 0, bet: "HOME", wl: [3, 0] },
     { id: "large", game: 0, bet: "OVER", wl: [60, 30] },
   ]);
-  check("3-0 (100%) vs 60-30 (67%): the 60-30 is the leg", generatedIds(run(snap(s), { legCount: 1 })), ["large"]);
+  check("edge model: 3-0 (100%) vs 60-30 (67%): the 60-30 is the leg", generatedIds(run(snap(s), { legCount: 1, scoreModel: "EDGE" })), ["large"]);
+  // The record model (record-score.ts, K 12, each pick counted once): 60-30 is 64.7%, 3-0 60.0%.
+  check("record model: 60-30 (64.7%) beats 3-0 (60.0%)", generatedIds(run(snap(s), { legCount: 1 })), ["large"]);
 }
 
 // ============================================================================

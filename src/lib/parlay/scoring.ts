@@ -1,7 +1,8 @@
-// The Parlay Generator's one scoring module: a pick goes in, a score and its
-// breakdown come out. Standard, Your picks only, Hedge and slip ranking read it
-// (generator.ts), and so do Contrarian and Consensus Hybrid (consensus.ts: the same
-// scorePick and the same gate). Pure and client-safe: the engine runs in the browser, so
+// The edge model: a pick goes in, a score and its breakdown come out. Consensus
+// Hybrid reads it (consensus.ts). The Standard generator (generator.ts: Standard,
+// Your picks only, Hedge, Contrarian, slip ranking, the Swap modal) gates and ranks on
+// record-score.ts's combined win % instead; scorePick stays here, unused by it, so
+// the two can be compared. passesGate / compareScores read either model. Pure and client-safe: the engine runs in the browser, so
 // everything here reads what the snapshot already holds and nothing reads the
 // database.
 //
@@ -162,7 +163,8 @@ export type RawCheck = { wins: number; decided: number; breakEven: number; bar: 
 // What the long-shot rule reads: the raw record and the pick's own break-even (null: no real price).
 export type RawInput = { wins: number; decided: number; breakEven: number | null };
 
-export type ScoreModel = "edge model" | "win-rate model";
+// "record model": record-score.ts (the Standard generator's combined win %), in this shape.
+export type ScoreModel = "edge model" | "win-rate model" | "record model";
 
 export type ScoredPick = {
   status: "SCORED";
@@ -203,6 +205,8 @@ export type ScoredPick = {
   gate: GateCheck;
   historicalBreakEven: { rate: number; n: number } | null;
   propMarket?: PropMarketKey;
+  // The record model's working (record-score.ts). Absent on the edge and win-rate models.
+  record?: { pOther: number; pLeague: number; last20: number | null; combined: number; nCat: number };
 };
 
 export type UnscoredPick = { status: "NO_RECORD"; pickId: string; reason: "NO_CATEGORY" | "NO_RECORD" | "NO_PROP_MARKET_RECORD" };
@@ -483,6 +487,8 @@ export function rawRecordClears(wins: number, decided: number, bar: number): boo
 // passes, at any setting (gate.ts: at 0% cappers with no record are still out).
 export function passesGate(score: PickScore, minWinPct: number): boolean {
   if (score.status !== "SCORED") return false;
+  // The record model's gate is the combined win % itself (record-score.ts recordGatePasses).
+  if (score.model === "record model") return minWinPct === 0 || Math.round(score.rankScore * 1e9) / 1e7 >= minWinPct;
   const raw: RawInput = { wins: score.levels.league.wins + score.levels.otherLeagues.wins, decided: score.decided, breakEven: score.breakEven };
   return gateCheck(score.gate.probability, score.gate.breakEven, minWinPct, raw).passes;
 }

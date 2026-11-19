@@ -37,7 +37,8 @@ export const NBA_SPECS: Spec[] = [
   p({ id: "l-davis-reb", game: 1, category: "TD_PROP", betType: "PLAYER_PROP", detail: "Anthony Davis Under 11.5 Rebounds", line: 11.5, lg: [36, 21], propMarket: "REBOUNDS" }),
 ];
 
-const base: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+// scoreModel EDGE: the frozen diffs pin the edge model (scoring.ts), kept for comparison.
+const base: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const NBA_CASES: NbaCase[] = [
   { slate: "NBA", label: "NBA · 2 legs, 1 per game", settings: { ...base, legCount: 2 }, slip: [] },
   { slate: "NBA", label: "NBA · 6 legs, 3 per game", settings: { ...base, maxLegsPerGame: 3 }, slip: [] },

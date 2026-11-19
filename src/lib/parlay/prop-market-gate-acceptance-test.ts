@@ -124,7 +124,7 @@ check("best of two on a market: in-league", gate("mlbKs"), "LEAGUE 8-0 BASEBALL:
 check("a keyed prop without the snapshot's prop records: none", gate("nbaPts", false), null);
 
 // ---- The engine: gated on the per-market record, labelled with the market.
-const SETTINGS: GeneratorSettings = { legCount: 7, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 7, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
 const built = buildGeneratedParlay(snap, SETTINGS, null, NOW);
 const legIds = built.legs.map((l) => l.pick.pickId).sort();
 // nbaPts (80%), noKey (70%), line (60%), nflTd (60%), nhlSog (60%), mlbKs (100%) clear 55%; noMarketRecord has no record.

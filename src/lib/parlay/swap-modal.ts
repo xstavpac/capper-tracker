@@ -10,7 +10,7 @@ import { PROP_MARKET_LABELS, type PropMarketKey } from "@/lib/prop-market-key";
 export const SWAP_TAB_LABELS: Record<SwapTabKey, string> = { PRIMARY: "Primary", HEDGE: "Hedge", CONTRARIAN: "Contrarian", OTHER_GAMES: "Other games" };
 export const SWAP_TAB_HELP: Record<SwapTabKey, string> = {
   PRIMARY: "Same side and market — alternate lines",
-  HEDGE: "Same game — this pick's own team and game totals",
+  HEDGE: "Other markets in the same game",
   CONTRARIAN: "Same game — the direct opposite and the opposing team",
   OTHER_GAMES: "Replace this leg with a pick from a game not in your parlay",
 };
@@ -21,6 +21,33 @@ export const SWAP_EMPTY: Record<SwapTabKey, string> = {
   OTHER_GAMES: "No qualifying picks on games outside your parlay.",
 };
 export const OTHER_GAMES_NOTE = "Not in your parlay · clears your win-rate bar";
+
+// ---- Below your gate, game started, the combined win % -----------------------------
+export const BELOW_GATE_GROUP = "Below your gate";
+export const CLEARS_GATE_GROUP = "Clears your gate";
+// The row the same-game tabs show, swap disabled, when the leg's game has started.
+export const SWAP_GAME_STARTED = "Game started — picks on this game can't be swapped in now.";
+
+// A win % in points, whole unless rounding would carry it onto or over the gate
+// (54.6 vs 55 reads "54.6%", never "55% vs 55%").
+function pctText(pct: number, gate?: number): string {
+  const whole = Math.round(pct);
+  return (gate !== undefined && pct < gate && whole >= gate ? pct.toFixed(1) : String(whole)) + "%";
+}
+
+// "Combined 61%": the row's combined win % (record-score.ts).
+export const combinedText = (combinedWinPct: number) => `Combined ${pctText(combinedWinPct)}`;
+// "53% vs 55%": a below-gate row's combined win % against the gate.
+export const belowGateText = (b: { combinedWinPct: number; gate: number }) => `${pctText(b.combinedWinPct, b.gate)} vs ${b.gate}%`;
+// The confirmation once a below-gate pick is swapped in, and the tag its leg card carries.
+export const BELOW_GATE_TAG = "Below your gate";
+export const belowGateSwapNote = (b: { combinedWinPct: number; gate: number }) => `below your gate (${belowGateText(b)})`;
+
+// A tab's rows in its two groups: the rows that clear (every row not marked belowGate,
+// your own slip picks included - they are never gated) and the rows below the gate.
+export function gateGroups<R extends { belowGate?: unknown }>(rows: readonly R[]): { clears: R[]; below: R[] } {
+  return { clears: rows.filter((r) => !r.belowGate), below: rows.filter((r) => Boolean(r.belowGate)) };
+}
 
 // The Other games tab's league chips: All, then each league present, in the order
 // they first appear (the ranking order), each with how many rows it holds.

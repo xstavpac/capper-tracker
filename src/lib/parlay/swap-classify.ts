@@ -6,11 +6,12 @@
 //
 //   CONTRARIAN  exactly contrarianMatch (contrarian-match.ts): the same bet, the
 //               other side, within its tolerances. Checked first.
-//   PRIMARY     the same side in the same market family: the classifier's R1 (an
-//               alternate line, or the same team's ML for a spread and its spread
-//               for an ML), or the same bet at the same line from another capper
-//               (EXACT_DUPLICATE). Props: the same player, stat, period and
-//               direction. R1 is left out of generation so a parlay doesn't stack
+//   PRIMARY     the same side in the same market: the classifier's R1 when both are
+//               the same bet type (an alternate line), or the same bet at the same
+//               line from another capper (EXACT_DUPLICATE). Props: the same player,
+//               stat, period and direction. R1 across markets (the same team's ML for
+//               a spread leg, its spread for an ML leg) is HEDGE: another market on
+//               the same game. R1 is left out of generation so a parlay doesn't stack
 //               correlated legs; a swap REPLACES the leg, so that reason doesn't
 //               apply here.
 //   HEDGE /     every other same-game pick that is not PRIMARY. By team identity first:
@@ -119,7 +120,9 @@ export function classifySwapCandidate(leg: ParlayCandidate, cand: ParlayCandidat
   if (o.outcome !== "RULE") return { tab: null, why: o.outcome === "UNDERIVABLE" ? "UNDERIVABLE" : "UNCLASSIFIED" };
   switch (o.rule) {
     case "R1":
-      return { tab: "PRIMARY" };
+      // An alternate line in the same market is Primary. The same team's ML for a spread
+      // leg, or its spread for an ML leg, is another market on the same game: Hedge.
+      return leg.pick.betType === cand.pick.betType ? { tab: "PRIMARY" } : { tab: "HEDGE" };
     case "R4":
     case "R5":
       return hedgeOrContrarian(leg, cand, fav);
