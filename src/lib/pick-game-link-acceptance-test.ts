@@ -22,7 +22,8 @@ check("same teams, same start -> that game's page, sport on the link", liveGameH
 check("a moved start inside the drift still matches", liveGameHref(slate, pick("Buffalo Bills", "Kansas City Chiefs", T + 2 * HOUR), NFL), "/live/g1?sport=" + NFL);
 check("past the drift -> no link", liveGameHref(slate, pick("Buffalo Bills", "Kansas City Chiefs", T + GAME_LINK_MAX_DRIFT_MS + 1), NFL), null);
 check("a series: the closest start wins", liveGameHref(slate, pick("New York Yankees", "Boston Red Sox", T + 23 * HOUR), MLB), "/live/g3?sport=" + MLB);
-check("home and away swapped is another game -> no link", liveGameHref(slate, pick("Kansas City Chiefs", "Buffalo Bills", T), NFL), null);
+// Neutral-site games: the pick's feed (ESPN) and the slate's (Odds API) can pick opposite homes - same team pair + start = same game.
+check("home and away swapped is the same game (neutral site)", liveGameHref(slate, pick("Kansas City Chiefs", "Buffalo Bills", T), NFL), liveGameHref(slate, pick("Buffalo Bills", "Kansas City Chiefs", T), NFL));
 check("a game the slate does not carry -> no link", liveGameHref(slate, pick("Dallas Cowboys", "New York Giants", T), NFL), null);
 check("empty slate -> no link", liveGameHref([], pick("Buffalo Bills", "Kansas City Chiefs", T), NFL), null);
 

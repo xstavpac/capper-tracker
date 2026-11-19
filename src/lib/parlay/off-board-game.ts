@@ -21,7 +21,10 @@ export function findBoardGameForPick<G extends BoardGameRef>(
   let best: G | null = null;
   let bestDist = Infinity;
   for (const g of games) {
-    if (!teamNamesMatch(pick.homeTeam, g.homeTeam, sportKey) || !teamNamesMatch(pick.awayTeam, g.awayTeam, sportKey)) continue;
+    const sameWay = teamNamesMatch(pick.homeTeam, g.homeTeam, sportKey) && teamNamesMatch(pick.awayTeam, g.awayTeam, sportKey);
+    // Either orientation: the pick's feed and the board's can disagree on home/away (neutral site).
+    const reversed = teamNamesMatch(pick.homeTeam, g.awayTeam, sportKey) && teamNamesMatch(pick.awayTeam, g.homeTeam, sportKey);
+    if (!sameWay && !reversed) continue;
     const dist = Math.abs(t - new Date(g.commenceTime).getTime());
     if (dist > driftMs) continue;
     if (dist < bestDist || (dist === bestDist && best !== null && g.id < best.id)) {

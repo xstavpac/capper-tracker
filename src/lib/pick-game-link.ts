@@ -15,7 +15,10 @@ export function liveGameHref(slate: SlateGame[], pick: PickGame, sportKey: strin
   let best: SlateGame | null = null;
   let bestDrift = Infinity;
   for (const g of slate) {
-    if (!teamNamesMatch(pick.homeTeam, g.homeTeam, sportKey) || !teamNamesMatch(pick.awayTeam, g.awayTeam, sportKey)) continue;
+    const sameWay = teamNamesMatch(pick.homeTeam, g.homeTeam, sportKey) && teamNamesMatch(pick.awayTeam, g.awayTeam, sportKey);
+    // Either orientation: the pick's feed and the slate's can disagree on home/away (neutral site).
+    const reversed = teamNamesMatch(pick.homeTeam, g.awayTeam, sportKey) && teamNamesMatch(pick.awayTeam, g.homeTeam, sportKey);
+    if (!sameWay && !reversed) continue;
     const drift = Math.abs(new Date(g.commenceTime).getTime() - pick.gameTime.getTime());
     if (drift <= GAME_LINK_MAX_DRIFT_MS && drift < bestDrift) {
       best = g;
