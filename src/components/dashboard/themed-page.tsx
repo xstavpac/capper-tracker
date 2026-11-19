@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { SHELL_CONTAINER } from "@/components/layout/shell";
 
 // The page wrapper shared by /cappers and /dashboard: their own typeface, applied to the wrapper only
-// (self-hosted by next/font at build time), and the soft neutral backdrop.
-const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], display: "swap", fallback: ["system-ui", "sans-serif"] });
+// (self-hosted from src/fonts via next/font/local), and the soft neutral backdrop.
+const jakarta = localFont({
+  src: [{ path: "../../fonts/plus-jakarta-sans-latin-wght.woff2", weight: "200 800", style: "normal" }],
+  display: "swap",
+  fallback: ["system-ui", "sans-serif"],
+});
 // The backdrop is painted over the shared layout's content padding (<main>'s p-4 / md:p-8, cancelled by
 // the negative margins) rather than changing that layout, so it sits flush with the full-width main.
 // It is at least as tall as the content area - the viewport less the ticker (32px) and the header

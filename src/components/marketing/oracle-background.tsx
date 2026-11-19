@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Orbitron, Rajdhani } from "next/font/google";
+import localFont from "next/font/local";
 import {
   BADGE_RING_COUNT,
   BADGE_RING_DELAYS_MS,
@@ -29,20 +29,22 @@ import {
   WIRE_BASE,
 } from "./oracle-background-constants";
 
-// The two display faces the prototype relied on. next/font/google works in a
-// "use client" module and self-hosts the files (no runtime request to Google),
-// exposing each as a CSS variable we hang on this component's root only - so
-// the utilities `font-orbitron` / `font-rajdhani` (tailwind.config.ts) resolve
-// inside this subtree and nowhere else in the app.
-const orbitron = Orbitron({
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
+// The two display faces the prototype relied on. Loaded with next/font/local from files committed
+// in src/fonts (latin subset, only the weights used), so a build never fetches from Google. Each is
+// exposed as a CSS variable we hang on this component's root only - so the utilities
+// `font-orbitron` / `font-rajdhani` (tailwind.config.ts) resolve inside this subtree and nowhere
+// else in the app.
+const orbitron = localFont({
+  src: [{ path: "../../fonts/orbitron-latin-wght.woff2", weight: "600 800", style: "normal" }],
   variable: "--font-orbitron",
   display: "swap",
 });
-const rajdhani = Rajdhani({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+const rajdhani = localFont({
+  src: [
+    { path: "../../fonts/rajdhani-latin-500.woff2", weight: "500", style: "normal" },
+    { path: "../../fonts/rajdhani-latin-600.woff2", weight: "600", style: "normal" },
+    { path: "../../fonts/rajdhani-latin-700.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-rajdhani",
   display: "swap",
 });

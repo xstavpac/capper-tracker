@@ -37,7 +37,7 @@ stub("../auth", { requireUser: async () => ({ id: userId }), getCurrentUser: asy
 // tsx compiles the page's JSX with the classic runtime (tsconfig keeps jsx: preserve for Next).
 (globalThis as unknown as { React: unknown }).React = require("react");
 // next/font only works inside a Next build; the page's font loaders just need a className.
-stub("next/font/google", new Proxy({}, { get: () => () => ({ className: "", variable: "", style: {} }) }));
+stub("next/font/local", new Proxy({}, { get: () => () => ({ className: "", variable: "", style: {} }) }));
 (require as unknown as { extensions: Record<string, (m: { exports: unknown }) => void> }).extensions[".png"] = (m) => {
   m.exports = { default: { src: "/stub.png", width: 1, height: 1 } };
 };

@@ -60,7 +60,7 @@ const config: Config = {
       fontFamily: {
         // Display faces for the marketing "oracle" login background
         // (components/marketing/oracle-background.tsx). Loaded via
-        // next/font/google in that component, which sets the CSS variables on
+        // next/font/local in that component, which sets the CSS variables on
         // its own subtree - these utilities are scoped to that usage.
         orbitron: ["var(--font-orbitron)", "sans-serif"],
         rajdhani: ["var(--font-rajdhani)", "sans-serif"],
