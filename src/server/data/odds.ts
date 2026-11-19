@@ -1,4 +1,5 @@
 import { unstable_cache, revalidateTag } from "next/cache";
+import { matchScoreEitherWay } from "@/lib/score-orientation";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
@@ -2449,14 +2450,9 @@ export function matchScoreToGame(
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   sportKey?: string
 ): ScoreGame | undefined {
-  const candidates = scores.filter(
-    (s) => teamNamesMatch(s.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(s.awayTeam, game.awayTeam, sportKey)
-  );
-  if (candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
-
-  const gameStart = new Date(game.commenceTime).getTime();
-  return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
+  // Either orientation (neutral-site games: see score-orientation.ts); a reversed feed game comes
+  // back mirrored so its home/away fields match the card's.
+  return matchScoreEitherWay(scores, game, sportKey, (c, start) => closestByTime(c, (s) => new Date(s.commenceTime).getTime(), start));
 }
 
 // Shared by findMarketPrice, findMarketTotalLine, and (via nfl-prop-odds.ts)

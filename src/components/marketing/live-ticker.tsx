@@ -1,5 +1,6 @@
 "use client";
 
+import { teamOrientation } from "@/lib/score-orientation";
 import { useEffect, useState } from "react";
 import type { TickerGame } from "@/server/data/live-ticker";
 import { closestByTime } from "@/lib/dates";
@@ -41,7 +42,7 @@ type ScoreUpdate = {
 // then never another update.
 function matchUpdate(updates: ScoreUpdate[], game: TickerGame): ScoreUpdate | undefined {
   const candidates = updates.filter(
-    (u) => teamNamesMatch(u.homeTeam, game.homeTeam, game.sportKey) && teamNamesMatch(u.awayTeam, game.awayTeam, game.sportKey)
+    (u) => teamOrientation(u, game, game.sportKey) !== null
   );
   if (candidates.length === 0) return undefined;
   if (candidates.length === 1) return candidates[0];

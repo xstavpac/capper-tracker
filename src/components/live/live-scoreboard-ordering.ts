@@ -45,6 +45,7 @@
 //     Thursday-through-Monday football week, or a full college weekend,
 //     together on one board, and to still show *something* on an off-day
 //     (the anchor is the next game day, not today).
+import { matchScoreEitherWay } from "@/lib/score-orientation";
 import { easternDateKey, addDaysToDateKey, closestByTime } from "@/lib/dates";
 import { teamNamesMatch } from "@/lib/team-name-match";
 import type { ScoreGame } from "@/server/data/odds";
@@ -69,14 +70,9 @@ export function matchScoreToGame(
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   sportKey?: string
 ): ScoreGame | undefined {
-  const candidates = scores.filter(
-    (s) => teamNamesMatch(s.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(s.awayTeam, game.awayTeam, sportKey)
-  );
-  if (candidates.length === 0) return undefined;
-  if (candidates.length === 1) return candidates[0];
-
-  const gameStart = new Date(game.commenceTime).getTime();
-  return closestByTime(candidates, (s) => new Date(s.commenceTime).getTime(), gameStart);
+  // Either orientation (neutral-site games: see score-orientation.ts); a reversed feed game comes
+  // back mirrored so its home/away fields match the card's.
+  return matchScoreEitherWay(scores, game, sportKey, (c, start) => closestByTime(c, (s) => new Date(s.commenceTime).getTime(), start));
 }
 
 // One team's score string off a matched ScoreGame, or null. `scores[].name` is

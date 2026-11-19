@@ -117,12 +117,17 @@ function legacyLabel(userId: string, c: DbDupCandidate): string | null {
       p.userId === userId &&
       p.capperId === c.capperId &&
       p.sportId === c.sportId &&
-      p.homeTeam === c.homeTeam &&
-      p.awayTeam === c.awayTeam &&
+      // Either orientation (neutral-site games): a row logged with the teams the other way round
+      // is the same game - see isSameBet.
+      ((p.homeTeam === c.homeTeam && p.awayTeam === c.awayTeam) || (p.homeTeam === c.awayTeam && p.awayTeam === c.homeTeam)) &&
       p.gameTime.getTime() >= c.gameTimeMs - DRIFT &&
       p.gameTime.getTime() <= c.gameTimeMs + DRIFT
   );
-  const dbDup = existingPicks.find((p) => {
+  const flip = <T extends string | null>(side: T): T => (side === "HOME" ? "AWAY" : side === "AWAY" ? "HOME" : side) as T;
+  const dbDup = existingPicks.find((p0) => {
+    // The row as seen from the candidate's orientation: sides mirrored when its teams are reversed.
+    const reversed = p0.homeTeam !== c.homeTeam;
+    const p = reversed ? { ...p0, homeTeam: p0.awayTeam, awayTeam: p0.homeTeam, pickedSide: flip(p0.pickedSide), mlFavoredSide: flip(p0.mlFavoredSide) } : p0;
     if (p.period !== c.period) return false;
     const pCategory = pickCategory({ ...p, sportName: c.sportName });
     if (!pCategory) return false;

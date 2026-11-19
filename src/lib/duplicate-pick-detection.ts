@@ -142,11 +142,30 @@ export function isComparableBet(b: Pick<BetIdentity, "betType" | "category" | "p
 //     team alone. FAV_ML / DOG_ML is derived from the price, and the price can
 //     cross from favourite to underdog between two imports of the same pick.
 //   - everything else on the side-aware category.
+const flipSide = <T extends string | null | undefined>(side: T): T => (side === "HOME" ? "AWAY" : side === "AWAY" ? "HOME" : side) as T;
+
+// b as seen from the other home/away orientation. Only the side-relative fields change; the
+// category of every bet type but TEAM_TOTAL ("TEAM_TOTAL:HOME:OVER") is already side-neutral.
+function mirrorBetIdentity(b: BetIdentity): BetIdentity {
+  const category =
+    b.category !== null && b.category.startsWith("TEAM_TOTAL:")
+      ? b.category.replace(/^TEAM_TOTAL:(HOME|AWAY):/, (_m, side: string) => "TEAM_TOTAL:" + flipSide(side) + ":")
+      : b.category;
+  return { ...b, homeTeam: b.awayTeam, awayTeam: b.homeTeam, pickedSide: flipSide(b.pickedSide), category };
+}
+
 export function isSameBet(a: BetIdentity, b: BetIdentity, maxGameTimeDriftMs: number): boolean {
   if (a.period !== b.period) return false;
   if (Math.abs(a.gameTimeMs - b.gameTimeMs) > maxGameTimeDriftMs) return false;
   const sportKey = a.sportKey ?? b.sportKey;
-  if (!teamNamesMatch(a.homeTeam, b.homeTeam, sportKey) || !teamNamesMatch(a.awayTeam, b.awayTeam, sportKey)) return false;
+  const sameWay = teamNamesMatch(a.homeTeam, b.homeTeam, sportKey) && teamNamesMatch(a.awayTeam, b.awayTeam, sportKey);
+  // Either orientation: on a neutral-site game the feed that resolved one import (ESPN) and the one
+  // that resolved the other (the Odds API) can name opposite homes, so a re-import of the same pick
+  // arrives with the teams flipped. Home/away-relative parts of b (the ML pickedSide, a team total's
+  // HOME/AWAY key) are mirrored into a's orientation before comparing - "Auburn ML" stays Auburn.
+  const reversed = !sameWay && teamNamesMatch(a.homeTeam, b.awayTeam, sportKey) && teamNamesMatch(a.awayTeam, b.homeTeam, sportKey);
+  if (!sameWay && !reversed) return false;
+  if (reversed) b = mirrorBetIdentity(b);
   if (a.betType === "MONEYLINE" && b.betType === "MONEYLINE" && a.pickedSide && b.pickedSide) {
     return a.pickedSide === b.pickedSide;
   }
