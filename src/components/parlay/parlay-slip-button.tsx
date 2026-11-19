@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon, TicketIcon } from "@/components/dashboard/cappers-icons";
-import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
+import { LIVE_PILL, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 import { canSendSlip } from "@/lib/parlay/slip-state";
 
@@ -22,13 +22,11 @@ const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 ";
 // Colors come from LIVE_PILL_ON, not the --bv-* variables: those are defined under .pbanner only, and since
 // #496 the slip sits in the league row, outside the banner, where they resolve to nothing.
 const SLIP_ON_CHIP = LIVE_PILL + LIVE_PILL_ON + "!h-11 ";
-// Desktop Exit + over-cap notice: the idle league chip's look (LIVE_PILL_OFF), so they match the NFL chip etc. in the same row, with no --bv-* dependency.
-const SLIP_IDLE = LIVE_PILL_OFF + "font-semibold ";
-// Phone action bar only (its own white card): unchanged.
+// The action bar's Exit button (its own white card, phone and desktop).
 const BANNER_IDLE = "border-[color:var(--bv-pill-border)] bg-[var(--bv-pill-bg)] font-semibold text-[color:var(--bv-btn-text)]";
 
 export function ParlaySlipButton() {
-  const { slipSize, targetedGames, slipMode, enterSlipMode, exitSlipMode, sendToGenerator, overCapBy, dismissOverCap } = useParlayPool();
+  const { slipSize, targetedGames, slipMode, enterSlipMode, exitSlipMode } = useParlayPool();
   const games = targetedGames.length;
 
   if (!slipMode) {
@@ -43,29 +41,14 @@ export function ParlaySlipButton() {
   }
 
   const summary = slipSize + " pick" + (slipSize === 1 ? "" : "s") + " · " + games + " game" + (games === 1 ? "" : "s") + " targeted";
+  // Phone only (below 768px): the chip is the filled "on" pill and a tap on it leaves slip mode. Exit and Send are in
+  // the action bar (ParlaySlipActionBar), which desktop uses too; on desktop nothing renders here, so every league chip stays tappable.
   return (
-    <div role="toolbar" aria-label="Slip mode" className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-      {/* Phone (below 768px): the chip is the filled "on" pill and a tap on it leaves slip mode; Exit and Send are in the action bar (ParlaySlipActionBar). */}
-      <button type="button" aria-pressed="true" aria-label={"Slip mode on, " + summary + ". Tap to exit."} onClick={exitSlipMode} className={SLIP_ON_CHIP + "md:hidden"}>
+    <div role="toolbar" aria-label="Slip mode" className="flex min-w-0 max-w-full items-center md:hidden">
+      <button type="button" aria-pressed="true" aria-label={"Slip mode on, " + summary + ". Tap to exit."} onClick={exitSlipMode} className={SLIP_ON_CHIP}>
         <ClipboardIcon className="h-[18px] w-[18px] flex-none" />
         {summary}
       </button>
-      <span className={SLIP_ON_CHIP + "min-w-0 max-md:hidden"}>
-        <ClipboardIcon className="h-[18px] w-[18px] flex-none" />
-        <span className="truncate">{summary}</span>
-      </span>
-      {overCapBy !== null && (
-        <span role="alert" className={"max-md:hidden " + BANNER_PILL + SLIP_IDLE + "gap-1 pl-3 pr-1.5"}>
-          <span className="font-semibold text-[#0b1838]">{MAX_POOL_PICKS_MESSAGE}</span>
-          <button type="button" onClick={dismissOverCap} className="rounded-full px-2 py-1 text-xs font-medium hover:bg-[#dbe5f6]/60">
-            OK
-          </button>
-        </span>
-      )}
-      <button type="button" onClick={exitSlipMode} className={"max-md:hidden " + BANNER_BUTTON + SLIP_IDLE}>
-        Exit
-      </button>
-      <SendToGenerator canSend={canSendSlip(slipSize, games)} onSend={sendToGenerator} className={"max-md:hidden " + BANNER_BUTTON} />
     </div>
   );
 }
@@ -89,8 +72,8 @@ function SendToGenerator({ canSend, onSend, className }: { canSend: boolean; onS
   );
 }
 
-// Phone only (below 768px), while slip mode is on: a floating card just above the bottom tab bar with the
-// live summary, Exit and Send to generator - the same handlers as the inline buttons. It slides up and
+// While slip mode is on: a floating card (phone: just above the bottom tab bar; desktop: bottom of the viewport,
+// centered, at most the page column wide) with the live summary, Exit and Send to generator - the same handlers as the inline buttons. It slides up and
 // fades in on enter and back out on exit (no motion under prefers-reduced-motion). While it is up, <body>
 // carries data-slip-bar so the page gets bottom padding (globals.css) and the last tiles clear it.
 const BAR_EXIT_MS = 200;
@@ -121,7 +104,7 @@ export function ParlaySlipActionBar() {
       role="toolbar"
       aria-label="Slip actions"
       className={
-        "fixed inset-x-3 bottom-[calc(56px+env(safe-area-inset-bottom)+8px)] z-40 flex flex-col gap-2 rounded-2xl border border-[#E3E8F0] bg-white p-3 shadow-[0_8px_28px_rgba(5,11,28,.18)] transition duration-200 ease-out motion-reduce:transition-none md:hidden dark:border-border dark:bg-card " +
+        "fixed inset-x-3 bottom-[calc(56px+env(safe-area-inset-bottom)+8px)] z-40 md:inset-x-6 md:bottom-4 md:mx-auto md:max-w-[1232px] flex flex-col gap-2 rounded-2xl border border-[#E3E8F0] bg-white p-3 shadow-[0_8px_28px_rgba(5,11,28,.18)] transition duration-200 ease-out motion-reduce:transition-none dark:border-border dark:bg-card " +
         (shown && slipMode ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 motion-reduce:translate-y-0")
       }
     >
