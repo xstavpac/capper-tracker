@@ -5,7 +5,6 @@ import { addDaysToDateKey, easternDateKey } from "@/lib/dates";
 
 export type SlateDay = "yesterday" | "today" | "tomorrow";
 export const SLATE_DAYS: SlateDay[] = ["yesterday", "today", "tomorrow"];
-export const SLATE_DAY_LABEL: Record<SlateDay, string> = { yesterday: "Yesterday", today: "Today", tomorrow: "Tomorrow" };
 
 // Display order of the league chips. `logo` is the league's own logo as ESPN's scoreboard
 // reports it (leagues[0].logos, the dark-background variant, since the bar is navy); the college
@@ -32,13 +31,13 @@ export type LeagueDayCount = {
   live: number;
   // Not started yet.
   pending: number;
+  // Finished.
+  final: number;
 };
 
 export type LeagueSlate = {
   sportKey: string;
-  // The league has no games in the feed's window at all and is out of season.
-  offseason: boolean;
-  // The league's feed could not be read; its chip shows no count.
+  // The league's feed could not be read; its numbers are left out of the strip.
   failed: boolean;
   days: Record<SlateDay, LeagueDayCount>;
 };
@@ -47,12 +46,11 @@ export type SlateCounts = { leagues: LeagueSlate[] };
 
 export type SlateFeedInput = {
   sportKey: string;
-  inSeason: boolean;
   failed: boolean;
   games: { status: string; commenceTime: string }[];
 };
 
-const EMPTY_DAY = (): LeagueDayCount => ({ games: 0, live: 0, pending: 0 });
+const EMPTY_DAY = (): LeagueDayCount => ({ games: 0, live: 0, pending: 0, final: 0 });
 
 export function buildSlateCounts(feeds: SlateFeedInput[], now: Date = new Date()): SlateCounts {
   const todayKey = easternDateKey(now);
@@ -73,36 +71,30 @@ export function buildSlateCounts(feeds: SlateFeedInput[], now: Date = new Date()
       days[day].games += 1;
       if (g.status === "live") days[day].live += 1;
       else if (g.status === "preview") days[day].pending += 1;
+      else if (g.status === "final") days[day].final += 1;
     }
-    const anyGames = SLATE_DAYS.some((d) => days[d].games > 0);
-    return { sportKey: feed.sportKey, offseason: !feed.failed && !feed.inSeason && !anyGames, failed: feed.failed, days };
+    return { sportKey: feed.sportKey, failed: feed.failed, days };
   });
   return { leagues };
 }
 
-export type SlateTotals = { live: number; pending: number; liveTop: string | null; pendingTop: string | null };
+export type SlateTotals = { live: number; pending: number; final: number; liveTop: string | null; pendingTop: string | null };
 
-// The two stats cells for a day: totals across every league, plus the league with the most
-// matching games (where the cell's link lands, since /live shows one league at a time).
+// The stats cells for a day: totals across every league, plus the league with the most matching
+// live / not-started games (where those cells' links land, since /live shows one league at a time).
 export function slateTotals(counts: SlateCounts, day: SlateDay): SlateTotals {
   let live = 0;
   let pending = 0;
+  let final = 0;
   let liveTop: { key: string; n: number } | null = null;
   let pendingTop: { key: string; n: number } | null = null;
   for (const l of counts.leagues) {
     const d = l.days[day];
     live += d.live;
     pending += d.pending;
+    final += d.final;
     if (d.live > (liveTop?.n ?? 0)) liveTop = { key: l.sportKey, n: d.live };
     if (d.pending > (pendingTop?.n ?? 0)) pendingTop = { key: l.sportKey, n: d.pending };
   }
-  return { live, pending, liveTop: liveTop?.key ?? null, pendingTop: pendingTop?.key ?? null };
-}
-
-// Chip order for a day: leagues with games first, then the rest, each group in SLATE_LEAGUES order.
-export function orderSlateLeagues(counts: SlateCounts, day: SlateDay): LeagueSlate[] {
-  const bySport = new Map(counts.leagues.map((l) => [l.sportKey, l]));
-  const ordered = SLATE_LEAGUES.map((l) => bySport.get(l.key)).filter((l): l is LeagueSlate => !!l);
-  const has = (l: LeagueSlate) => l.days[day].games > 0;
-  return [...ordered.filter(has), ...ordered.filter((l) => !has(l))];
+  return { live, pending, final, liveTop: liveTop?.key ?? null, pendingTop: pendingTop?.key ?? null };
 }

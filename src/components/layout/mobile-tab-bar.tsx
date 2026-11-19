@@ -25,10 +25,13 @@ function pick(hrefs: string[]): NavItem[] {
   return hrefs.map((href) => NAV_ITEMS.find((i) => i.href === href)).filter((i): i is NavItem => !!i);
 }
 
+// The bar looks the same in light and dark mode: the top header's navy (#0A1530, site-header.tsx)
+// with no theme variants. The active tab is a raised blue pill (the selected league chip's gradient).
 const TAB_BASE =
-  "relative flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-semibold leading-none transition-colors ";
-const TAB_ACTIVE = "text-[#1E5BD8] dark:text-brand-400";
-const TAB_IDLE = "text-[#64748B] dark:text-muted-foreground";
+  "relative m-1 flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-2xl text-[11px] leading-none transition-all duration-200 ease-out motion-reduce:transition-none ";
+const TAB_ACTIVE =
+  "-translate-y-0.5 bg-[linear-gradient(180deg,#3b82f6,#1d4ed8)] font-semibold text-white shadow-[0_6px_18px_rgba(37,99,235,.45),inset_0_1px_0_rgba(255,255,255,.35)]";
+const TAB_IDLE = "font-medium text-slate-300";
 
 export function MobileTabBar() {
   const pathname = usePathname();
@@ -90,7 +93,7 @@ export function MobileTabBar() {
     <div className="md:hidden">
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-[#E3E8F0] bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(5,11,28,.08)] dark:border-border dark:bg-card"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-[#0A1530] pb-[env(safe-area-inset-bottom)]"
       >
         <div className="grid grid-cols-5">
           {tabs.map((item) => {
@@ -105,7 +108,7 @@ export function MobileTabBar() {
               >
                 <span className="relative flex">
                   <Icon className="h-[22px] w-[22px]" />
-                  {item.liveDot && <LiveDot ringClassName="border-white dark:border-card" />}
+                  {item.liveDot && <LiveDot ringClassName={active ? "border-[#2563eb]" : "border-[#0A1530]"} />}
                 </span>
                 {item.label}
               </Link>
@@ -116,6 +119,7 @@ export function MobileTabBar() {
             type="button"
             aria-haspopup="dialog"
             aria-expanded={moreOpen}
+            aria-current={moreActive && !moreOpen ? "page" : undefined}
             aria-controls={moreOpen ? sheetId : undefined}
             onClick={() => setMoreOpen((v) => !v)}
             className={TAB_BASE + (moreActive ? TAB_ACTIVE : TAB_IDLE)}
@@ -123,7 +127,7 @@ export function MobileTabBar() {
             <span className="relative flex">
               <MoreIcon className="h-[22px] w-[22px]" />
               {slipSize > 0 && !moreActive && (
-                <span aria-hidden="true" className="absolute -right-[3px] -top-[3px] h-[9px] w-[9px] rounded-full border-2 border-white bg-brand-500 dark:border-card" />
+                <span aria-hidden="true" className="absolute -right-[3px] -top-[3px] h-[9px] w-[9px] rounded-full border-2 border-[#0A1530] bg-brand-500" />
               )}
             </span>
             More
