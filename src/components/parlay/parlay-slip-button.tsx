@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon, TicketIcon } from "@/components/dashboard/cappers-icons";
-import { LIVE_PILL, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
+import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
 
 // The /live banner's pills (40px, as in design/page-banners-reference.html).
@@ -21,6 +21,9 @@ const BANNER_BUTTON = BANNER_PILL + "flex-none px-3.5 ";
 // Colors come from LIVE_PILL_ON, not the --bv-* variables: those are defined under .pbanner only, and since
 // #496 the slip sits in the league row, outside the banner, where they resolve to nothing.
 const SLIP_ON_CHIP = LIVE_PILL + LIVE_PILL_ON + "!h-11 ";
+// Desktop Exit + over-cap notice: the idle league chip's look (LIVE_PILL_OFF), so they match the NFL chip etc. in the same row, with no --bv-* dependency.
+const SLIP_IDLE = LIVE_PILL_OFF + "font-semibold ";
+// Phone action bar only (its own white card): unchanged.
 const BANNER_IDLE = "border-[color:var(--bv-pill-border)] bg-[var(--bv-pill-bg)] font-semibold text-[color:var(--bv-btn-text)]";
 
 export function ParlaySlipButton() {
@@ -51,14 +54,14 @@ export function ParlaySlipButton() {
         <span className="truncate">{summary}</span>
       </span>
       {overCapBy !== null && (
-        <span role="alert" className={"max-md:hidden " + BANNER_PILL + BANNER_IDLE + " gap-1 pl-3 pr-1.5"}>
-          <span className="font-semibold text-[color:var(--bv-h1)]">{MAX_POOL_PICKS_MESSAGE}</span>
-          <button type="button" onClick={dismissOverCap} className="rounded-full px-2 py-1 text-xs font-medium hover:bg-[var(--bv-pill-border)]/40 hover:text-[color:var(--bv-h1)]">
+        <span role="alert" className={"max-md:hidden " + BANNER_PILL + SLIP_IDLE + "gap-1 pl-3 pr-1.5"}>
+          <span className="font-semibold text-[#0b1838]">{MAX_POOL_PICKS_MESSAGE}</span>
+          <button type="button" onClick={dismissOverCap} className="rounded-full px-2 py-1 text-xs font-medium hover:bg-[#dbe5f6]/60">
             OK
           </button>
         </span>
       )}
-      <button type="button" onClick={exitSlipMode} className={"max-md:hidden " + BANNER_BUTTON + BANNER_IDLE + " hover:text-[color:var(--bv-h1)]"}>
+      <button type="button" onClick={exitSlipMode} className={"max-md:hidden " + BANNER_BUTTON + SLIP_IDLE}>
         Exit
       </button>
       <Link href="/parlay" onClick={sendToGenerator} className={"max-md:hidden " + BANNER_BUTTON + SEND_STYLE}>
