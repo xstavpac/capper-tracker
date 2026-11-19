@@ -379,7 +379,7 @@ export async function withCapperAndSportNames<T extends { capperId: string; spor
 // name alone isn't enough to tell "this specific game" from "the same
 // matchup two days ago." Same reasoning as findMatchingGameResult's
 // withinDrift, just picks-to-a-game instead of a-pick-to-its-game-result.
-export function matchPicksToGame<
+function matchPicksToGameByTeams<
   T extends { homeTeam: string; awayTeam: string; betDetail: string | null; gameTime: Date },
 >(
   candidates: T[],
@@ -396,9 +396,14 @@ export function matchPicksToGame<
   // fallback below could not save it, since that card's nickname is
   // "appalachian state" and the pick says "app state".
   const sportKey = SPORT_LABEL_TO_KEY[sportName];
+  // Either orientation: a pick stores the home/away of the feed that resolved it
+  // (ESPN), the card the Odds API's, and the two disagree for neutral-site and some
+  // campus games (Auburn/Notre Dame 2026-11-19: pick Auburn-home, card ND-home).
   const exact = withinDrift(
     candidates.filter(
-      (p) => teamNamesMatch(p.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(p.awayTeam, game.awayTeam, sportKey)
+      (p) =>
+        (teamNamesMatch(p.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(p.awayTeam, game.awayTeam, sportKey)) ||
+        (teamNamesMatch(p.homeTeam, game.awayTeam, sportKey) && teamNamesMatch(p.awayTeam, game.homeTeam, sportKey))
     )
   );
   if (exact.length > 0) return exact;
@@ -436,6 +441,43 @@ export function matchPicksToGame<
       return homeRe.test(text) && awayRe.test(text);
     })
   );
+}
+
+// A pick whose stored home/away is the reverse of the card's is handed back with the teams
+// swapped and pickedSide / mlFavoredSide mirrored, so every reader that groups by HOME/AWAY
+// (classifyPickTeamGroup, ML favourite/underdog) sees the card's own orientation. One mirrored
+// copy per pick (WeakMap): a pick matched by several cards must stay ONE object for
+// assignPicksToNearestGame's identity maps. Picks already in the card's orientation are
+// returned untouched.
+const mirroredPicks = new WeakMap<object, object>();
+const flipSide = (s: unknown) => (s === "HOME" ? "AWAY" : s === "AWAY" ? "HOME" : s);
+
+export function orientPickToGame<T extends { homeTeam: string; awayTeam: string }>(
+  pick: T,
+  game: { homeTeam: string; awayTeam: string },
+  sportKey: string | undefined
+): T {
+  if (teamNamesMatch(pick.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(pick.awayTeam, game.awayTeam, sportKey)) return pick;
+  if (!(teamNamesMatch(pick.homeTeam, game.awayTeam, sportKey) && teamNamesMatch(pick.awayTeam, game.homeTeam, sportKey))) return pick;
+  const cached = mirroredPicks.get(pick);
+  if (cached) return cached as T;
+  const rec = pick as Record<string, unknown>;
+  const mirrored: Record<string, unknown> = { ...rec, homeTeam: pick.awayTeam, awayTeam: pick.homeTeam };
+  if ("pickedSide" in rec) mirrored.pickedSide = flipSide(rec.pickedSide);
+  if ("mlFavoredSide" in rec) mirrored.mlFavoredSide = flipSide(rec.mlFavoredSide);
+  mirroredPicks.set(pick, mirrored);
+  return mirrored as T;
+}
+
+export function matchPicksToGame<
+  T extends { homeTeam: string; awayTeam: string; betDetail: string | null; gameTime: Date },
+>(
+  candidates: T[],
+  game: { homeTeam: string; awayTeam: string; commenceTime: Date },
+  sportName: string
+): T[] {
+  const sportKey = SPORT_LABEL_TO_KEY[sportName];
+  return matchPicksToGameByTeams(candidates, game, sportName).map((p) => orientPickToGame(p, game, sportKey));
 }
 
 // The columns a board / game-detail pick is read with - only what

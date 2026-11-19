@@ -27,7 +27,8 @@ const DRIFT = 6 * H;
   check("a doubleheader's second game: nearest start", findBoardGameForPick(pick("Boston Red Sox", "New York Yankees", T0 + 2 * H), [...games, game("a2", "Boston Red Sox", "New York Yankees", T0 + 4 * H)], undefined, DRIFT)?.id, "a");
   check("outside the drift window: no game", findBoardGameForPick(pick("Boston Red Sox", "New York Yankees", T0 + 10 * H), [games[0]], undefined, DRIFT), null);
   check("other teams: no game", findBoardGameForPick(pick("Chicago Cubs", "St. Louis Cardinals", T0), games, undefined, DRIFT), null);
-  check("home and away swapped is a different game", findBoardGameForPick(pick("New York Yankees", "Boston Red Sox", T0), games, undefined, DRIFT), null);
+  // Neutral-site games: the two feeds can pick opposite homes - same team pair + start window = same game.
+  check("home and away swapped is the same game (neutral site)", findBoardGameForPick(pick("New York Yankees", "Boston Red Sox", T0), games, undefined, DRIFT)?.id, findBoardGameForPick(pick("Boston Red Sox", "New York Yankees", T0), games, undefined, DRIFT)?.id);
 }
 
 // ---- the point of it: the cap counts the keyed pick -----------------------------
