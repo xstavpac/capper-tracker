@@ -18,26 +18,27 @@ const r1 = (x: number) => Math.round(x * 1000) / 10;
 const wl = (wins: number, losses: number) => ({ wins, losses });
 
 // ---- The config: one object, the defaults asked for ---------------------------
-check("defaults: K = 10, F = 0.20, prior 0.50", [RECORD_SCORE_CONFIG.k, RECORD_SCORE_CONFIG.f, RECORD_SCORE_CONFIG.prior], [10, 0.2, 0.5]);
+check("defaults: K = 15, F = 0.10, prior 0.50", [RECORD_SCORE_CONFIG.k, RECORD_SCORE_CONFIG.f, RECORD_SCORE_CONFIG.prior], [15, 0.1, 0.5]);
 check("the config is frozen", Object.isFrozen(RECORD_SCORE_CONFIG), true);
 
-// ---- Today's four real picks (2026-11-18): all-time / league / last 20 -> combined --------
+// ---- Today's four real picks (2026-11-18): all-time / league / last 20 -> combined (K 15, F 0.10) --------
 const real: [string, [number, number], [number, number], [number, number], number][] = [
-  ["CALEB PICKS Florida ML", [25, 17], [5, 0], [14, 6], 71],
-  ["The Gambling GAWD 76ers ML", [54, 49], [5, 2], [13, 7], 61],
+  ["CALEB PICKS Florida ML", [25, 17], [5, 0], [14, 6], 65],
+  ["The Gambling GAWD 76ers ML", [54, 49], [5, 2], [13, 7], 58],
   ["This Girl BETZ 76ers ML", [160, 128], [12, 8], [10, 10], 57],
-  ["KIMSPICKS Magic ML", [23, 15], [3, 4], [10, 10], 52],
+  ["KIMSPICKS Magic ML", [23, 15], [3, 4], [10, 10], 54],
 ];
 for (const [label, cat, lg, l20, want] of real) {
   const c = combinedWinProb({ category: wl(...cat), league: wl(...lg), last20: wl(...l20) });
   check(`${label}: ${cat.join("-")} / ${lg.join("-")} / ${l20.join("-")} -> ~${want}%`, Math.round(c.combined * 100), want);
 }
 {
-  // Worked by hand: CALEB. p_cat = 30/52, p_league = (5 + 10 p_cat) / 15, combined = .8 p_league + .2 * .70.
+  // Worked by hand: CALEB. Other leagues 20-17: p_other = (20 + 7.5) / 52, p_league = (5 + 15 p_other) / 20,
+  // combined = .9 p_league + .1 * .70.
   const c = combinedWinProb({ category: wl(25, 17), league: wl(5, 0), last20: wl(14, 6) });
-  const pCat = 30 / 52;
-  const pLg = (5 + 10 * pCat) / 15;
-  check("CALEB by hand: p_cat, p_league, combined", [r1(c.pCat), r1(c.pLeague), r1(c.combined)], [r1(pCat), r1(pLg), r1(0.8 * pLg + 0.2 * 0.7)]);
+  const pOther = 27.5 / 52;
+  const pLg = (5 + 15 * pOther) / 20;
+  check("CALEB by hand: p_other, p_league, combined", [r1(c.pOther), r1(c.pLeague), r1(c.combined)], [r1(pOther), r1(pLg), r1(0.9 * pLg + 0.1 * 0.7)]);
   check("N_cat is the category's decided picks", c.nCat, 42);
 }
 // The 76ers @ Magic outcome at the default 55% gate: GAWD and This Girl BETZ qualify, KIMSPICKS does not.
@@ -47,8 +48,27 @@ for (const [label, cat, lg, l20, want] of real) {
 }
 
 // ---- The formula's edges -------------------------------------------------------
-check("no league record: p_league = p_cat", (() => { const c = combinedWinProb({ category: wl(12, 8), league: null, last20: null }); return c.pLeague === c.pCat; })(), true);
-check("league record 0-0: p_league = p_cat", (() => { const c = combinedWinProb({ category: wl(12, 8), league: wl(0, 0), last20: null }); return c.pLeague === c.pCat; })(), true);
+check("no league record: p_league = p_other", (() => { const c = combinedWinProb({ category: wl(12, 8), league: null, last20: null }); return c.pLeague === c.pOther; })(), true);
+check("league record 0-0: p_league = p_other", (() => { const c = combinedWinProb({ category: wl(12, 8), league: wl(0, 0), last20: null }); return c.pLeague === c.pOther; })(), true);
+
+// ---- Each pick counted once: a record scores the same in this league or elsewhere ---------------
+// The middle level is all-time minus the league. Shrinking toward all-time (which holds the league
+// picks) counted them twice: 3-0 in-league was 70.4% that way, 61.5% elsewhere (K 10).
+const RECS: [string, number, number][] = [["3-0", 3, 0], ["1-0", 1, 0], ["18-4", 18, 4], ["60-30", 60, 30], ["19-15", 19, 15]];
+const inLeague = (w: number, l: number) => combinedWinProb({ category: wl(w, l), league: wl(w, l), last20: null }).combined;
+const elsewhere = (w: number, l: number) => combinedWinProb({ category: wl(w, l), league: wl(0, 0), last20: null }).combined;
+check("identical in-league and elsewhere, every record", RECS.map(([, w, l]) => Math.abs(inLeague(w, l) - elsewhere(w, l)) < 1e-12), [true, true, true, true, true]);
+check("18-4 with 10-2 in league: 71.5% at K 15", r1(combinedWinProb({ category: wl(18, 4), league: wl(10, 2), last20: null }).combined), 71.5);
+// ---- Pinned at K 15, F 0.10, no Last 20 (combined = p_league) --------------------------------
+const pct = (w: number, l: number) => Math.round(inLeague(w, l) * 1e4) / 100;
+check("pinned combined %: 3-0, 1-0, 18-4, 60-30, 19-15", RECS.map(([, w, l]) => pct(w, l)), [58.33, 53.13, 68.92, 64.29, 54.08]);
+check("60-30 beats 3-0", inLeague(60, 30) > inLeague(3, 0), true);
+check("19-15 beats 1-0 (strictly: K 10 tied them at 6/11 = 24/44)", inLeague(19, 15) > inLeague(1, 0), true);
+check("18-4 beats 60-30", inLeague(18, 4) > inLeague(60, 30), true);
+{
+  const k10 = (w: number, l: number) => combinedWinProb({ category: wl(w, l), league: null, last20: null }, { ...RECORD_SCORE_CONFIG, k: 10 }).combined;
+  check("K 10 would tie 1-0 and 19-15 exactly", k10(1, 0) === k10(19, 15), true);
+}
 check("no Last 20: combined = p_league", (() => { const c = combinedWinProb({ category: wl(12, 8), league: wl(4, 1), last20: null }); return c.combined === c.pLeague; })(), true);
 check("0-0 category is the prior, 50%", combinedWinProb({ category: wl(0, 0), league: null, last20: null }).combined, 0.5);
 check("F moves only the Last 20 weight", r1(combinedWinProb({ category: wl(10, 10), league: null, last20: wl(20, 0) }, { ...RECORD_SCORE_CONFIG, f: 0.3 }).combined), r1(0.7 * 0.5 + 0.3 * 1));
@@ -79,9 +99,9 @@ const ctx = ctxOf();
 const gawd = scorePickByRecord(pick({ pickId: "g", capperId: "gawd", odds: -108 }), ctx);
 const gawdLong = scorePickByRecord(pick({ pickId: "g2", capperId: "gawd", odds: -900 }), ctx);
 const kims = scorePickByRecord(pick({ pickId: "k", capperId: "kims", category: "DOG_ML", odds: -108 }), ctx);
-check("scored on the record model; pushes out (54-49-3 is N_cat 103)", gawd.status === "SCORED" ? [gawd.model, gawd.decided, Math.round(gawd.rankScore * 100)] : null, ["record model", 103, 61]);
+check("scored on the record model; pushes out (54-49-3 is N_cat 103)", gawd.status === "SCORED" ? [gawd.model, gawd.decided, Math.round(gawd.rankScore * 100)] : null, ["record model", 103, 58]);
 check("odds never move the score (-108 and -900 score the same)", gawd.status === "SCORED" && gawdLong.status === "SCORED" ? gawd.rankScore === gawdLong.rankScore : null, true);
-check("passesGate reads the combined %: GAWD passes 55, fails 62; KIMS fails 55", [passesGate(gawd, 55), passesGate(gawd, 62), passesGate(kims, 55)], [true, false, false]);
+check("passesGate reads the combined %: GAWD passes 55, fails 59; KIMS fails 55", [passesGate(gawd, 55), passesGate(gawd, 59), passesGate(kims, 55)], [true, false, false]);
 check("no card: no record", scorePickByRecord(pick({ pickId: "n", capperId: "none" }), ctx).status, "NO_RECORD");
 check("no category: no record", scorePickByRecord(pick({ pickId: "c", capperId: "gawd", category: null }), ctx).status, "NO_RECORD");
 {
@@ -141,11 +161,11 @@ check("no category: no record", scorePickByRecord(pick({ pickId: "c", capperId: 
   const NOW = new Date("2099-06-01T12:00:00.000Z");
   const s: GeneratorSettings = { legCount: 1, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 55 };
   const p = buildGeneratedParlay(snap, s, null, NOW);
-  check("76ers @ Magic: the leg is GAWD's 76ers ML (61%), not KIMS's Magic ML (52%)", p.legs.map((l) => l.pick.pickId), ["gawd-phi"]);
-  check("its score is the combined win % in points", Math.round(p.legs[0].score ?? 0), 61);
+  check("76ers @ Magic: the leg is GAWD's 76ers ML (58%), not KIMS's Magic ML (54%)", p.legs.map((l) => l.pick.pickId), ["gawd-phi"]);
+  check("its score is the combined win % in points", Math.round(p.legs[0].score ?? 0), 58);
   const o = legSwapOptions(snap, s, p.legs, 0, NOW);
   check("Swap: This Girl BETZ (57%) clears, in Primary (the same bet)", o.PRIMARY.filter((r) => !r.current).map((r) => [r.pick.pickId, Boolean(r.belowGate)]), [["tgb-phi", false]]);
-  check("Swap: KIMS (52%) is Contrarian, below your gate, 52% vs 55%", o.CONTRARIAN.map((r) => [r.pick.pickId, r.belowGate ? Math.round(r.belowGate.combinedWinPct) : null, r.belowGate?.gate]), [["kims-orl", 52, 55]]);
+  check("Swap: KIMS (54%) is Contrarian, below your gate, 54% vs 55%", o.CONTRARIAN.map((r) => [r.pick.pickId, r.belowGate ? Math.round(r.belowGate.combinedWinPct) : null, r.belowGate?.gate]), [["kims-orl", 54, 55]]);
   check("the edge model still runs on request (scoreModel EDGE)", buildGeneratedParlay(snap, { ...s, scoreModel: "EDGE" }, null, NOW).legs.length <= 1, true);
 }
 

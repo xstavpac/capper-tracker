@@ -5,10 +5,16 @@
 // already holds (generator-snapshot.ts's one record bundle).
 //
 // Decided picks only (pushes out), K and F from RECORD_SCORE_CONFIG:
-//   p_cat    = (W_cat + K * prior) / (N_cat + K)        the capper's all-time record in the
-//                                                       pick's category (every league)
-//   p_league = (W_lg + K * p_cat) / (N_lg + K)          the same category in the pick's league;
-//                                                       no league record: p_league = p_cat
+//   p_other  = (W_cat - W_lg + K * prior) / (N_cat - N_lg + K)
+//                                                       the capper's record in the pick's category
+//                                                       in their OTHER leagues (all-time minus this league)
+//   p_league = (W_lg + K * p_other) / (N_lg + K)        this league's record shrunk toward it;
+//                                                       no league record: p_league = p_other
+// Each pick counts once. The middle level is all-time minus the league, never all-time:
+// shrinking the league record toward an all-time record that already holds it counts the
+// league picks twice (3-0 in-league scored 70.4% that way, against 61.5% counted once). So a
+// record scores the same whether it sits in this league or elsewhere (scoring.ts has the same
+// rule for its middle level).
 //   combined = (1 - F) * p_league + F * last20          last20: the capper's Last 20 win %
 //                                                       (every category and league); none: p_league
 // A player prop with a market key reads its per-market record (all-time = the market's
@@ -34,25 +40,32 @@ export type RecordScoreConfig = {
   prior: number;
 };
 
-export const RECORD_SCORE_CONFIG: Readonly<RecordScoreConfig> = Object.freeze({ k: 10, f: 0.2, prior: 0.5 });
+// K = 15, F = 0.10, on the 30-day backtest (scripts/t2-harness/record-score-backtest.sql) over
+// K = 10 / 15 / 20 x F = 0.10 / 0.20. K = 10 ties 1-0 with 19-15 exactly (6/11 = 24/44); K > 10 breaks it.
+export const RECORD_SCORE_CONFIG: Readonly<RecordScoreConfig> = Object.freeze({ k: 15, f: 0.1, prior: 0.5 });
 
-export const RECORD_SCORING_VERSION = "record-k10-f20-p50-v1";
+export const RECORD_SCORING_VERSION = "record-other-k15-f10-p50-v2";
 
 export type CombinedInput = { category: WinLoss; league: WinLoss | null; last20: WinLoss | null };
-export type CombinedWinProb = { pCat: number; pLeague: number; last20: number | null; combined: number; nCat: number };
+// pOther: the other-leagues level (the league's prior). nCat: decided picks in the category, every league.
+export type CombinedWinProb = { pOther: number; pLeague: number; last20: number | null; combined: number; nCat: number };
 
 const decidedOf = (r: WinLoss | null | undefined) => (r ? r.wins + r.losses : 0);
 
 // The formula alone, on win-loss records (pushes already out).
 export function combinedWinProb(input: CombinedInput, cfg: RecordScoreConfig = RECORD_SCORE_CONFIG): CombinedWinProb {
   const nCat = decidedOf(input.category);
-  const pCat = (input.category.wins + cfg.k * cfg.prior) / (nCat + cfg.k);
+  const lgWins = input.league?.wins ?? 0;
   const nLg = decidedOf(input.league);
-  const pLeague = input.league && nLg > 0 ? (input.league.wins + cfg.k * pCat) / (nLg + cfg.k) : pCat;
+  // Other leagues = all-time minus this league (never below zero: a league column can't exceed all-time).
+  const otherWins = Math.max(0, input.category.wins - lgWins);
+  const otherN = Math.max(0, nCat - nLg);
+  const pOther = (otherWins + cfg.k * cfg.prior) / (otherN + cfg.k);
+  const pLeague = nLg > 0 ? (lgWins + cfg.k * pOther) / (nLg + cfg.k) : pOther;
   const n20 = decidedOf(input.last20);
   const last20 = input.last20 && n20 > 0 ? input.last20.wins / n20 : null;
   const combined = last20 === null ? pLeague : (1 - cfg.f) * pLeague + cfg.f * last20;
-  return { pCat, pLeague, last20, combined, nCat };
+  return { pOther, pLeague, last20, combined, nCat };
 }
 
 // The gate on a combined probability. Written on whole-number percents so a record exactly
@@ -112,7 +125,7 @@ export function scorePickByRecord(pick: ScoringPick, ctx: ScoringContext, cfg: R
     levels: {
       league,
       otherLeagues: { wins: Math.max(0, inputs.category.wins - league.wins), losses: Math.max(0, inputs.category.losses - league.losses) },
-      midPrior: c.pCat,
+      midPrior: c.pOther,
       platform: { rate: cfg.prior, n: 0, tier: "DEFAULT" },
     },
     rankYardstick: null,

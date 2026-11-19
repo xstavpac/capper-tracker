@@ -206,7 +206,7 @@ export type ScoredPick = {
   historicalBreakEven: { rate: number; n: number } | null;
   propMarket?: PropMarketKey;
   // The record model's working (record-score.ts). Absent on the edge and win-rate models.
-  record?: { pCat: number; pLeague: number; last20: number | null; combined: number; nCat: number };
+  record?: { pOther: number; pLeague: number; last20: number | null; combined: number; nCat: number };
 };
 
 export type UnscoredPick = { status: "NO_RECORD"; pickId: string; reason: "NO_CATEGORY" | "NO_RECORD" | "NO_PROP_MARKET_RECORD" };

@@ -1,5 +1,6 @@
 -- Parlay Generator backtest: OLD (scoring.ts edge model, the gate before this PR) vs NEW (record-score.ts
--- combined win %), for F = 0.10 / 0.20 / 0.30 at K = 10. One read-only statement that returns aggregates
+-- combined win %, other-leagues middle level: each pick counted once), for K = 10 / 15 / 20 x F = 0.10 / 0.20.
+-- One read-only statement that returns aggregates
 -- only (a few dozen rows), for the Supabase SQL editor or a read-only MCP session.
 --
 -- The generator, simulated per Eastern game day with today's settings: gate 55, Include ALL, max 1 leg per
@@ -24,7 +25,7 @@
 -- Payouts use the stored odds as they are (a DEFAULTED -110 pays -110); a push is a void leg (x1.0).
 WITH params AS (
   SELECT 'cmse05x5a0000z4osuufx38lr'::text AS uid, DATE '2026-10-19' AS d0, DATE '2026-11-17' AS d1,
-         0.55::float8 AS gate, 10::float8 AS k, 0.5::float8 AS prior
+         0.55::float8 AS gate, 0.5::float8 AS prior
 ),
 market_keys(family, market) AS (
   VALUES
@@ -116,16 +117,17 @@ s2 AS (
     -- OLD (scoring.ts, k = 20): win probability, shrunk edge, historical break-even.
     (lw + 20 * (((aw - lw) + 20 * plat) / ((aw - lw) + (al - ll) + 20))) / (lw + ll + 20) AS shrunk,
     ((lpw - limp) + 20 * (((apw - lpw) - (aimp - limp)) / NULLIF(pn - (lpw + lpl) + 20, 0))) / (lpw + lpl + 20) AS shrunk_edge,
-    aimp / NULLIF(pn, 0) AS hist,
-    -- NEW (record-score.ts, K = 10, prior 0.5).
-    (aw + (SELECT k * prior FROM params)) / (aw + al + (SELECT k FROM params)) AS p_cat
+    aimp / NULLIF(pn, 0) AS hist
   FROM s1
 ),
 s3 AS (
   SELECT s2.*,
     LEAST(0.99, GREATEST(0.01, hist)) AS hist_c,
     LEAST(0.99, GREATEST(0.01, hist + shrunk_edge)) AS hist_p,
-    (lw + (SELECT k FROM params) * p_cat) / (lw + ll + (SELECT k FROM params)) AS p_lg,
+    -- NEW (record-score.ts): p_other = other leagues (all-time minus this league), p_league shrunk toward it.
+    (lw + 10 * ((aw - lw + 5) / (aw - lw + al - ll + 10))) / (lw + ll + 10) AS p_lg10,
+    (lw + 15 * ((aw - lw + 7.5) / (aw - lw + al - ll + 15))) / (lw + ll + 15) AS p_lg15,
+    (lw + 20 * ((aw - lw + 10) / (aw - lw + al - ll + 20))) / (lw + ll + 20) AS p_lg20,
     CASE WHEN l20w + l20l > 0 THEN l20w / (l20w + l20l) END AS l20
   FROM s2
 ),
@@ -146,9 +148,12 @@ models AS (
   FROM scored s
   CROSS JOIN LATERAL (VALUES
     ('OLD edge', s.edge, s.edge >= (SELECT gate FROM params) - 110.0::float8 / 210 AND s.ls1),
-    ('NEW F=0.10', CASE WHEN s.l20 IS NULL THEN s.p_lg ELSE 0.9 * s.p_lg + 0.1 * s.l20 END, NULL::boolean),
-    ('NEW F=0.20', CASE WHEN s.l20 IS NULL THEN s.p_lg ELSE 0.8 * s.p_lg + 0.2 * s.l20 END, NULL),
-    ('NEW F=0.30', CASE WHEN s.l20 IS NULL THEN s.p_lg ELSE 0.7 * s.p_lg + 0.3 * s.l20 END, NULL)
+    ('NEW K10 F.10', CASE WHEN s.l20 IS NULL THEN s.p_lg10 ELSE 0.9 * s.p_lg10 + 0.1 * s.l20 END, NULL::boolean),
+    ('NEW K10 F.20', CASE WHEN s.l20 IS NULL THEN s.p_lg10 ELSE 0.8 * s.p_lg10 + 0.2 * s.l20 END, NULL),
+    ('NEW K15 F.10', CASE WHEN s.l20 IS NULL THEN s.p_lg15 ELSE 0.9 * s.p_lg15 + 0.1 * s.l20 END, NULL),
+    ('NEW K15 F.20', CASE WHEN s.l20 IS NULL THEN s.p_lg15 ELSE 0.8 * s.p_lg15 + 0.2 * s.l20 END, NULL),
+    ('NEW K20 F.10', CASE WHEN s.l20 IS NULL THEN s.p_lg20 ELSE 0.9 * s.p_lg20 + 0.1 * s.l20 END, NULL),
+    ('NEW K20 F.20', CASE WHEN s.l20 IS NULL THEN s.p_lg20 ELSE 0.8 * s.p_lg20 + 0.2 * s.l20 END, NULL)
   ) AS v(model, score, passes)
 ),
 qual AS (
