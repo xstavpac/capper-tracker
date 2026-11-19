@@ -13,6 +13,7 @@ import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { ClipboardIcon, TicketIcon } from "@/components/dashboard/cappers-icons";
 import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON } from "@/components/live/live-pill-styles";
 import { MAX_POOL_PICKS_MESSAGE } from "@/lib/parlay/leg-cap";
+import { canSendSlip } from "@/lib/parlay/slip-state";
 
 // The /live banner's pills (40px, as in design/page-banners-reference.html).
 const BANNER_PILL = "flex h-10 items-center rounded-full border text-[13px] transition ";
@@ -64,14 +65,29 @@ export function ParlaySlipButton() {
       <button type="button" onClick={exitSlipMode} className={"max-md:hidden " + BANNER_BUTTON + SLIP_IDLE}>
         Exit
       </button>
-      <Link href="/parlay" onClick={sendToGenerator} className={"max-md:hidden " + BANNER_BUTTON + SEND_STYLE}>
-        Send to generator →
-      </Link>
+      <SendToGenerator canSend={canSendSlip(slipSize, games)} onSend={sendToGenerator} className={"max-md:hidden " + BANNER_BUTTON} />
     </div>
   );
 }
 
 const SEND_STYLE = "border-transparent bg-[#2563EB] font-semibold text-white hover:bg-[#1D4ED8] dark:border-white dark:bg-white dark:text-banner dark:hover:bg-[#D3DEFA]";
+
+// "Send to generator →" for both the banner and the phone action bar, so the two can't drift: a link
+// when canSendSlip (a pick or a targeted game), otherwise a dimmed, non-link span.
+function SendToGenerator({ canSend, onSend, className }: { canSend: boolean; onSend: () => void; className: string }) {
+  if (!canSend) {
+    return (
+      <span aria-disabled="true" className={className + "cursor-not-allowed border-transparent bg-[#2563EB] font-semibold text-white opacity-50 dark:bg-white dark:text-banner"}>
+        Send to generator →
+      </span>
+    );
+  }
+  return (
+    <Link href="/parlay" onClick={onSend} className={className + SEND_STYLE}>
+      Send to generator →
+    </Link>
+  );
+}
 
 // Phone only (below 768px), while slip mode is on: a floating card just above the bottom tab bar with the
 // live summary, Exit and Send to generator - the same handlers as the inline buttons. It slides up and
@@ -125,15 +141,7 @@ export function ParlaySlipActionBar() {
           <span aria-hidden="true">✕</span>
           Exit
         </button>
-        {slipSize === 0 ? (
-          <span aria-disabled="true" className={BANNER_BUTTON + "cursor-not-allowed border-transparent bg-[#2563EB] font-semibold text-white opacity-50 dark:bg-white dark:text-banner"}>
-            Send to generator →
-          </span>
-        ) : (
-          <Link href="/parlay" onClick={sendToGenerator} className={BANNER_BUTTON + SEND_STYLE}>
-            Send to generator →
-          </Link>
-        )}
+        <SendToGenerator canSend={canSendSlip(slipSize, games)} onSend={sendToGenerator} className={BANNER_BUTTON} />
       </div>
     </div>
   );

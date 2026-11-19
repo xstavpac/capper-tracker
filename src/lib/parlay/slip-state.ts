@@ -108,6 +108,15 @@ export function targetedGames(state: Pick<SlipStateV2, "picks" | "targets">): Ta
   return out;
 }
 
+// The one rule for "Send to generator →", used by the desktop banner and the
+// phone action bar alike: something to send - a pick, or a targeted game (a
+// targeted game with no picks lets the generator choose its legs). 0 picks and
+// 0 games is nothing to send. `games` is the targetedGames() count, which
+// already includes the picks' own games.
+export function canSendSlip(picks: number, games: number): boolean {
+  return picks > 0 || games > 0;
+}
+
 export function isTargetedViaPicks(state: Pick<SlipStateV2, "picks">, gameId: string): boolean {
   return state.picks.some((p) => p.gameId === gameId);
 }
