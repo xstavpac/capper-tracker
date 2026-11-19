@@ -65,7 +65,8 @@ async function main() {
   check("another game segment is not", !isSameBet(bet(), bet({ period: "FIRST_HALF" }), DRIFT));
   check("a game 6h01m away is not", !isSameBet(bet(), bet({ gameTimeMs: T0 + DRIFT + 60_000 }), DRIFT));
   check("a game 6h away is", isSameBet(bet(), bet({ gameTimeMs: T0 + DRIFT }), DRIFT));
-  check("home and away swapped is not the same game", !isSameBet(bet(), bet({ homeTeam: "Wyoming Cowboys", awayTeam: "Air Force Falcons" }), DRIFT));
+  // Neutral-site games: the two feeds can name opposite homes - same pair, same start = same game.
+  check("home and away swapped is the same game (neutral site)", isSameBet(bet(), bet({ homeTeam: "Wyoming Cowboys", awayTeam: "Air Force Falcons" }), DRIFT));
 
   // Score-feed spelling vs Odds API spelling.
   const espn = bet({ homeTeam: "Hawai'i Rainbow Warriors", awayTeam: "App State Mountaineers" });
