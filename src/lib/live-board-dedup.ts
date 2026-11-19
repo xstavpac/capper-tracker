@@ -33,8 +33,12 @@ export type DedupedBoard<T> = {
 };
 
 export function dropPhantomCards<T extends BoardCard>(games: T[], scores: ScoreGame[]): DedupedBoard<T> {
+  // Orientation-agnostic: a neutral-site game has no true home team and the odds
+  // feed and the schedule feed pick differently, so the team pair is sorted. Left
+  // strict, a reversed schedule game never joined its card's group and a phantom
+  // card on a neutral-site game was never dropped.
   const groupKey = (teams: { homeTeam: string; awayTeam: string }, iso: string) =>
-    teams.homeTeam + "|" + teams.awayTeam + "|" + easternDateKey(new Date(iso));
+    [teams.homeTeam, teams.awayTeam].sort().join("|") + "|" + easternDateKey(new Date(iso));
 
   const cardsByGroup = new Map<string, number[]>();
   games.forEach((g, i) => {

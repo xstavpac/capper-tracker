@@ -29,7 +29,8 @@
 //     number (1 or 2) picks the first or second by start time; without one, the
 //     event whose start is closest to the score's.
 import { closestByTime, easternDayStart, sameEasternDay } from "@/lib/dates";
-import { CROSS_SOURCE_TEAM_ALIASES, normalizeTeamName, teamNamesMatch } from "@/lib/team-name-match";
+import { CROSS_SOURCE_TEAM_ALIASES, normalizeTeamName } from "@/lib/team-name-match";
+import { teamOrientation } from "@/lib/score-orientation";
 
 export type SwingGame = {
   // ISO start time of the finished game (game_results.gameDate).
@@ -114,12 +115,15 @@ export type ChosenLine = { homeSpread: number | null; total: number | null; hour
 // The stored line for a finished game, or null when none belongs to it.
 export function chooseLine(score: SwingScore, lines: StoredLine[], sportKey: string): ChosenLine | null {
   const played = new Date(score.gameDate);
-  const sameGame = lines.filter(
-    (l) =>
-      teamNamesMatch(l.homeTeam, score.homeTeam, sportKey) &&
-      teamNamesMatch(l.awayTeam, score.awayTeam, sportKey) &&
-      sameEasternDay(new Date(l.commenceTime), played)
-  );
+  // Either orientation (neutral-site games: the feeds disagree on the home team,
+  // score-orientation.ts). homeSpread is the ODDS game's home point, so a reversed
+  // line is flipped here and every reader below sees it from the score's home side.
+  const sameGame: StoredLine[] = [];
+  for (const l of lines) {
+    const o = teamOrientation(score, l, sportKey);
+    if (o === null || !sameEasternDay(new Date(l.commenceTime), played)) continue;
+    sameGame.push(o === "reversed" && l.homeSpread !== null ? { ...l, homeSpread: -l.homeSpread } : l);
+  }
   if (sameGame.length === 0) return null;
 
   const byEvent = new Map<string, StoredLine[]>();
