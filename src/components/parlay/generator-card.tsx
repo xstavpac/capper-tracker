@@ -58,6 +58,70 @@ const CHIP = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text
 const ADD_FROM_LIVE =
   "inline-flex h-8 items-center rounded-full border border-brand-600 bg-brand-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-brand-700";
 
+const PILL_BASE = "inline-flex h-8 items-center justify-center rounded-full border px-3.5 text-[13px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2";
+const CLEAR_PICKS =
+  PILL_BASE + " w-full gap-1.5 border-red-500 bg-transparent text-red-600 hover:bg-red-600 hover:text-white focus-visible:ring-red-500 sm:w-auto dark:text-red-400 dark:hover:text-white";
+const CLEAR_YES = PILL_BASE + " border-red-600 bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500";
+const CLEAR_CANCEL = PILL_BASE + " border-border bg-transparent text-foreground hover:bg-muted focus-visible:ring-brand-600";
+const CLEAR_CONFIRM_MS = 5000;
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 5v6m4-6v6" />
+    </svg>
+  );
+}
+
+// "Clear Your Picks (N)": the first click asks "Clear N picks?" inline. No answer
+// in 5 seconds, or a click elsewhere, puts it back. Hidden with no picks.
+function ClearPicksButton({ count, onClear }: { count: number; onClear: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(false), CLEAR_CONFIRM_MS);
+    const away = (e: Event) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setConfirming(false);
+    };
+    document.addEventListener("pointerdown", away);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener("pointerdown", away);
+    };
+  }, [confirming]);
+  useEffect(() => {
+    if (count === 0) setConfirming(false);
+  }, [count]);
+  if (count === 0) return null;
+  if (!confirming) {
+    return (
+      <button type="button" onClick={() => setConfirming(true)} className={CLEAR_PICKS}>
+        <TrashIcon className="h-3.5 w-3.5" />
+        Clear Your Picks ({count})
+      </button>
+    );
+  }
+  return (
+    <div ref={ref} role="group" aria-label="Confirm clearing your picks" className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <span className="text-[13px] font-semibold text-foreground">Clear {count} pick{count === 1 ? "" : "s"}?</span>
+      <button
+        type="button"
+        onClick={() => {
+          setConfirming(false);
+          onClear();
+        }}
+        className={CLEAR_YES}
+      >
+        Yes, clear
+      </button>
+      <button type="button" onClick={() => setConfirming(false)} className={CLEAR_CANCEL}>
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 // What the page's stat tiles read from the last build.
 export type GeneratorSummary = { legs: number; fromSlip: number; generated: number } | null;
 
@@ -353,6 +417,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           description="Picks you've locked in for this parlay."
           actions={
             <>
+              <ClearPicksButton count={pool.length} onClear={slip.clearSlip} />
               <Link href="/live" onClick={slip.enterSlipMode} className={ADD_FROM_LIVE}>
                 + Add picks from Live
               </Link>
@@ -384,9 +449,6 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 <div>
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className={LABEL}>Your picks · {pool.length}</p>
-                    <button type="button" onClick={slip.clearSlip} className={LINK}>
-                      Clear all picks
-                    </button>
                   </div>
                   <div className="mt-2 grid gap-2.5 md:grid-cols-2">
                     {byGame.map((picks) => (

@@ -269,11 +269,19 @@ async function main() {
   });
   await settle();
   check("opening FanDuel keeps the slip, its targets and the result; slip mode ends", ctx.pool.length > 0 && !ctx.slipMode && text().includes(READY), `pool=${ctx.pool.length}`);
-  await click(button("Clear all picks"));
-  check("Clear all picks empties the slip and offers Undo", ctx.pool.length === 0 && Boolean(button("Undo")));
+  const clearBtn = () => buttons().find((b) => (b.textContent ?? "").trim().startsWith("Clear Your Picks ("));
+  await click(clearBtn());
+  check("Clear Your Picks asks first and clears nothing yet", ctx.pool.length > 0 && Boolean(button("Yes, clear")) && Boolean(button("Cancel")));
+  await click(button("Cancel"));
+  check("Cancel puts the button back with the picks intact", ctx.pool.length > 0 && Boolean(clearBtn()));
+  await click(clearBtn());
+  await click(button("Yes, clear"));
+  check("Clear Your Picks empties the slip and offers Undo", ctx.pool.length === 0 && Boolean(button("Undo")));
   await click(button("Undo"));
   check("Undo brings the picks back", ctx.pool.length > 0);
-  await click(button("Clear all picks"));
+  await click(clearBtn());
+  await click(button("Yes, clear"));
+  check("Clear Your Picks is hidden with no picks", !clearBtn());
   await act(() => ctx.clearTargets());
   check("Fill from: with no picks, Best available is the only choice", text().includes("Add picks to build from your picks only"));
 
