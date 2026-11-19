@@ -1,6 +1,6 @@
-// Slate Bar counts (buildSlateCounts / slateTotals / orderSlateLeagues) and the Live tab's
+// Slate Bar counts (buildSlateCounts / slateTotals) and the Live tab's
 // ?status= filter (orderBoardGames' `status`). Pure: no DB, no network.
-import { buildSlateCounts, orderSlateLeagues, slateTotals, SLATE_LEAGUES } from "@/lib/slate-counts";
+import { buildSlateCounts, slateTotals, SLATE_LEAGUES } from "@/lib/slate-counts";
 import { orderBoardGames, parseBoardStatusFilter } from "@/components/live/live-scoreboard-ordering";
 import { resolveInitialScope } from "@/lib/live-list-scope";
 
@@ -16,7 +16,6 @@ const at = (iso: string) => iso;
 const feeds = [
   {
     sportKey: "basketball_nba",
-    inSeason: true,
     failed: false,
     games: [
       { status: "live", commenceTime: at("2026-11-17T15:00:00Z") },
@@ -28,12 +27,12 @@ const feeds = [
       { status: "preview", commenceTime: at("2026-11-25T23:00:00Z") }, // outside the 3 days
     ],
   },
-  { sportKey: "icehockey_nhl", inSeason: true, failed: false, games: [{ status: "live", commenceTime: at("2026-11-17T02:00:00Z") }] }, // started 9pm ET yesterday, still live
-  { sportKey: "baseball_mlb", inSeason: false, failed: false, games: [] },
-  { sportKey: "americanfootball_nfl", inSeason: true, failed: false, games: [] },
-  { sportKey: "basketball_wnba", inSeason: false, failed: true, games: [] },
-  { sportKey: "basketball_ncaab", inSeason: true, failed: false, games: [{ status: "preview", commenceTime: at("2026-11-17T23:00:00Z") }] },
-  { sportKey: "americanfootball_ncaaf", inSeason: true, failed: false, games: [] },
+  { sportKey: "icehockey_nhl", failed: false, games: [{ status: "live", commenceTime: at("2026-11-17T02:00:00Z") }] }, // started 9pm ET yesterday, still live
+  { sportKey: "baseball_mlb", failed: false, games: [] },
+  { sportKey: "americanfootball_nfl", failed: false, games: [] },
+  { sportKey: "basketball_wnba", failed: true, games: [] },
+  { sportKey: "basketball_ncaab", failed: false, games: [{ status: "preview", commenceTime: at("2026-11-17T23:00:00Z") }] },
+  { sportKey: "americanfootball_ncaaf", failed: false, games: [] },
 ];
 const counts = buildSlateCounts(feeds, now);
 const nba = counts.leagues.find((l) => l.sportKey === "basketball_nba")!;
@@ -42,19 +41,16 @@ check("NBA yesterday: 1 final game", nba.days.yesterday.games === 1 && nba.days.
 check("NBA tomorrow: 1 pending; a game 8 days out is in no day", nba.days.tomorrow.games === 1 && nba.days.tomorrow.pending === 1, nba.days.tomorrow);
 const nhl = counts.leagues.find((l) => l.sportKey === "icehockey_nhl")!;
 check("a game live past midnight counts as live today, not yesterday", nhl.days.today.live === 1 && nhl.days.yesterday.games === 0, nhl.days);
-check("out-of-season league with no games is offseason", counts.leagues.find((l) => l.sportKey === "baseball_mlb")!.offseason === true);
-check("in-season league with no games is not offseason", counts.leagues.find((l) => l.sportKey === "americanfootball_nfl")!.offseason === false);
-check("a failed feed is flagged and never offseason", counts.leagues.find((l) => l.sportKey === "basketball_wnba")!.failed === true && counts.leagues.find((l) => l.sportKey === "basketball_wnba")!.offseason === false);
 
 const t = slateTotals(counts, "today");
 check("today totals: 2 live, 3 pending (NBA 2 + NCAAB 1)", t.live === 2 && t.pending === 3, t);
 check("live link lands on a league with the most live games (tie: first in feed order)", t.liveTop === "basketball_nba", t);
 check("pending link lands on NBA (2 > NCAAB 1)", t.pendingTop === "basketball_nba", t);
 check("no live games tomorrow: no top league", slateTotals(counts, "tomorrow").liveTop === null);
+const fin = buildSlateCounts([{ sportKey: "basketball_nba", failed: false, games: [{ status: "final", commenceTime: "2026-11-17T15:00:00Z" }, { status: "final", commenceTime: "2026-11-17T16:00:00Z" }, { status: "live", commenceTime: "2026-11-17T17:00:00Z" }] }], now);
+check("today final counts finished games only", slateTotals(fin, "today").final === 2 && slateTotals(fin, "today").live === 1, slateTotals(fin, "today"));
+check("NBA yesterday final counted", slateTotals(counts, "yesterday").final === 1, slateTotals(counts, "yesterday"));
 
-const order = orderSlateLeagues(counts, "today").map((l) => l.sportKey);
-check("leagues with games first, in chip order", order.slice(0, 3).join() === "basketball_nba,icehockey_nhl,basketball_ncaab", order);
-check("then the rest in chip order", order.slice(3).join() === ["americanfootball_nfl", "americanfootball_ncaaf", "baseball_mlb", "basketball_wnba"].join(), order);
 check("every league has a logo URL on ESPN's CDN", SLATE_LEAGUES.every((l) => l.logo.startsWith("https://a.espncdn.com/")));
 check("chip order is NBA NFL NHL NCAAB NCAAF MLB WNBA", SLATE_LEAGUES.map((l) => l.label).join() === "NBA,NFL,NHL,NCAAB,NCAAF,MLB,WNBA");
 
@@ -62,7 +58,6 @@ check("chip order is NBA NFL NHL NCAAB NCAAF MLB WNBA", SLATE_LEAGUES.map((l) =>
 // "Now" is Tuesday 2026-11-17 noon ET. Games on Sun 15th .. Sun 22nd, none on the 17th itself for NFL.
 const weekly = (sportKey: string, days: { iso: string; status: string; n: number }[]) => ({
   sportKey,
-  inSeason: true,
   failed: false,
   games: days.flatMap((d) => Array.from({ length: d.n }, () => ({ status: d.status, commenceTime: d.iso }))),
 });
@@ -89,7 +84,6 @@ check("weekly NFL: yesterday counts only the Monday-night game, not Sunday's 13"
 check("weekly NFL: tomorrow has 0 games (the Thursday game is 2 days out)", wk("americanfootball_nfl").days.tomorrow.games === 0, wk("americanfootball_nfl").days);
 check("weekly NCAAF: today 2, tomorrow 3, yesterday 0 (Saturdays never leak in)", (() => { const d = wk("americanfootball_ncaaf").days; return d.today.games === 2 && d.tomorrow.games === 3 && d.yesterday.games === 0; })(), wk("americanfootball_ncaaf").days);
 check("weekly leagues: totals use the selected day only", slateTotals(week, "today").pending === 2 && slateTotals(week, "tomorrow").pending === 3, [slateTotals(week, "today"), slateTotals(week, "tomorrow")]);
-check("weekly NFL with no game today is ordered after leagues that have games today", orderSlateLeagues(week, "today").map((l) => l.sportKey).join() === "americanfootball_ncaaf,americanfootball_nfl", orderSlateLeagues(week, "today").map((l) => l.sportKey));
 
 // ?status= filter on the Live board.
 check("status param parsing", parseBoardStatusFilter("live") === "live" && parseBoardStatusFilter("pending") === "pending" && parseBoardStatusFilter("x") === null && parseBoardStatusFilter(undefined) === null);
