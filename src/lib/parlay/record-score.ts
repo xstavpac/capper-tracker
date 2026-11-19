@@ -40,11 +40,11 @@ export type RecordScoreConfig = {
   prior: number;
 };
 
-// K = 15, F = 0.10, on the 30-day backtest (scripts/t2-harness/record-score-backtest.sql) over
-// K = 10 / 15 / 20 x F = 0.10 / 0.20. K = 10 ties 1-0 with 19-15 exactly (6/11 = 24/44); K > 10 breaks it.
-export const RECORD_SCORE_CONFIG: Readonly<RecordScoreConfig> = Object.freeze({ k: 15, f: 0.1, prior: 0.5 });
+// K = 12, F = 0.10, chosen on the backtests (scripts/t2-harness/record-score-backtest.sql). K = 10 ties
+// 1-0 with 19-15 exactly (6/11 = 24/44); K > 10 breaks it. With the -250 leg price floor (price-floor.ts).
+export const RECORD_SCORE_CONFIG: Readonly<RecordScoreConfig> = Object.freeze({ k: 12, f: 0.1, prior: 0.5 });
 
-export const RECORD_SCORING_VERSION = "record-other-k15-f10-p50-v2";
+export const RECORD_SCORING_VERSION = "record-other-k12-f10-p50-floor250-v3";
 
 export type CombinedInput = { category: WinLoss; league: WinLoss | null; last20: WinLoss | null };
 // pOther: the other-leagues level (the league's prior). nCat: decided picks in the category, every league.

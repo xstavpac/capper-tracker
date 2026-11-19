@@ -38,6 +38,7 @@ export const REASON_LABELS = {
   IS_SLIP_PICK: "Already a slip pick",
   FILTER_BET_TYPE: "Bet Types filter",
   FILTER_FAVORITES: "Favorites only (capper not a favorite)",
+  PRICE_FLOOR: "Priced shorter than the -250 leg price floor",
   NO_CATEGORY: "Pick has no record category",
   NO_RECORD: "Capper has no record in this bet",
   NO_PROP_MARKET_RECORD: "Capper has no record in this prop market",
