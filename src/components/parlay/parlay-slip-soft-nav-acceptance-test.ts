@@ -82,6 +82,8 @@ async function main() {
   Object.defineProperty(globalThis, "navigator", { value: win.navigator, configurable: true });
   Object.defineProperty(win.document, "fonts", { value: { ready: Promise.resolve() }, configurable: true });
   g.IS_REACT_ACT_ENVIRONMENT = true;
+  g.requestAnimationFrame = (cb: (t: number) => void) => setTimeout(() => cb(Date.now()), 0) as unknown as number;
+  g.cancelAnimationFrame = (id: number) => clearTimeout(id);
 
   const React = await import("react");
   // tsx compiles the components' JSX to React.createElement (tsconfig "jsx": "preserve"), with no import of its own.
@@ -89,7 +91,7 @@ async function main() {
   const { createRoot } = await import("react-dom/client");
   const { AppRouterContext } = await import("next/dist/shared/lib/app-router-context.shared-runtime");
   const { ParlayPoolProvider, useParlayPool, clearParlaySlips } = await import("./parlay-pool-context");
-  const { ParlaySlipButton } = await import("./parlay-slip-button");
+  const { ParlaySlipButton, ParlaySlipActionBar } = await import("./parlay-slip-button");
   const { TargetGameCheckbox } = await import("./target-game-checkbox");
   const { LiveBannerRow } = await import("../live/live-banner-row");
   const { PickCard } = await import("../live/pick-card");
@@ -138,6 +140,7 @@ async function main() {
       { key: userId, userId, children: null },
       h(Probe),
       h(LiveBannerRow, { leagues, league: at.league, views, view: at.view, children: h(ParlaySlipButton) }),
+      h(ParlaySlipActionBar),
       h(Board, { key: at.league, league: at.league })
     );
   }
@@ -295,6 +298,26 @@ async function main() {
 
   await act(() => clearParlaySlips());
   check("sign-out clears the stored slip", win.localStorage.getItem("parlay-pool:user-1") === null);
+
+  // ---------------------------------------------------------------------
+  // 4b. Send to generator is one rule for the banner and the phone bar: a
+  //     pick or a targeted game. 0 picks + 0 games is disabled; 0 picks + N
+  //     targeted games is enabled and carries the targets to /parlay
+  // ---------------------------------------------------------------------
+  respond = async (ids) => pending(ids);
+  await start("user-4b");
+  await click(button("Parlay slip"));
+  // Desktop banner and phone bar each render one Send control (no CSS here, so both are in the DOM).
+  const sendLinks = () => $$<HTMLAnchorElement>("a").filter((a) => a.textContent === "Send to generator →");
+  const sendSpans = () => $$<HTMLElement>("span[aria-disabled=true]").filter((s) => s.textContent === "Send to generator →");
+  check("0 picks + 0 targets: both Send controls (banner + phone bar) disabled, no link", sendLinks().length === 0 && sendSpans().length === 2, `links=${sendLinks().length} spans=${sendSpans().length}`);
+  const tBox = (gameId: string) => $$<HTMLInputElement>("input[type=checkbox]").find((i) => (i.getAttribute("aria-label") ?? "").endsWith("Away @ Home " + gameId));
+  await click(tBox("game-nfl2"));
+  check("setup: 0 picks, 1 targeted game", ctx.pool.length === 0 && ctx.targets.map((t) => t.gameId).join() === "game-nfl2", `pool=${ctx.pool.length}`);
+  check("0 picks + 1 targeted game: both Send controls enabled links to /parlay", sendSpans().length === 0 && sendLinks().length === 2 && sendLinks().every((a) => a.getAttribute("href") === "/parlay"), `links=${sendLinks().length}`);
+  await follow(sendLinks()[sendLinks().length - 1]);
+  check("phone-bar Send with 0 picks: slip mode off, went to /parlay, the target is carried", !ctx.slipMode && routerNavs[routerNavs.length - 1] === "/parlay" && ctx.generatorTargets().map((t) => t.gameId).join() === "game-nfl2" && ctx.pool.length === 0, `last=${routerNavs[routerNavs.length - 1]} targets=${ctx.generatorTargets().map((t) => t.gameId).join()}`);
+  await act(() => clearParlaySlips());
 
   // ---------------------------------------------------------------------
   // 5. A pick checked while the stored slip is still being checked

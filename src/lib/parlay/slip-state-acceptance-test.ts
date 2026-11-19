@@ -5,6 +5,7 @@
 //   npx tsx src/lib/parlay/slip-state-acceptance-test.ts
 import {
   addRemoved,
+  canSendSlip,
   clearedSlip,
   EMPTY_SLIP_STATE,
   generatorTargets,
@@ -148,6 +149,11 @@ const game = (gameId: string, leagueName = "NFL"): SlipTarget => ({ gameId, game
   check("a removed key is the empty slip", slipFromStorageEvent(null, 0), EMPTY_SLIP_STATE);
   check("corrupt storage is the empty slip", slipFromStorageEvent("{nope", 0), EMPTY_SLIP_STATE);
 }
+
+check("canSendSlip: 0 picks + 0 games is not sendable", canSendSlip(0, 0), false);
+check("canSendSlip: 0 picks + 6 targeted games is sendable", canSendSlip(0, 6), true);
+check("canSendSlip: picks and no explicit targets is sendable", canSendSlip(2, 0), true);
+check("canSendSlip: picks and games is sendable", canSendSlip(3, 2), true);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
 if (failures > 0) process.exit(1);
