@@ -38,6 +38,8 @@ import {
   gameCardStreakRowText,
   gameCardStreakTooltip,
   GAME_CARD_NO_HISTORY_TEXT,
+  GAME_CARD_SIDE_UNDETERMINED_TEXT,
+  gameCardNoHistoryText,
   GAME_CARD_STREAK_GLYPH_CLASS,
   GAME_CARD_LAST_N,
   type GameCardStreak,
@@ -445,6 +447,36 @@ console.log("\n########## the combinations: {league history?} x {last 20?} x {2+
 // ---------------------------------------------------------------------------
 console.log("\n########## no-category-history placeholder is unchanged ##########");
 check("placeholder text", GAME_CARD_NO_HISTORY_TEXT, "No history in this category yet");
+
+console.log("\n########## unresolved-side moneyline placeholder ##########");
+check("side-undetermined text", GAME_CARD_SIDE_UNDETERMINED_TEXT, "Favorite or underdog not determined");
+check(
+  "(a) full-game ML, null category -> side-undetermined copy",
+  gameCardNoHistoryText({ category: null, betType: "MONEYLINE", period: "FULL_GAME" }),
+  GAME_CARD_SIDE_UNDETERMINED_TEXT
+);
+check(
+  "(b) category set (FAV_ML), no record -> old no-history copy",
+  gameCardNoHistoryText({ category: "FAV_ML", betType: "MONEYLINE", period: "FULL_GAME" }),
+  GAME_CARD_NO_HISTORY_TEXT
+);
+check(
+  "(b) category set (DOG_ML), no record -> old no-history copy",
+  gameCardNoHistoryText({ category: "DOG_ML", betType: "MONEYLINE", period: "FULL_GAME" }),
+  GAME_CARD_NO_HISTORY_TEXT
+);
+for (const betType of ["SPREAD", "TOTAL", "TEAM_TOTAL", "PLAYER_PROP", "NRFI"]) {
+  check(
+    `(c) ${betType} with null category -> old no-history copy`,
+    gameCardNoHistoryText({ category: null, betType, period: "FULL_GAME" }),
+    GAME_CARD_NO_HISTORY_TEXT
+  );
+}
+check(
+  "(c) non-full-game ML with null category -> old no-history copy",
+  gameCardNoHistoryText({ category: null, betType: "MONEYLINE", period: "FIRST_HALF" }),
+  GAME_CARD_NO_HISTORY_TEXT
+);
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 if (failures > 0) process.exit(1);

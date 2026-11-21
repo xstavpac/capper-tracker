@@ -75,6 +75,26 @@ export const GAME_CARD_LAST_N = 20;
 // the component and the tests share the exact string.
 export const GAME_CARD_NO_HISTORY_TEXT = "No history in this category yet";
 
+// Shown instead of the placeholder above when a full-game moneyline has no
+// category at all: pickCategory files a moneyline as Favorite or Underdog only
+// when it can tell which side the pick is on (the odds feed's favorite, or a
+// stated / market price), so a pick imported with no market price carries
+// category null and there is no record to look up. "No history" would read as
+// an empty record; this says the pick couldn't be classified.
+export const GAME_CARD_SIDE_UNDETERMINED_TEXT = "Favorite or underdog not determined";
+
+// The line to show in place of the record rows when the pick has no history in
+// its category. Only a full-game MONEYLINE with a null category gets the
+// side-undetermined copy; every other case (a category that simply has no
+// graded record yet, a spread, a total, a segment moneyline - which always has
+// its own category) keeps GAME_CARD_NO_HISTORY_TEXT.
+export function gameCardNoHistoryText(pick: { category: string | null; betType: string; period: string }): string {
+  if (pick.category === null && pick.betType === "MONEYLINE" && pick.period === "FULL_GAME") {
+    return GAME_CARD_SIDE_UNDETERMINED_TEXT;
+  }
+  return GAME_CARD_NO_HISTORY_TEXT;
+}
+
 // The classes on the streak-row glyph: infinite opacity+scale pulse
 // (animate-streak-pulse, tailwind.config.ts, PR #34/#35), static for anyone
 // with prefers-reduced-motion (motion-reduce:animate-none), inline-block so

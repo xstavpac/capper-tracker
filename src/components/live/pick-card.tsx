@@ -15,7 +15,7 @@ import {
   gameCardRecordRows,
   gameCardStreakGlyph,
   gameCardStreakTooltip,
-  GAME_CARD_NO_HISTORY_TEXT,
+  gameCardNoHistoryText,
   GAME_CARD_STREAK_GLYPH_CLASS,
   type GameCardRecordRow,
   type GameCardStreak,
@@ -193,7 +193,7 @@ export function PickCard({
           <div className="mt-0.5 text-[10px] text-muted-foreground">Loading record&hellip;</div>
         ) : (
           <div className="mt-0.5 space-y-0.5 text-[10px] leading-snug">
-            {!hasHistory && <div className="text-muted-foreground">{GAME_CARD_NO_HISTORY_TEXT}</div>}
+            {!hasHistory && <div className="text-muted-foreground">{gameCardNoHistoryText(pick)}</div>}
             {rows.map((r) => (
               <RecordRow key={r.kind} {...r} />
             ))}
