@@ -33,6 +33,7 @@ import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/componen
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import { useBuildReveal } from "@/components/parlay/use-build-reveal";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
+import { StartedLine } from "@/components/parlay/started-line";
 import { reconcileMix, selectedCategories, toggleInclude, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
@@ -469,6 +470,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                                     </Link>
                                     {records && " · " + (r ? `${r.wins}–${r.losses}` : "no record yet")}
                                   </p>
+                                  <StartedLine game={p} />
                                   {droppedNote.has(p.pickId) && <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{droppedNote.get(p.pickId)}</p>}
                                 </div>
                                 <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatOdds(p.odds)}</span>

@@ -33,6 +33,7 @@ import {
   wilsonLowerBound,
 } from "@/lib/parlay/qualification-ranking";
 import type { GameFeedStatus } from "@/lib/parlay/game-over";
+import type { GameLiveState } from "@/lib/parlay/game-progress";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
@@ -49,6 +50,9 @@ export type GeneratorGame = {
   gameTime: string;
   // The score feed's status for the game (game-over.ts); null/absent when unknown.
   gameStatus?: GameFeedStatus | null;
+  // A started game's progress and score when the pool was read (game-progress.ts):
+  // what keeps it eligible up to its sport's cutoff. Absent before kickoff.
+  liveState?: GameLiveState | null;
   leagueName: string;
   picks: GeneratorPick[];
   // True when the same two teams play another game the same day. Only the

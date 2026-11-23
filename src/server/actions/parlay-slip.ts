@@ -11,6 +11,8 @@ import { requireUser } from "@/server/auth";
 import { getOwnedSlipPickRows, loadSlipBoards, picksOnBoards } from "@/server/data/parlay-slip-picks";
 import type { PickStatus } from "@prisma/client";
 import { hasKickedOff, isGameOver, type GameFeedStatus } from "@/lib/parlay/game-over";
+import type { GameLiveState } from "@/lib/parlay/game-progress";
+import { liveStatesForBoards } from "@/server/data/live-state";
 
 export type SlipPickState = {
   status: PickStatus;
@@ -26,6 +28,9 @@ export type SlipPickState = {
   // live stays. null when the kickoff isn't known here; the slip then goes by
   // the kickoff it captured when the pick was added (see reconcileSlip).
   over: boolean | null;
+  // A live game's progress and score (game-progress.ts), from the score feed's shared
+  // cache - no DB read. null before kickoff, when over, or when the feed has no live row.
+  liveState?: GameLiveState | null;
 };
 
 // Keyed by pickId; an id absent from the result no longer exists (deleted).
@@ -46,6 +51,8 @@ export async function getSlipPickStatesAction(pickIds: string[]): Promise<Record
     pending.map((r) => r.id)
   );
 
+  const liveStates = await liveStatesForBoards(boards).catch(() => new Map<string, GameLiveState>());
+
   const now = new Date();
   const out: Record<string, SlipPickState> = {};
   for (const r of rows) {
@@ -58,6 +65,7 @@ export async function getSlipPickStatesAction(pickIds: string[]): Promise<Record
       kickoff,
       gameStatus,
       over: kickoff === null ? null : isGameOver({ gameTime: kickoff, gameStatus }, now),
+      liveState: board ? (liveStates.get(board.gameId) ?? null) : null,
     };
   }
   return out;

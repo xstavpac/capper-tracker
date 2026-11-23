@@ -22,6 +22,8 @@ import { propMarketRecordKey } from "@/lib/record-keys";
 import { gameStatusFor } from "@/server/data/expander-pick";
 import { hasKickedOff, isGameOver } from "@/lib/parlay/game-over";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
+import { liveStatesForBoards } from "@/server/data/live-state";
+import { withLiveState } from "@/lib/parlay/game-progress";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
 import { doubleheaderGameIds } from "@/lib/parlay/doubleheader";
@@ -41,7 +43,7 @@ export type SnapshotScope = {
 };
 
 // A full-slate game with pending picks that the snapshot left out: it has
-// started (or is over), or it is outside Auto-Generate's window. From the boards
+// started and is past its progress cutoff (or is over), or it is outside Auto-Generate's window. From the boards
 // already loaded - no read of its own. Only Consensus Hybrid's "Why only N games?"
 // reads it.
 export type SnapshotSkippedGame = { gameId: string; gameLabel: string; gameTime: string; leagueName: string; picks: number; reason: "started" | "outside-window" };
@@ -76,7 +78,13 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   const boards = await loadSlipBoards(userId, rows, [...scope.leagues, ...scope.targets.map((t) => t.leagueName)], pickStats);
   const onBoard = picksOnBoards(boards, scope.slipPickIds);
   const rowById = new Map(rows.map((r) => [r.id, r]));
-  const slipPicks: GeneratorPick[] = scope.slipPickIds.map((id) => onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards));
+  // Every live game's progress and score, from the score feed's shared cache (no DB read): what keeps a
+  // started game in the pool up to its sport's cutoff, and the "Started · Q2 4:12 · 45-41" line.
+  const liveStates = await liveStatesForBoards(boards);
+  const slipPicks: GeneratorPick[] = scope.slipPickIds.map((id) => {
+    const p = onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards);
+    return withLiveState(p, liveStates.get(p.gameId) ?? null);
+  });
   const slipGameIds = new Set(slipPicks.map((p) => p.gameId));
   const targetIds = new Set(scope.targets.map((t) => t.gameId));
   const fullSlate = scope.targets.length === 0;
@@ -94,15 +102,18 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
     const doubleheaders = doubleheaderGameIds(board.odds, board.scores);
     board.odds.forEach((game, i) => {
       // A live game is fine for a target or a slip pick (it is priced as posted);
-      // only a game that is over is skipped, and the full slate never reaches
-      // for a game already under way (inWindow).
+      // only a game that is over is skipped. The full slate keeps a game under way
+      // while it is within its sport's progress cutoff (inWindow, game-progress.ts).
       const gameStatus = gameStatusFor(board.scores, game, key);
-      const picks = board.expanderPicksByGame[i].filter(
-        (p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string"
-      );
+      const liveState = liveStates.get(game.id) ?? null;
+      // Copies, never the board's own objects (the board can be a cached value); a pick's odds stay as stored.
+      const picks = board.expanderPicksByGame[i]
+        .filter((p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string")
+        .map((p) => withLiveState(p, liveState));
       const over = isGameOver({ gameTime: game.commenceTime, gameStatus }, now);
       const wanted =
-        !over && (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime)));
+        !over &&
+        (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime, { gameStatus, liveState })));
       if (trace) {
         const matched = board.expanderPicksByGame[i].length;
         stats.matchedPending += picks.length;
@@ -125,6 +136,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
         gameLabel: picks[0]?.gameLabel ?? game.awayTeam + " @ " + game.homeTeam,
         gameTime: game.commenceTime,
         gameStatus,
+        ...(liveState ? { liveState } : {}),
         leagueName: label,
         picks,
         doubleheader: doubleheaders.has(game.id),
