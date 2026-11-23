@@ -7,48 +7,48 @@ export const GREEN = "text-[#15803D] dark:text-emerald-400";
 export const RED = "text-[#B91C1C] dark:text-red-400";
 
 // A hue: a soft card tint + border, the header's icon tile, the subtitle's dark shade, the control's
-// border, and the footer's icon + link color. Dark mode keeps a faint wash of the hue.
+// border, and the footer's icon + link color. Dark mode: the /live panel with a faint wash of the hue (globals.css .dk-tint).
 export type PanelTint = { card: string; iconWrap: string; subtitleClass: string; control: string; accent: string };
 export type PanelTheme = PanelTint & { title: string; subtitle: string; icon: ReactNode };
 
 export const TINTS = {
   blue: {
-    card: "bg-[#F6F8FF] border-[#E1E7FA] dark:bg-brand-500/[0.06] dark:border-brand-500/30",
+    card: "bg-[#F6F8FF] border-[#E1E7FA] dk-tint [--tint:59_130_246]",
     iconWrap: "rounded-full bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400",
     subtitleClass: "text-[#5B6275] dark:text-muted-foreground",
     control: "border-[#DADDE5] dark:border-border",
     accent: "text-brand-600 dark:text-brand-400",
   },
   green: {
-    card: "bg-[#F4FBF7] border-[#D6EFDF] dark:bg-emerald-500/[0.06] dark:border-emerald-500/30",
+    card: "bg-[#F4FBF7] border-[#D6EFDF] dk-tint [--tint:16_185_129]",
     iconWrap: "rounded-full bg-[#DCF7E6] text-[#16A34A] dark:bg-emerald-500/15 dark:text-emerald-400",
     subtitleClass: "text-[#5B6275] dark:text-muted-foreground",
     control: "border-[#DADDE5] dark:border-border",
     accent: GREEN,
   },
   orange: {
-    card: "bg-[#FFF8F2] border-[#F8E1CC] dark:bg-orange-500/[0.06] dark:border-orange-500/30",
+    card: "bg-[#FFF8F2] border-[#F8E1CC] dk-tint [--tint:249_115_22]",
     iconWrap: "rounded-full bg-[#FFE3CC] dark:bg-orange-500/15",
     subtitleClass: "text-[#6B4A2E] dark:text-muted-foreground",
     control: "border-[#F1D3B6] dark:border-border",
     accent: "text-[#C2410C] dark:text-orange-400",
   },
   violet: {
-    card: "bg-[#FAF7FF] border-[#E7DDFA] dark:bg-violet-500/[0.06] dark:border-violet-500/30",
+    card: "bg-[#FAF7FF] border-[#E7DDFA] dk-tint [--tint:139_92_246]",
     iconWrap: "rounded-full bg-[#EDE2FF] text-[#7C3AED] dark:bg-violet-500/15 dark:text-violet-400",
     subtitleClass: "text-[#5B4E75] dark:text-muted-foreground",
     control: "border-[#E2D4FB] dark:border-border",
     accent: "text-[#6D28D9] dark:text-violet-400",
   },
   red: {
-    card: "bg-[#FFF7F7] border-[#F6D9D9] dark:bg-red-500/[0.06] dark:border-red-500/30",
+    card: "bg-[#FFF7F7] border-[#F6D9D9] dk-tint [--tint:239_68_68]",
     iconWrap: "rounded-full bg-[#FFE0E0] text-[#DC2626] dark:bg-red-500/15 dark:text-red-400",
     subtitleClass: "text-[#7A3A3A] dark:text-muted-foreground",
     control: "border-[#F3CACA] dark:border-border",
     accent: RED,
   },
   rose: {
-    card: "bg-[#FFF5F8] border-[#F8D7E1] dark:bg-rose-500/[0.06] dark:border-rose-500/30",
+    card: "bg-[#FFF5F8] border-[#F8D7E1] dk-tint [--tint:244_63_94]",
     iconWrap: "rounded-full bg-[#FFDDE7] text-[#E11D48] dark:bg-rose-500/15 dark:text-rose-400",
     subtitleClass: "text-[#7A3A4A] dark:text-muted-foreground",
     control: "border-[#F3CAD6] dark:border-border",

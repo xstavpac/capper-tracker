@@ -72,17 +72,24 @@ html {
   .live-seg-off:hover {
     color: #1d4fd8;
   }
+  /* The /live chips row under the banner: the page background at its top (.live-bg starts there). */
+  .live-row-bg {
+    background: #f1f6fd;
+  }
   .dark .live-bg {
-    background: linear-gradient(180deg, #0d1521 0%, #101b2e 100%);
+    background: var(--dk-page);
+  }
+  .dark .live-row-bg {
+    background: var(--dk-page-top);
   }
   .dark .live-panel {
-    background: rgba(20, 32, 58, 0.55);
-    border-color: rgba(140, 170, 220, 0.18);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    background: var(--dk-panel);
+    border-color: var(--dk-line);
+    box-shadow: var(--dk-shadow);
   }
   .dark .live-card {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(140, 170, 220, 0.18);
+    background: var(--dk-tile);
+    border-color: var(--dk-line);
   }
   .dark .live-ou {
     background: rgba(110, 155, 214, 0.16);
@@ -100,12 +107,12 @@ html {
     border-color: rgba(248, 113, 113, 0.4);
   }
   .dark .live-tile-neutral {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(140, 170, 220, 0.18);
+    background: var(--dk-tile);
+    border-color: var(--dk-line);
   }
   .dark .live-seg {
-    background: rgba(20, 32, 58, 0.55);
-    border-color: rgba(140, 170, 220, 0.18);
+    background: var(--dk-panel);
+    border-color: var(--dk-line);
   }
   .dark .live-seg-on {
     background: rgba(140, 170, 220, 0.22);
@@ -129,10 +136,30 @@ html {
     color: rgb(var(--muted-foreground));
   }
   .dark .glass-card {
-    @apply border-border bg-card shadow-none backdrop-blur-none;
+    @apply border-border bg-card shadow-none;
+    backdrop-filter: none;
   }
   .dark .glass-card-soft {
-    @apply border-border bg-card/60 backdrop-blur-none;
+    @apply border-border bg-card/60;
+    backdrop-filter: none;
+  }
+  /* Dark: no colored glow under the active pill, a crisp shadow at most (as on /live). */
+  .dark .pill-active {
+    box-shadow: var(--dk-shadow);
+  }
+  .dark .shadow-soft {
+    box-shadow: var(--dk-shadow);
+  }
+  /* ThemedPage's backdrop (every page but /live, which wears .live-bg): the /live page background in dark. */
+  .dark .themed-bg {
+    background: var(--dk-page);
+  }
+  /* A PanelShell tint (panel-shell.tsx TINTS) in dark: the /live panel surface with a faint wash of the hue
+     (--tint, RGB channels) and a border of it, the way /live tints its tiles. */
+  .dark .dk-tint {
+    background: linear-gradient(rgb(var(--tint) / 0.06), rgb(var(--tint) / 0.06)), var(--dk-panel);
+    border-color: rgb(var(--tint) / 0.3);
+    box-shadow: var(--dk-shadow);
   }
   .dark .pill-inactive {
     @apply border-border bg-card text-foreground;
@@ -156,16 +183,25 @@ html {
   --border-subtle: 243 244 246; /* gray-100 */
 }
 
+/* Dark: the /live look is the site's dark look, from this one block. --dk-* are /live's own surfaces (page
+   gradient, panel glass, inner tile, hairline, crisp shadow); the RGB tokens are the same navy as solid colors
+   (the panel glass over the page, the hairline over the panel) for the bg-card / border-border users. */
 .dark {
   color-scheme: dark;
-  --background: 3 7 18; /* gray-950 */
+  --dk-page-top: #0d1521;
+  --dk-page: linear-gradient(180deg, #0d1521 0%, #101b2e 100%);
+  --dk-panel: rgba(20, 32, 58, 0.55);
+  --dk-tile: rgba(255, 255, 255, 0.04);
+  --dk-line: rgba(140, 170, 220, 0.18);
+  --dk-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --background: 13 21 33; /* #0d1521, the /live page */
   --foreground: 249 250 251; /* gray-50 */
-  --card: 17 24 39; /* gray-900 */
+  --card: 18 28 50; /* #121c32, the /live panel over the page */
   --card-foreground: 249 250 251; /* gray-50 */
-  --muted: 31 41 55; /* gray-800 */
+  --muted: 29 41 66; /* #1d2942 */
   --muted-foreground: 156 163 175; /* gray-400 */
-  --border: 55 65 81; /* gray-700 */
-  --border-subtle: 31 41 55; /* gray-800 */
+  --border: 40 54 81; /* #283651, the /live hairline over the panel */
+  --border-subtle: 29 41 66; /* #1d2942 */
 }
 
 /* PageBanner (components/dashboard/page-banner.tsx; art and motion in components/banners/*). The card is the

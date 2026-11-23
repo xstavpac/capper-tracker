@@ -147,7 +147,7 @@ export function CapperHero({
   const lastCell = paired ? "" : "col-span-2 [@container_(min-width:900px)]:col-span-1";
 
   return (
-    <div className="rounded-[18px] bg-banner px-3.5 py-3.5 text-white shadow-[0_8px_24px_rgba(3,11,41,0.22)] [container-type:inline-size] sm:px-[22px]">
+    <div className="rounded-[18px] bg-banner px-3.5 py-3.5 text-white shadow-[0_8px_24px_rgba(3,11,41,0.22)] dark:shadow-[0_1px_2px_rgba(0,0,0,.25)] [container-type:inline-size] sm:px-[22px]">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div className="flex min-w-0 items-center gap-4">
           <div className="relative flex-none">

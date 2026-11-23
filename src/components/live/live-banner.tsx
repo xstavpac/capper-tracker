@@ -17,10 +17,12 @@ export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGri
 
   return (
     <>
-      <PageBanner variant="live" title="Live" motto="EVERY GAME · EVERY PICK · LIVE" />
+      <PageBanner variant="live" title="Live" motto="EVERY GAME · EVERY SCORE" />
       {/* The league pills: under the banner, in the same container (the banner's strip cancels main's padding the same way), so the first pill lines up with the banner's left edge. No background of their own. */}
-      {/* Outside ThemedPage, so it takes the site's typeface here. */}
-      <div className={SITE_FONT + " live-bg -mx-4 md:-mx-8"}>
+      {/* Outside ThemedPage, so it takes the site's typeface here. flow-root keeps the row's margins inside this
+          wrapper (they used to collapse through it and show <main>'s own background as a band above and below);
+          live-row-bg is the page's background at its top, so the row, the banner strip and the page read as one surface. */}
+      <div className={SITE_FONT + " live-row-bg flow-root -mx-4 md:-mx-8"}>
         <div className={SHELL_CONTAINER + " mb-4 mt-3.5 lg:mb-[18px] lg:mt-1.5"}>
           <LiveBannerRow leagues={leagues} league={activeSport} views={views} view={view}>
             <ParlaySlipButton />

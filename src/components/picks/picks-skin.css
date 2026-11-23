@@ -39,7 +39,9 @@
 .dark .pk-seg [aria-pressed="true"]{background:rgb(var(--foreground));color:rgb(var(--background));box-shadow:none}
 .dark .pk-trend{background-image:none;box-shadow:none}
 .dark .pk-glass.pk-glass,.dark .pk-chip.pk-chip{background:rgb(var(--card));border-color:rgb(var(--border));box-shadow:none}
-.dark .pk-chip.pk-chip.pk-chip-on{border-color:#2563eb;box-shadow:0 8px 18px -8px rgba(37,99,235,.6)}
+.dark .pk-chip.pk-chip.pk-chip-on{border-color:#2563eb;box-shadow:var(--dk-shadow)}
+/* Dark: no colored glows (a crisp shadow at most, as on /live). */
+.dark .pk-rk.pk-rk,.dark .pk-lg{box-shadow:var(--dk-shadow)}
 .dark .pk-chip.pk-chip.pk-chip-menu{border-color:#1d4ed8}
 .dark .pk-list.pk-list{background:rgb(var(--card));border-color:rgb(var(--border));box-shadow:none}
 .dark .pk-list .pk-head.pk-head{background:rgba(59,130,246,.06)}
