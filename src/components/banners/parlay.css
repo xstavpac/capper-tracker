@@ -1,0 +1,14 @@
+/* Parlay Generator banner art (banners/bettingview-parlay-banner.html). Shared rules (incl. the bolt
+   icon's soft glow, .bnr-lit): banner-shared.css. */
+
+/* parlay path: light and a bright ball travel leg to leg, then the bolt glows on arrival */
+.bnr-pl-hl{fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:10 120;opacity:0;animation:bnr-pl-rise 9s linear infinite}
+@keyframes bnr-pl-rise{0%{stroke-dashoffset:10;opacity:0}6%{opacity:.95}90%{opacity:.95}100%{stroke-dashoffset:-100;opacity:0}}
+.bnr-pl-ball{offset-path:path('M770 65 C779 43 801 36 812 48 S826 66 836 76 S852 82 862 70 S876 28 902 25 S926 28 936 35');offset-rotate:0deg;offset-distance:0%;opacity:0;animation:bnr-pl-ball 9s linear infinite}
+@keyframes bnr-pl-ball{0%{offset-distance:0%;opacity:0}6%{opacity:1}90%{opacity:1}100%{offset-distance:100%;opacity:0}}
+.bnr-pl-arrive{fill:none;stroke:#f0a30a;stroke-width:1.4;vector-effect:non-scaling-stroke;transform-box:fill-box;transform-origin:center;opacity:0;animation:bnr-pl-arrive 9s ease-out infinite}
+@keyframes bnr-pl-arrive{0%,86%{transform:scale(1);opacity:0}88%{transform:scale(1);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+
+@media (prefers-reduced-motion:reduce){
+  .bnr-pl-hl,.bnr-pl-ball,.bnr-pl-arrive{display:none}
+}

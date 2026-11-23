@@ -18,7 +18,7 @@ export function LiveProgressBar({ pct, label }: { pct: number; label: string }) 
         <span className="text-[11px] font-medium text-muted-foreground">{Math.round(pct)}%</span>
       </div>
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        className="lv-pbar h-1.5 w-full overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuenow={Math.round(pct)}
         aria-valuemin={0}

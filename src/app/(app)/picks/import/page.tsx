@@ -6,7 +6,7 @@ import { getPendingReviewCards } from "@/server/data/ingest-review-queue";
 import { ReviewQueue } from "@/components/import/review-queue";
 import { BulkImportForm } from "@/components/dashboard/bulk-import-form";
 import { ImportPageHeader } from "@/components/import/import-page-header";
-import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
+import { PageBanner } from "@/components/dashboard/page-banner";
 import { ThemedPage } from "@/components/dashboard/themed-page";
 import { SupportedFormatsSection, WherePicksLandCard } from "@/components/import/supported-formats";
 
@@ -29,7 +29,7 @@ export default async function BulkImportPage() {
 
   return (
     <>
-    <PageBanner variant="import" title="Catalog Import" icon={PAGE_BANNER_ICONS.import} motto="PASTE · PARSE · TRACK" />
+    <PageBanner variant="import" title="Catalog Import" motto="PASTE · PARSE · TRACK" />
     <ThemedPage>
       {/* Header + manual single-pick entry: the same PickForm, opened from the header button. */}
       <ImportPageHeader cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports} atLimit={planStatus.atLimit} />

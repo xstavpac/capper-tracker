@@ -137,13 +137,14 @@ export function LiveCategoryPanel({
 
   return (
     <PanelShell
-      theme={{ ...TINTS.neutral, card: "live-panel", title: sportLabel + " record by category", subtitle: "All-time, by market", icon: <TargetIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
+      theme={{ ...TINTS.neutral, card: "live-panel lv-gpanel", iconWrap: TINTS.neutral.iconWrap + " lv-ico", title: sportLabel + " record by category", subtitle: "All-time, by market", icon: <TargetIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
       footer={undefined}
     >
       <div className={CATEGORY_GRID}>
-        {visible.shown.map((tile) => (
+        {visible.shown.map((tile, i) => (
+          // lv-cell: the tile's text sizes are cqw of this cell (live-skin.css).
+          <div key={tile.key} className="lv-cell">
           <CategoryCard
-            key={tile.key}
             label={tile.label}
             wins={tile.wins}
             losses={tile.losses}
@@ -154,7 +155,9 @@ export function LiveCategoryPanel({
             frost
             active={tile.key === activeTile?.key}
             onToggle={() => toggle(tile.key)}
+            skinIndex={i}
           />
+          </div>
         ))}
       </div>
 

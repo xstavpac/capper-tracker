@@ -1,5 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+// Page banners (components/banners/*): the shared pieces, then each banner's own art. Imported here rather than
+// from the components so the tests, which load components under Node, never meet a .css import.
+import "@/components/banners/banner-shared.css";
+import "@/components/banners/live.css";
+import "@/components/banners/dashboard.css";
+import "@/components/banners/cappers.css";
+import "@/components/banners/picks.css";
+import "@/components/banners/parlay.css";
+import "@/components/banners/import.css";
+import "@/components/banners/charts.css";
+// The /live and /picks skins (tiles, panels, chips, lists).
+import "@/components/live/live-skin.css";
+import "@/components/picks/picks-skin.css";
 
 export const metadata: Metadata = {
   title: "Bettingview",

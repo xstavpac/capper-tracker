@@ -18,12 +18,12 @@ const RESULT_OPTIONS: Option[] = [
 ];
 
 const chipBase =
-  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] font-medium transition disabled:opacity-60";
+  "pk-chip inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] font-medium transition disabled:opacity-60";
 const chipIdle = "border-[#DADDE5] bg-white text-foreground hover:bg-[#F5F6FA] dark:border-border dark:bg-card dark:hover:bg-muted";
 // A selected sport is the filled chip (brand-700, #1d4ed8); a dropdown holding a value keeps the white
 // pill and takes the same blue on its border and text.
-const chipActive = "border-brand-700 bg-brand-700 text-white hover:bg-brand-800";
-const menuActive = "border-brand-700 bg-white text-brand-700 hover:bg-brand-50 dark:bg-card dark:text-brand-300 dark:hover:bg-muted";
+const chipActive = "pk-chip-on border-brand-700 bg-brand-700 text-white hover:bg-brand-800";
+const menuActive = "pk-chip-menu border-brand-700 bg-white text-brand-700 hover:bg-brand-50 dark:bg-card dark:text-brand-300 dark:hover:bg-muted";
 
 function Caret() {
   return (

@@ -67,9 +67,9 @@ export function GridLiveGameList({
   }
 
   return (
-    <section className="live-panel rounded-[18px] border p-3">
+    <section className="live-panel lv-gpanel rounded-[18px] border p-3">
       <div className="mb-2.5 flex items-center gap-3 px-0.5">
-        <span className={"flex h-[26px] w-[26px] shrink-0 items-center justify-center " + TINTS.blue.iconWrap}>
+        <span className={"lv-ico flex h-[26px] w-[26px] shrink-0 items-center justify-center " + TINTS.blue.iconWrap}>
           <CalendarIcon className="h-[15px] w-[15px] stroke-[2.2]" />
         </span>
         <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-foreground">Games</h2>
@@ -98,7 +98,10 @@ export function GridLiveGameList({
           <div
             key={game.id}
             className={
-              "live-card rounded-xl border transition-colors " +
+              "live-card lv-gcard rounded-xl border transition-colors " +
+              (isSelected
+                ? "lv-on "
+                : "") +
               (isSelected
                 ? "border-brand-600 ring-1 ring-brand-600 dark:border-brand-400 dark:ring-brand-400"
                 : "hover:border-brand-300 dark:hover:border-brand-500/60")
@@ -124,7 +127,7 @@ export function GridLiveGameList({
                       <LiveProgressLabel label={progress.label} />
                     </span>
                   )}
-                  <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-700 dark:bg-red-500/15 dark:text-red-400">
+                  <span className="lv-live rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-700 dark:bg-red-500/15 dark:text-red-400">
                     LIVE
                   </span>
                   {picksPill}

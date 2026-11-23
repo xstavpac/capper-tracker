@@ -1,0 +1,52 @@
+/* Page banners, shared pieces (components/banners/*, components/dashboard/page-banner.tsx).
+   Copied from banners/bettingview-*-banner.html: the trail flow, the gliding nodes, the soft icon glow and
+   their reduced-motion rules are the same in every banner, so they live here once. Each banner's own art
+   (shockwave, scans, balls, podium...) keeps its keyframes in its own file next to it (live.css, ...). */
+
+/* Flowing highlight: normalized pathLength=100, dash slides one full length, seamless loop */
+.bnr-flow{fill:none;stroke-linecap:round;stroke-dasharray:16 84;stroke-dashoffset:16;animation:bnr-flow var(--d) linear infinite;animation-delay:var(--s)}
+@keyframes bnr-flow{to{stroke-dashoffset:-84}}
+
+/* Data points glide along the same curves */
+.bnr-node{offset-rotate:0deg;offset-distance:0%;opacity:0;animation:bnr-glide var(--d) linear infinite;animation-delay:var(--s)}
+@keyframes bnr-glide{0%{offset-distance:0%;opacity:0}8%{opacity:.95}92%{opacity:.95}100%{offset-distance:100%;opacity:0}}
+
+/* Page icon: soft glow */
+.bnr-lit{animation:bnr-lit 6s ease-in-out infinite}
+@keyframes bnr-lit{0%,100%{opacity:.7}35%,55%{opacity:1}}
+
+@media (prefers-reduced-motion:reduce){
+  .bnr-flow{display:none}
+  .bnr-lit{animation:none;opacity:1}
+  .bnr-node{animation:none;opacity:.85;offset-distance:var(--p)}
+}
+
+/* ---- The card ----
+   From 900px the card has the reference's exact proportions (1000 x 103, Live 1000 x 115) and everything is
+   placed in reference units: 1 unit = .1cqw of .bnr-wrap (the card's width). The page art and the icon are one
+   SVG on the same viewBox; the title, motto and controls are real HTML laid over it at the reference's x/y.
+   Below 900px the art goes, the background stretches to the card, and the card grows to fit its content. */
+.bnr-wrap{container-type:inline-size}
+.bnr-card{position:relative;overflow:hidden;border-radius:20px;filter:drop-shadow(0 10px 22px var(--bnr-shadow))}
+.bnr-card::after{content:"";position:absolute;inset:0;border-radius:inherit;border:1px solid var(--bnr-edge);pointer-events:none}
+.bnr-bg,.bnr-fg{position:absolute;inset:0;display:block;width:100%;height:100%}
+.bnr-fg{display:none}
+.bnr-body{position:relative;display:flex;align-items:center;gap:16px;padding:18px 20px}
+.bnr-micon{display:block;flex:none;align-self:flex-start;width:52px;height:52px}
+.bnr-text{display:flex;min-width:0;flex:1 1 0;flex-direction:column;gap:10px}
+.bnr-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.bnr-title{margin:0;font-size:30px;font-weight:800;line-height:1.05;letter-spacing:-.015em;color:var(--bnr-ink)}
+.bnr-div2{display:none;flex:none;width:1px;background:var(--bnr-div);opacity:.8}
+.bnr-motto{font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.22em;color:var(--bnr-motto)}
+@media (min-width:900px){
+  .bnr-card{aspect-ratio:var(--bnr-ar);border-radius:calc(var(--bnr-rx) * .1cqw)}
+  .bnr-fg{display:block}
+  .bnr-micon{display:none}
+  .bnr-body{position:absolute;left:calc(var(--bnr-tx) * .1cqw);top:calc(var(--bnr-ty) * .1cqw);display:block;padding:0}
+  .bnr-text{flex:none}
+  .bnr-text{gap:calc(var(--bnr-cg) * .1cqw)}
+  .bnr-line{flex-wrap:nowrap;gap:0}
+  .bnr-title{font-size:calc(var(--bnr-ts) * .1cqw);line-height:1;letter-spacing:calc(var(--bnr-tls) * .1cqw);white-space:nowrap}
+  .bnr-div2{display:block;height:calc(var(--bnr-dh) * .1cqw);margin:0 1.4cqw 0 1.5cqw}
+  .bnr-motto{font-size:calc(var(--bnr-ms) * .1cqw);line-height:1;letter-spacing:calc(var(--bnr-mls) * .1cqw);white-space:nowrap}
+}
