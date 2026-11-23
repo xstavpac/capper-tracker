@@ -302,7 +302,7 @@ export function CapperComparisonWorkspace({
   return (
     <div ref={fs.ref} className={(fs.isFullscreen ? FULLSCREEN_SURFACE_CLASS + " " : "") + "space-y-3.5"}>
       {/* The time range, the league and the two cappers, under the page banner: the same navy card they were in. */}
-      <div className="overflow-hidden rounded-2xl bg-banner shadow-[0_10px_28px_rgba(3,11,41,0.28)] [container-type:inline-size]">
+      <div className="overflow-hidden rounded-2xl bg-banner shadow-[0_10px_28px_rgba(3,11,41,0.28)] dark:shadow-[0_1px_2px_rgba(0,0,0,.25)] [container-type:inline-size]">
         <div className="flex px-3 py-3 sm:px-5">
             <div role="group" aria-label="Time range" className="flex max-w-full gap-0.5 rounded-full border border-white/[0.14] bg-white/[0.08] p-0.5">
               {TIME_PRESETS.map((p) => {

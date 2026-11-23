@@ -8,7 +8,7 @@ import { PageBanner } from "@/components/dashboard/page-banner";
 // in the shared motto style.
 export function CappersHeader({ params, controls = true }: { params: CappersParams; controls?: boolean }) {
   return (
-    <PageBanner variant="cappers" title="Cappers" motto="TRACK · COMPARE · WIN">
+    <PageBanner variant="cappers" title="Cappers" motto="EVERY CAPPER · EVERY RECORD">
       {controls && <CappersTimeTabs params={params} />}
     </PageBanner>
   );
