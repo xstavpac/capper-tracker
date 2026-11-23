@@ -100,7 +100,7 @@ const game = {
   firstInningAwayScore: null,
   linescoreJson: null,
 };
-const pick = { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: bcText, homeTeam: "Boston College", line: null };
+const pick = { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: bcText, homeTeam: "Boston College", awayTeam: "Opponent", line: null };
 expect("resolveOutcome: NCAAB 1H grades with a first-half score present (WIN)", resolveOutcome(pick, { ...game, sportKey: NCAAB }), "WIN");
 expect(
   "resolveOutcome: NCAAB 2H grades with a first-half score present (36-27 -> WIN)",

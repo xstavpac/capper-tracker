@@ -155,7 +155,7 @@ const SEA_CGY = {
   ],
 } as unknown as GameResult;
 const grade = (period: Period, betDetail: string, line: number, game = SEA_CGY) =>
-  resolveOutcome({ betType: "TOTAL", period, betDetail, homeTeam: game.homeTeam, line, pickedSide: null }, game as never);
+  resolveOutcome({ betType: "TOTAL", period, betDetail, homeTeam: game.homeTeam, awayTeam: game.awayTeam, line, pickedSide: null }, game as never);
 
 check("FIRST_PERIOD 'over 3.5 1P' grades off P1 (3 goals): LOSS", grade("FIRST_PERIOD", "Seattle Kraken over 3.5 1P", 3.5), "LOSS");
 check("FIRST_PERIOD 'over 2.5 1P': WIN", grade("FIRST_PERIOD", "Seattle Kraken over 2.5 1P", 2.5), "WIN");

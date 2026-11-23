@@ -77,6 +77,7 @@ const pick = (period: string, betType: string, betDetail: string, line: number |
   betDetail,
   line,
   homeTeam: GAME.homeTeam,
+  awayTeam: GAME.awayTeam,
   pickedSide,
 });
 
@@ -128,6 +129,7 @@ const BC_PICK = {
   line: null,
   period: "FIRST_HALF",
   homeTeam: "Boston College Eagles",
+  awayTeam: "Massachusetts Minutemen",
   pickedSide: "HOME" as const,
 };
 check("BC 1H ML: PENDING while the row has no first-half score (prod today)", resolveOutcome(BC_PICK, BC_UMASS), null);
@@ -165,6 +167,7 @@ const sdPick = (betType: string, betDetail: string, line: number | null, side: "
   betDetail,
   line,
   homeTeam: SD_OT.homeTeam,
+  awayTeam: SD_OT.awayTeam,
   pickedSide: side,
 });
 check("OT final: 2H Over 90.5 WINS (108 with OT; 86 regulation-only would lose)", resolveOutcome(sdPick("TOTAL", "2H Over 90.5", 90.5), SD_OT), "WIN");
@@ -192,6 +195,7 @@ const saPick = (betType: string, betDetail: string, line: number | null, side: "
   betDetail,
   line,
   homeTeam: SA_2OT.homeTeam,
+  awayTeam: SA_2OT.awayTeam,
   pickedSide: side,
 });
 check("2OT final: 2H Over 100.5 WINS (108 with both OTs; 77 regulation-only)", resolveOutcome(saPick("TOTAL", "2H Over 100.5", 100.5), SA_2OT), "WIN");

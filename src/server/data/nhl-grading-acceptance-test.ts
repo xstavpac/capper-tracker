@@ -160,7 +160,7 @@ const shootoutGame = {
 expect(
   "resolveOutcome: FULL_GAME ML on the shootout winner (Stars) -> WIN",
   resolveOutcome(
-    { betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Stars ML", homeTeam: "Buffalo Sabres", line: null, pickedSide: "AWAY" },
+    { betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Stars ML", homeTeam: "Buffalo Sabres", awayTeam: "Dallas Stars", line: null, pickedSide: "AWAY" },
     shootoutGame
   ),
   "WIN"
@@ -168,7 +168,7 @@ expect(
 expect(
   "resolveOutcome: FULL_GAME puck line, Sabres +1.5 in a SO loss -> WIN",
   resolveOutcome(
-    { betType: "SPREAD", period: "FULL_GAME", betDetail: "Sabres +1.5", homeTeam: "Buffalo Sabres", line: 1.5, pickedSide: "HOME" },
+    { betType: "SPREAD", period: "FULL_GAME", betDetail: "Sabres +1.5", homeTeam: "Buffalo Sabres", awayTeam: "Dallas Stars", line: 1.5, pickedSide: "HOME" },
     shootoutGame
   ),
   "WIN"
@@ -176,7 +176,7 @@ expect(
 expect(
   "resolveOutcome: a FIRST_HALF NHL pick has no period source -> null (stays pending), not a wrong grade",
   resolveOutcome(
-    { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Stars ML", homeTeam: "Buffalo Sabres", line: null, pickedSide: "AWAY" },
+    { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Stars ML", homeTeam: "Buffalo Sabres", awayTeam: "Dallas Stars", line: null, pickedSide: "AWAY" },
     shootoutGame
   ),
   null
