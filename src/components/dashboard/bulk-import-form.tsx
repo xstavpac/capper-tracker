@@ -52,6 +52,8 @@ import {
   splitByCapper,
 } from "@/lib/bulk-import-summary";
 import { betTypeLabel } from "@/lib/bet-line";
+import { isFarFutureGame, farFutureWarning } from "@/lib/far-future-game";
+import { LiveEntryChip } from "@/components/picks/live-entry-chip";
 import { capperInitials, formatOdds } from "@/lib/pick-display";
 import {
   CapperFuzzyPrompt,
@@ -149,6 +151,12 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     // TOTAL picks whose market-line suggestion was left unconfirmed or
     // explicitly rejected at submit time.
     skippedTotalLinePending: string[];
+    // Picks matched to a game days away whose warning was left unanswered or answered Skip (never sent).
+    skippedFarFuture: string[];
+    // Picks the server held for a game days away that the preview had not flagged (BulkImportResult.farFutureHeld).
+    farFutureHeld: string[];
+    // Picks saved against a game already in progress (BulkImportResult.enteredLive) - the "Live entry" list.
+    enteredLive: string[];
     pickLimitBlocked?: { message: string; remaining: number };
     parlaysImported: number;
     unmatchedParlays: string[];
@@ -192,6 +200,9 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
   // auto-filled number ever imports silently.
   const [totalLineFlags, setTotalLineFlags] = useState<Record<number, MissingTotalLineResult>>({});
   const [totalLineChoices, setTotalLineChoices] = useState<Record<number, "confirm" | "reject">>({});
+  // Answers to the far-future warning (lib/far-future-game.ts), keyed like totalLineChoices. Absent = not answered,
+  // which keeps the pick out of the import, the same default as a flagged duplicate.
+  const [farFutureChoices, setFarFutureChoices] = useState<Record<number, "import" | "skip">>({});
 
   // Scrolls to the bottom action area (the "Needs your answer" panel and the
   // Import button) right after a fresh Drop Catalog parse - with a large
@@ -301,6 +312,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     setDupCheckFailed(false);
     setTotalLineFlags({});
     setTotalLineChoices({});
+    setFarFutureChoices({});
     setAnsweredOpen(false);
     setResolving(true);
     const parseSeq = ++parseSeqRef.current;
@@ -571,8 +583,8 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     if (newlyResolved.length > 0) {
       setAmbiguityLog((prev) => [...prev, { key, sport: choice.sport, method: "user", count: newlyResolved.length }]);
     }
-    const needsOdds = newlyResolved.filter((e) => !e.p.hasExplicitOdds);
-    if (needsOdds.length > 0) fetchOddsFor(needsOdds);
+    // Every newly resolved row, the capper's-own-odds ones too: each needs its matched game for the far-future check.
+    if (newlyResolved.length > 0) fetchOddsFor(newlyResolved);
     if (newlyResolved.length > 0) checkDuplicatesFor(newlyResolved);
     if (newlyResolved.length > 0) checkTotalLinesFor(newlyResolved);
   }
@@ -605,8 +617,16 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
   function isPendingOrRejectedTotalLine(idx: number): boolean {
     return isPendingOrRejectedTotalLineShared(Boolean(totalLineFlags[idx]), totalLineChoices[idx]);
   }
+  // A pick matched to a game past its sport's far-future threshold - judged against the moment it is shown.
+  function isFarFutureFlagged(e: { p: ParsedPick; idx: number }): boolean {
+    const game = matchedGames[e.idx];
+    return Boolean(game) && isFarFutureGame(e.p.sportName, game.gameTime, Date.now());
+  }
+  function isPendingOrSkippedFarFuture(e: { p: ParsedPick; idx: number }): boolean {
+    return isFarFutureFlagged(e) && farFutureChoices[e.idx] !== "import";
+  }
   const includedEntries = validEntries.filter(
-    (e) => !isPendingOrSkippedDuplicate(e.idx) && !isPendingOrRejectedTotalLine(e.idx)
+    (e) => !isPendingOrSkippedDuplicate(e.idx) && !isPendingOrRejectedTotalLine(e.idx) && !isPendingOrSkippedFarFuture(e)
   );
   const includedPicks = includedEntries.map((e) => e.p);
   // Every flagged duplicate that won't be imported - the user's explicit
@@ -679,6 +699,10 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     const skippedTotalLinePending = validEntries
       .filter((e) => totalLinePendingIdxSet.has(e.idx))
       .map((e) => dedupeLabel(e.p));
+    // Counted once: a pick already skipped as a duplicate or for its total line stays in that category.
+    const skippedFarFuture = validEntries
+      .filter((e) => isPendingOrSkippedFarFuture(e) && !isPendingOrSkippedDuplicate(e.idx) && !totalLinePendingIdxSet.has(e.idx))
+      .map((e) => dedupeLabel(e.p));
     setImportError(null);
     // Same check the server makes (bulkImportPicksAction), run first so an
     // oversized paste is refused instantly and never sends the whole payload.
@@ -714,6 +738,8 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
         // The explicit "Import anyway" on a pick the preview flagged. The
         // server refuses any duplicate that does not carry it.
         overrideDuplicate: Boolean(duplicateFlags[idx]) && duplicateChoices[idx] === "import",
+        // The explicit "Yes, this game" on a far-future warning. The server holds any far-future pick without it.
+        confirmFarFuture: farFutureChoices[idx] === "import",
       })),
       skippedDuplicateEntries.map((e) => ({
         capperName: resolvedCapperName(e.p.capperName),
@@ -765,6 +791,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
           totalLinePending: skippedTotalLinePending,
           duplicates: skippedDuplicates,
           noCapper: skippedNoCapper,
+          farFuture: skippedFarFuture,
           serverSkipped: res.skipped,
         }),
         errors: res.errors,
@@ -776,6 +803,9 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
         skippedNoCapper,
         skippedAmbiguous,
         skippedTotalLinePending,
+        skippedFarFuture,
+        farFutureHeld: res.farFutureHeld,
+        enteredLive: res.enteredLive,
         pickLimitBlocked: res.pickLimitBlocked,
         parlaysImported: parlayRes?.success ? parlayRes.imported : 0,
         unmatchedParlays: parlayRes?.success ? parlayRes.unmatchedParlays : [],
@@ -839,7 +869,8 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     if (e.p.ambiguous) return true;
     const dupPending = Boolean(duplicateFlags[e.idx]) && duplicateChoices[e.idx] === undefined;
     const totalPending = Boolean(totalLineFlags[e.idx]) && totalLineChoices[e.idx] === undefined;
-    return dupPending || totalPending;
+    const farFuturePending = isFarFutureFlagged(e) && farFutureChoices[e.idx] === undefined;
+    return dupPending || totalPending || farFuturePending;
   }
   const readyCount = includedPicks.length + parlays.length;
   const reviewCount = allEntries.filter(needsReview).length + noCapperLines.length;
@@ -895,7 +926,9 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     const totalFlag = totalLineFlags[idx];
     const totalChoice = totalLineChoices[idx];
     const review = needsReview(e);
-    const skipped = !review && (isPendingOrSkippedDuplicate(idx) || isPendingOrRejectedTotalLine(idx));
+    const skipped = !review && (isPendingOrSkippedDuplicate(idx) || isPendingOrRejectedTotalLine(idx) || isPendingOrSkippedFarFuture(e));
+    const farFutureFlag = isFarFutureFlagged(e);
+    const farFutureChoice = farFutureChoices[idx];
     const realOdds = enrichedOdds[idx];
     const displayOdds = realOdds ?? p.odds;
     const game = matchedGames[idx];
@@ -920,6 +953,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
             </div>
             <div className="mt-0.5 break-words text-xs text-muted-foreground">
               {subLine}
+              {game?.inProgress && <LiveEntryChip className="ml-1.5" />}
               {recoveredIndices.has(idx) && (
                 <span className="ml-1.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
                   matched to live schedule
@@ -974,6 +1008,29 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
             >
               {dupChoice === undefined ? "Answer below ↓" : "Change below ↓"}
             </button>
+          </div>
+        )}
+
+        {farFutureFlag && game && (
+          <div
+            role="status"
+            className="mt-1.5 rounded-md border border-amber-400 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200"
+          >
+            <div className="font-medium">{farFutureWarning(game.gameTime, Date.now())}</div>
+            <div className="mt-0.5">
+              Matched: {game.awayTeam} @ {game.homeTeam}
+              {farFutureChoice === "import" && <span className="font-medium"> Will import for this game.</span>}
+              {farFutureChoice === "skip" && <span className="font-medium"> Skipped - won&apos;t be imported.</span>}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3">
+              <button type="button" onClick={() => setFarFutureChoices((prev) => ({ ...prev, [idx]: "import" }))} className={promptLinkClass}>
+                Yes, this game
+              </button>
+              <button type="button" onClick={() => setFarFutureChoices((prev) => ({ ...prev, [idx]: "skip" }))} className={promptLinkClass}>
+                Skip it
+              </button>
+            </div>
+            <div className="mt-1 text-[11px] opacity-80">Wrong game? Fix the line in the paste above and drop it again.</div>
           </div>
         )}
 
@@ -1621,6 +1678,33 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
                   title={(n) => n + " refused as already logged"}
                   note="They were NOT imported: the same capper already has the same bet on the same game. Paste them again and choose Import anyway if you really want a second copy."
                 />
+                <ResultGroup
+                  items={result.skippedFarFuture}
+                  title={(n) => n + " skipped for a game days away"}
+                  note="They were NOT imported (the game-days-away warning was left unanswered or you chose Skip)."
+                />
+                <ResultGroup
+                  items={result.farFutureHeld}
+                  title={(n) => n + " held for a game days away"}
+                  note="They were NOT imported: each matched a game days from now. Paste them again and confirm the game if it is right."
+                />
+                {result.enteredLive.length > 0 && (
+                  <details className="rounded-lg border border-border-subtle bg-card text-xs text-foreground">
+                    <summary className={summaryClass}>
+                      {result.enteredLive.length} entered while the game was live <LiveEntryChip className="ml-1.5" />
+                    </summary>
+                    <div className="px-3 pb-3">
+                      <p className="text-muted-foreground">Matched to the game in progress; a line with no odds of its own was priced from the last pre-game odds.</p>
+                      <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+                        {result.enteredLive.map((item, i) => (
+                          <li key={i} className="break-words">
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </details>
+                )}
                 <ResultGroup
                   items={result.skippedAmbiguous}
                   title={(n) => n + " skipped with an ambiguous team or player name"}

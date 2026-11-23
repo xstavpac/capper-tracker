@@ -19,6 +19,7 @@ import { fanOutImportedPicks } from "@/server/data/pick-recipients";
 import { revalidateCapperRoster } from "@/server/data/capper-roster";
 import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 import { recordCapperNameDecision } from "@/server/data/capper-name-decisions";
+import { farFutureWarning } from "@/lib/far-future-game";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
 
 export type ReviewItemDraft = {
@@ -40,6 +41,7 @@ const choiceFrom = (base: Omit<ReviewChoice, "pick" | "unmatched">, r: PickRowRe
 export async function buildReviewDrafts(questions: CatalogQuestion[], { realTimeIngest = false }: { realTimeIngest?: boolean } = {}): Promise<ReviewItemDraft[]> {
   if (questions.length === 0) return [];
   const resolve = createPickRowResolver({ realTimeIngest });
+  const heldAt = Date.now();
   const drafts: ReviewItemDraft[] = [];
   for (const q of questions) {
     const lineText = q.pick.raw;
@@ -87,6 +89,24 @@ export async function buildReviewDrafts(questions: CatalogQuestion[], { realTime
         questionType: q.type,
         options: {
           choices: [choiceFrom({ id: "confirm", label: `Use the market line ${q.inferredLine}`, inferredLine: q.inferredLine, lineReason: q.reason }, r)],
+        },
+      });
+    } else if (q.type === "FAR_FUTURE_GAME") {
+      // Already matched and priced by the import that held it: the stored row is the pick a yes saves, unchanged.
+      // The warning is written into the label (judged at the message's time), so the queue's read stays as it is.
+      drafts.push({
+        capperName,
+        lineText,
+        questionType: q.type,
+        options: {
+          choices: [
+            {
+              id: "confirm",
+              label: `Yes, this game: ${q.row.awayTeam} @ ${q.row.homeTeam}, ${farFutureWarning(q.row.gameTime, heldAt).replace(/ Is this the right game\?$/, "")}`,
+              capperName: q.row.capperName,
+              pick: pickRowToStored(q.row),
+            },
+          ],
         },
       });
     } else {

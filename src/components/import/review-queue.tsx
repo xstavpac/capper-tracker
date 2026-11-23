@@ -25,6 +25,7 @@ const QUESTION_NAMES: Record<ReviewCard["questionType"], string> = {
   PLAYER_AMBIGUITY: "Ambiguous player",
   MISSING_TOTAL_LINE: "Missing total number",
   CAPPER_FUZZY: "Capper name",
+  FAR_FUTURE_GAME: "Game days away",
 };
 
 // The distinct answers behind a team / player question: a near-miss capper name multiplies each answer into
@@ -165,6 +166,15 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
                   {choiceButtons}
                   {dismiss}
                 </CapperFuzzyPrompt>
+              )}
+              {card.questionType === "FAR_FUTURE_GAME" && (
+                <>
+                  <div className="mt-1.5 text-xs">This pick matched a game days after the message. Is this the right game?</div>
+                  <ChoiceRow>
+                    {choiceButtons}
+                    {dismiss}
+                  </ChoiceRow>
+                </>
               )}
               {unmatched && <div className="mt-1 text-xs text-muted-foreground">Some answers are unavailable: {unmatched}</div>}
               {errors[card.id] && (

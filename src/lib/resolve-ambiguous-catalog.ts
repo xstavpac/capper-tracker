@@ -3,6 +3,7 @@ import { runAmbiguousHierarchy, type AutoResolveResult } from "@/lib/ambiguous-h
 import {
   checkAmbiguousTeamSchedules,
   checkAmbiguousTeamWideSchedules,
+  checkAmbiguousTeamInProgress,
   checkAmbiguousLeagueActivity,
   checkCollegePostedLines,
   getCapperCollegeHistory,
@@ -29,6 +30,7 @@ export async function autoResolveAmbiguousPicks(
   return runAmbiguousHierarchy(picks, priorChoices, {
     runScheduleCheck: checkAmbiguousTeamSchedules,
     runWideScheduleCheck: checkAmbiguousTeamWideSchedules,
+    runInProgressCheck: checkAmbiguousTeamInProgress,
     runLeagueActivityCheck: (sports, referenceDate) => checkAmbiguousLeagueActivity(sports, referenceDate.toISOString()),
     runCollegeLineCheck: checkCollegePostedLines,
     getCapperLeagueHistory: getCapperCollegeHistory,

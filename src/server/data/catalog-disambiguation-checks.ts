@@ -51,10 +51,31 @@ export async function runTeamScheduleCheck(queries: ScheduleCheckQuery[]): Promi
         "[catalog-disambiguation] schedule check:",
         nickname,
         sport,
-        upcomingOnly ? "(not started)" : "",
+        upcomingOnly ? "(not final)" : "",
         "->",
         game !== null ? "has a game today" : "no game today"
       );
+    })
+  );
+  return result;
+}
+
+// Step 2's in-progress check (ambiguous-hierarchy.ts HierarchyDeps.runInProgressCheck): for each (nickname,
+// candidate sport), whether that team has a game going on RIGHT NOW. The same cached score feed the schedule
+// check above reads (no extra fetch, no database read).
+export async function runTeamInProgressCheck(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
+  const result: Record<string, boolean> = {};
+  await Promise.all(
+    queries.map(async ({ nickname, sport }) => {
+      const sportKey = SPORT_LABEL_TO_KEY[sport];
+      const mapKey = nickname + "|" + sport;
+      if (!sportKey || !RESOLVABLE_SPORT_KEYS.includes(sportKey)) {
+        result[mapKey] = false;
+        return;
+      }
+      const { game } = await resolveGameForNickname(sportKey, nickname, { inProgressOnly: true });
+      result[mapKey] = game !== null;
+      if (game) console.log("[catalog-disambiguation] in-progress check:", nickname, sport, "-> game in progress");
     })
   );
   return result;

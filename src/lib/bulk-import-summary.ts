@@ -125,6 +125,9 @@ export type SkippedPickCategories = {
   // couldn't persist (BulkImportResult.skipped - no live-schedule match, or
   // a per-item error).
   serverSkipped: number;
+  // Picks matched to a game days away (lib/far-future-game.ts) whose warning was left unanswered or answered Skip.
+  // Optional: callers from before the warning existed have none.
+  farFuture?: string[];
 };
 
 export function totalSkipped(categories: SkippedPickCategories): number {
@@ -134,6 +137,7 @@ export function totalSkipped(categories: SkippedPickCategories): number {
     categories.totalLinePending.length +
     categories.duplicates.length +
     categories.noCapper.length +
+    (categories.farFuture?.length ?? 0) +
     categories.serverSkipped
   );
 }
