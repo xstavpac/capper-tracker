@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LightningIcon } from "@/components/dashboard/drop-catalog-button";
@@ -9,13 +9,29 @@ import { HeaderMenu, type HeaderUser } from "@/components/layout/header-menu";
 import { SHELL_CONTAINER } from "@/components/layout/shell";
 import { LiveDot, NAV_ITEMS, SlipBadge, isActiveHref } from "@/components/layout/nav-items";
 
+// Today's date under the greeting, e.g. "Monday, Nov 23", in the viewer's own timezone. Set after
+// mount: the server's timezone is not the user's, and rendering it there would mismatch on hydration.
+// A non-breaking space holds the line's height until then.
+function formatLocalDate(now: Date): string {
+  const weekday = now.toLocaleDateString("en-US", { weekday: "long" });
+  const monthDay = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return weekday + ", " + monthDay;
+}
+
+function LocalDate() {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    setLabel(formatLocalDate(new Date()));
+  }, []);
+  return <span className="whitespace-nowrap text-[12px] font-medium leading-[1.2] text-[#a9b8d6]">{label ?? "\u00a0"}</span>;
+}
+
 // The logo's mark (the "B" and chevron) cropped from the full lockup in
 // /logo-mark.png (1690x470, mark at x 22-480), on a white tile so its navy and
-// blue keep their real colors on the navy bar. Drawn 32px tall, the mark ends
-// about 33px across.
+// blue keep their real colors on the navy bar. The tile is 32px (36px, 10px radius, below 768px).
 function LogoMark() {
   return (
-    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white max-[419px]:h-10 max-[419px]:w-10">
+    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white max-md:h-9 max-md:w-9 max-md:rounded-[10px]">
       <span className="block h-[21px] w-[22px] overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element -- fixed local asset, not worth next/image's overhead at this size */}
         <img src="/logo-mark.png" alt="" className="h-[21px] w-auto max-w-none" />
@@ -49,14 +65,11 @@ export function SiteHeader({
   user,
   showAdminOps = false,
   reviewCount = 0,
-  slate,
 }: {
   user: HeaderUser;
   showAdminOps?: boolean;
   // Pending Telegram-ingest review items; a badge on Drop Catalog (the link to the Catalog Import page).
   reviewCount?: number;
-  // The Slate Bar: rendered under the header row, on the header's own navy background.
-  slate?: ReactNode;
 }) {
   const pathname = usePathname();
   const { slipSize } = useParlayPool();
@@ -96,13 +109,17 @@ export function SiteHeader({
 
   return (
     <header className="relative z-40 bg-[#0A1530]">
-    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-sm:flex-nowrap max-sm:gap-x-3 max-[419px]:gap-x-2 max-[379px]:pl-3 max-[379px]:pr-3 lg:flex-nowrap"}>
-      <Link href="/dashboard" aria-label="BettingView" className="flex min-w-0 items-center gap-2.5 rounded-xl max-[379px]:gap-2 sm:shrink-0">
+    <div className={SHELL_CONTAINER + " relative flex flex-wrap items-center gap-x-6 gap-y-3 py-3 max-md:flex-nowrap max-md:gap-x-2 max-md:pb-3.5 max-md:pt-2.5 max-md:!pl-[max(12px,env(safe-area-inset-left))] max-md:!pr-[max(12px,env(safe-area-inset-right))] lg:flex-nowrap"}>
+      <Link href="/dashboard" aria-label="BettingView" className="flex min-w-0 items-center gap-2.5 rounded-xl max-md:gap-2 max-lg:flex-1 sm:shrink-0">
         <LogoMark />
-        {/* Below 1024px (where the Slate Bar shows): the greeting, one row beside Drop Catalog and the avatar (both
-            shrink-0); it takes the room that is left and truncates with an ellipsis. From 1024px: the original wordmark,
-            hidden at 1024-1279px where the tabs need the room. */}
-        <span className="min-w-0 whitespace-nowrap text-[16px] font-bold text-white max-[419px]:text-[15px] max-[349px]:overflow-hidden max-[349px]:text-ellipsis sm:text-[18px] lg:hidden">Welcome back!</span>
+        {/* Below 1024px: the greeting on one line and today's date under it, in the room left beside Drop Catalog
+            and the avatar (both shrink-0). Below 768px the greeting is 16px/800. Only below 350px, narrower than
+            any phone we lay out for, does it truncate with an ellipsis instead of running into the button. From
+            1024px: the original wordmark, hidden at 1024-1279px where the tabs need the room. */}
+        <span className="flex min-w-0 flex-1 flex-col gap-px lg:hidden">
+          <span className="whitespace-nowrap text-[18px] font-bold leading-[1.2] text-white max-md:text-[16px] max-md:font-extrabold max-[349px]:overflow-hidden max-[349px]:text-ellipsis">Welcome back!</span>
+          <LocalDate />
+        </span>
         <span className="hidden whitespace-nowrap text-[18px] font-bold text-white xl:inline">BettingView</span>
       </Link>
 
@@ -125,19 +142,19 @@ export function SiteHeader({
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-3 max-[419px]:gap-2">
-        {/* Below 640px: the bolt and the full label, 14px (plus the badge). 1024-1279px: the bolt and "Catalog", 14px.
+      <div className="ml-auto flex items-center gap-3 max-md:gap-2">
+        {/* Below 768px: 44px tall, 12px side padding, the bolt (hidden below 380px) and the full label at 13px/700 (plus the badge). 1024-1279px: the bolt and "Catalog", 14px.
             From 1280px: 15px. The link's accessible name is always the full one. */}
         <a
           href="/picks/import"
           aria-label={"Drop Catalog" + (reviewCount > 0 ? ", " + reviewCount + " to review" : "")}
-          className="flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[10px] bg-[#7C3AED] px-3.5 text-[15px] max-[419px]:gap-[5px] max-[419px]:px-3 max-[379px]:px-2.5 font-bold text-white transition animate-glow-pulse-compact hover:bg-[#6D28D9] motion-reduce:animate-none sm:px-4 lg:max-xl:px-3 lg:max-xl:text-[14px]"
+          className="flex h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] bg-[#7C3AED] px-3 text-[15px] font-bold text-white transition animate-glow-pulse-compact hover:bg-[#6D28D9] motion-reduce:animate-none md:h-10 md:gap-2 md:px-4 lg:max-xl:px-3 lg:max-xl:text-[14px]"
         >
-          {/* Hidden below 380px so the greeting fits in full beside the button (the review badge stays). */}
+          {/* Hidden below 380px: at 360px the full greeting needs the 22px the bolt and its gap take (the review badge stays). */}
           <span className="contents max-[379px]:hidden">
             <LightningIcon />
           </span>
-          <span aria-hidden="true" className="whitespace-nowrap text-[14px] max-[419px]:text-[13px] sm:text-[15px] lg:max-xl:text-[14px]">
+          <span aria-hidden="true" className="whitespace-nowrap text-[13px] md:text-[15px] lg:max-xl:text-[14px]">
             <span className="lg:max-xl:hidden">Drop </span>Catalog
           </span>
           {reviewCount > 0 && (
@@ -160,7 +177,7 @@ export function SiteHeader({
           aria-controls={open ? menuId : undefined}
           onClick={() => setOpen((v) => !v)}
           className={
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500 max-[419px]:h-[38px] max-[419px]:w-[38px] text-[15px] font-semibold text-white transition hover:bg-brand-600 md:hidden " +
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-500 text-[15px] font-semibold text-white transition hover:bg-brand-600 md:hidden " +
             (open ? "ring-2 ring-white/60" : "")
           }
         >
@@ -186,7 +203,6 @@ export function SiteHeader({
 
       {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} slipSize={slipSize} onNavigate={() => setOpen(false)} />}
     </div>
-    {slate}
     </header>
   );
 }
