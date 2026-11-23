@@ -89,8 +89,13 @@ expect(
   );
 }
 
-// ---- 4. A bare team name is a header; a moneyline is written with ML ----
-expect('bare "Chiefs" heads the block below it', run("Sharp Sam\nYankees ML\nChiefs\nBills -3").picks, [
+// ---- 4. With no capper active a bare team name is a header; under an active capper it is that capper's moneyline ----
+expect('bare "Chiefs" under an active capper is that capper\'s moneyline', run("Sharp Sam\nYankees ML\nChiefs\nBills -3").picks, [
+  ["Sharp Sam", "Yankees ML"],
+  ["Sharp Sam", "Chiefs"],
+  ["Sharp Sam", "Bills -3"],
+]);
+expect('a SAVED capper "Chiefs" still heads the block', run("Sharp Sam\nYankees ML\nChiefs\nBills -3", ["Sharp Sam", "Chiefs"]).picks, [
   ["Sharp Sam", "Yankees ML"],
   ["Chiefs", "Bills -3"],
 ]);

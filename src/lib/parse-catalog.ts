@@ -85,6 +85,11 @@ export type ParsedPick = {
   // league, so promoteSharedCollegePick treats it like a code on the line: a shared
   // school stays in that league and never becomes a question. Absent otherwise.
   sportExplicit?: boolean;
+  // Set when the line was just one team with no market, read under an active
+  // capper as that team's moneyline (the header rule's bare-team exception). The
+  // line could instead be a capper's name, so the import preview offers a toggle
+  // back to a header and the review queue can show the flag.
+  fromBareTeamLine?: boolean;
   // Team nicknames found in the raw text, e.g. from "Over 9.5 (Angels/Orioles)"
   // or "Cardinals vs Panthers". Captured before parens/odds get stripped out of
   // `description`, so game resolution still has both teams even for bets (like
@@ -3825,6 +3830,14 @@ export function parseCatalog(
     return null;
   };
 
+  // Exactly one team named: a league's team (one nickname found) or a name shared by
+  // several leagues (the ambiguity flow asks which). "Marlins Royals" names two.
+  const isExactlyOneTeam = (text: string): boolean => {
+    const sportName = detectSport(text).sportName;
+    if (sportName) return findTeamNicknames(text, sportName).length === 1;
+    return findAmbiguousNickname(text) !== undefined;
+  };
+
   // The generic "unrecognized line -> capper name" read.
   const readAsCapperHeader = (line: string) => {
     const name = line.replace(/^[^\w]+/, "").trim();
@@ -3839,7 +3852,19 @@ export function parseCatalog(
     }
   };
 
+  // Marks the pick the previous line's bare-team read produced (if it produced one).
+  let pendingBare: number | null = null;
+  let pendingBareRaw = "";
+  const flushBare = () => {
+    if (pendingBare !== null && results.length > pendingBare) {
+      results[pendingBare].fromBareTeamLine = true;
+      // The line as typed, so the preview can find it in the pasted text.
+      results[pendingBare].raw = pendingBareRaw;
+    }
+    pendingBare = null;
+  };
   for (let i = 0; i < rawLines.length; i++) {
+    flushBare();
     let line = rawLines[i];
     if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
     // Any line that changed the active capper (a "Name - pick" line, a tagline) ended its section.
@@ -3885,7 +3910,24 @@ export function parseCatalog(
     // (A CBB / CFB alias doesn't count as a league code here: "Five Star CBB" is still that capper's header.)
     const cappedTeam = hasBetContent(line) ? null : teamOnlyAfterCapper(line);
     if (cappedTeam) line = cappedTeam;
-    if (!cappedTeam && !hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false, false).sportName) {
+    // A line that is just one team, with a capper already active: that capper's
+    // moneyline, not a new capper named like the team. A saved capper's own name
+    // still wins (checked first), as do league codes and boilerplate labels.
+    // Read through the saved-capper path below with the active capper as the owner.
+    let bareTeamOwner: string | undefined;
+    if (
+      !cappedTeam && currentCapper && !hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) &&
+      !detectSport(line, false, false).sportName &&
+      !knownCapperNames.some((n) => normalizeName(n) === normalizeName(line)) &&
+      !line.startsWith("*") && classifyTeamSide(line.replace(/^[^\w]+/, "").trim()) === "team" &&
+      isExactlyOneTeam(line.replace(/^[^\w]+/, "").trim())
+    ) {
+      bareTeamOwner = currentCapper;
+      pendingBareRaw = line;
+      line = `${currentCapper} ${line.replace(/^[^\w]+/, "").trim()}`;
+      pendingBare = results.length;
+    }
+    if (!cappedTeam && !bareTeamOwner && !hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false, false).sportName) {
       // The one exception: a bare name directly above a line that is only a
       // market ("James Cook" / "Touchdown", "Anytime TD") is that prop's
       // subject, and the two are read as one line. A next line with a number
@@ -3923,7 +3965,7 @@ export function parseCatalog(
     }
 
     const lower = line.toLowerCase();
-    const savedPrefix = sortedNames.find((name) => {
+    const savedPrefix = (bareTeamOwner ? [...sortedNames, bareTeamOwner] : sortedNames).find((name) => {
       const nameLower = name.toLowerCase();
       return lower === nameLower || (lower.startsWith(nameLower) && /[\s:.-]/.test(line[name.length] ?? " "));
     });
@@ -4417,5 +4459,6 @@ export function parseCatalog(
   for (const pick of results) pick.period = withRegulationPeriod(pick);
   for (const parlay of parlays) for (const leg of parlay.legs) leg.period = withRegulationPeriod(leg);
 
+  flushBare();
   return { picks: results, parlays, unresolved, unresolvedCapperNames, unresolvedLeagues, droppedAsHeaders };
 }

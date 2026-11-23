@@ -50,15 +50,35 @@ const amb = one("Picks Office\nPicks Office Arizona", PO);
 expect("ambiguous city stays ambiguous", [amb.picks.length, amb.picks[0]?.amb], [1, "arizona"]);
 expect("ambiguous city with spread", one("Picks Office\nPicks Office Orlando -3.5", PO).picks[0].amb, "orlando");
 
-// No capper prefix: a bare team line is still a header (capper-header rule).
-expect("bare team line is still a header", one("Picks Office\nOrlando Magic", PO).picks.length, 0);
-// A different, unsaved capper's name is not stripped.
-expect("unsaved name not stripped", one("Sharp Sam\nOrlando Magic", PO).picks.length, 0);
+// A bare team line (no capper name on it) under an active capper is that capper's moneyline (case A).
+const A = one("Picks Office\nOrlando Magic", PO);
+expect("A: bare team under saved capper -> 1 ML pick", A, ml("NBA", "Orlando Magic"));
+const B = one("Picks Office\nOrlando Magic\nLakers -4.5", PO);
+expect("B: bare team ML + next pick, both Picks Office", B.picks.map((p) => [p.c, p.d, p.b]), [
+  ["Picks Office", "Orlando Magic", "MONEYLINE"],
+  ["Picks Office", "Lakers -4.5", "SPREAD"],
+]);
+expect("bare team under an UNSAVED active capper is that capper's ML", one("Sharp Sam\nOrlando Magic", PO).picks.map((p) => [p.c, p.b]), [["Sharp Sam", "MONEYLINE"]]);
+const flagged = parseCatalog("Picks Office\nOrlando Magic\nLakers -4.5", PO).picks.map((p) => [p.raw, p.fromBareTeamLine ?? false]);
+expect("bare-team pick carries fromBareTeamLine (raw = line as typed); other picks do not", flagged, [["Orlando Magic", true], ["Lakers -4.5", false]]);
+// Ambiguous city: the existing ambiguity flow, flagged.
+const ambBare = parseCatalog("Picks Office\nArizona", PO).picks;
+expect("bare ambiguous city stays a question", [ambBare.length, ambBare[0]?.ambiguousKey, ambBare[0]?.fromBareTeamLine], [1, "arizona", true]);
+// Two teams on a line with no market are not "one team".
+expect("two teams, no market: not a moneyline", parseCatalog("Picks Office\nMarlins Royals", PO).picks.length, 0);
+// No active capper -> unchanged (case C and a first-line team).
+expect("C: no active capper -> bare team is a header, no pick", one("Orlando Magic", PO).picks.length, 0);
+expect("first line team, then a pick: team is the header", one("Orlando Magic\nLakers -4.5", PO).picks.map((p) => p.c), ["Orlando Magic"]);
+// A saved capper named like a team still reads as a header.
+expect("saved capper named like a team still heads its block", one("Picks Office\nOrlando Magic\nChiefs\nBills -3", ["Picks Office", "Chiefs"]).picks.map((p) => [p.c, p.d]), [
+  ["Picks Office", "Orlando Magic"],
+  ["Chiefs", "Bills -3"],
+]);
 
-// A capper whose name is itself team-like keeps the existing handling.
+// A capper whose name is itself team-like.
 const TEAMY = ["Magic"];
-expect("team-like capper name: bare line is a header", one("Magic\nMagic", TEAMY).picks.length, 0);
-expect("team-like capper name: exact name is not a pick", one("Magic\nOrlando Magic", TEAMY).picks.length, 0);
+expect("team-like capper name: its own name alone is a header", one("Magic\nMagic", TEAMY).picks.length, 0);
+expect("team-like capper: another team under it is its moneyline", one("Magic\nOrlando Magic", TEAMY).picks.map((p) => [p.c, p.b]), [["Magic", "MONEYLINE"]]);
 
 if (failures > 0) {
   console.log(`\n${failures} failure(s)`);
