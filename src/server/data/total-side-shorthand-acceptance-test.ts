@@ -67,12 +67,12 @@ const game = (homeTeam: string, awayTeam: string, homeScore: number, awayScore: 
 });
 expect(
   "prod pick: NHL TOTAL 'LEAFS / OILERS O6.5' line 6.5, no side - grades from its text",
-  resolveOutcome({ betType: "TOTAL", period: "FULL_GAME", betDetail: "LEAFS / OILERS O6.5", homeTeam: "Edmonton Oilers", line: 6.5, pickedSide: null }, game("Edmonton Oilers", "Toronto Maple Leafs", 3, 4)),
+  resolveOutcome({ betType: "TOTAL", period: "FULL_GAME", betDetail: "LEAFS / OILERS O6.5", homeTeam: "Edmonton Oilers", awayTeam: "Toronto Maple Leafs", line: 6.5, pickedSide: null }, game("Edmonton Oilers", "Toronto Maple Leafs", 3, 4)),
   "WIN"
 );
 expect(
   "prod pick: NCAAF TEAM_TOTAL 'Ole Miss TT o24.5' line 24.5, side AWAY - grades from its text",
-  resolveOutcome({ betType: "TEAM_TOTAL", period: "FULL_GAME", betDetail: "Ole Miss TT o24.5", homeTeam: "Texas Longhorns", line: 24.5, pickedSide: "AWAY" }, game("Texas Longhorns", "Ole Miss Rebels", 30, 27)),
+  resolveOutcome({ betType: "TEAM_TOTAL", period: "FULL_GAME", betDetail: "Ole Miss TT o24.5", homeTeam: "Texas Longhorns", awayTeam: "Ole Miss Rebels", line: 24.5, pickedSide: "AWAY" }, game("Texas Longhorns", "Ole Miss Rebels", 30, 27)),
   "WIN"
 );
 

@@ -49,7 +49,7 @@ const UNLV_HAWAII: GameResult = {
 
 function grade(period: Period, betType: string, betDetail: string, line: number | null, game: GameResult, side?: "HOME" | "AWAY") {
   return resolveOutcome(
-    { betType, period, betDetail, homeTeam: game.homeTeam, line, pickedSide: side ?? null },
+    { betType, period, betDetail, homeTeam: game.homeTeam, awayTeam: game.awayTeam, line, pickedSide: side ?? null },
     game
   );
 }

@@ -221,7 +221,7 @@ function espnGame(name: string) {
 type Game = ReturnType<typeof espnGame>;
 type Side = "HOME" | "AWAY" | "DRAW" | null;
 function grade(game: Game, betDetail: string, period: string, pickedSide: Side) {
-  return resolveOutcome({ betType: "MONEYLINE", period, betDetail, homeTeam: game.homeTeam, line: null, pickedSide: pickedSide as never }, game as never);
+  return resolveOutcome({ betType: "MONEYLINE", period, betDetail, homeTeam: game.homeTeam, awayTeam: game.awayTeam, line: null, pickedSide: pickedSide as never }, game as never);
 }
 
 async function main() {

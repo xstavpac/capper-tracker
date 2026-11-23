@@ -38,6 +38,8 @@ import {
   resolveOutcome,
   resolvePlayerProp,
   isTextSideAmbiguous,
+  pickedSideOnScoreRow,
+  SIDE_UNMATCHED_ON_SCORE_REASON,
   MAX_GAME_TIME_DRIFT_MS,
 } from "@/server/data/grading";
 import { FREE_PICK_LIMIT } from "@/lib/entitlements";
@@ -238,6 +240,8 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
           const segmentReason = segmentUnmatchedReason(scope, p.period, sportKey, sportFirstHalfPrefix);
           if (segmentReason) {
             unmatchedReason = segmentReason;
+          } else if (pickedSideOnScoreRow(p, { ...match.game, sportKey: sportKey ?? undefined }) === "UNMATCHED") {
+            unmatchedReason = SIDE_UNMATCHED_ON_SCORE_REASON;
           } else if (isTextSideAmbiguous(p.betType, p.betDetail ?? p.homeTeam, match.game.homeTeam, match.game.awayTeam, p.pickedSide)) {
             unmatchedReason =
               "matched game, but the bet text names both teams and no side was recorded at import, so it can't tell which team was picked - needs manual grading";

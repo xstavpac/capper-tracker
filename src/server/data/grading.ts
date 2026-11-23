@@ -1032,6 +1032,48 @@ function segmentScore(period: string, game: GradableGameResult): SegmentScore | 
   }
 }
 
+// How a score row lists the pick's two teams, by NAME: "same" home/away, "reversed", or null when the names don't
+// settle it. Neutral-site games have no true home team and the feeds disagree (ESPN vs the Odds API), so a pick
+// stored in one orientation can be matched (matchGameResult's fuzzy fallback) to a score row in the other.
+// Strict first: teamNamesMatch, sport-scoped (teamOrientation) - the only way a row is ever called "reversed".
+// Failing that, the nickname test matchGameResult's fuzzy fallback matched the row with may say "same" (graded as
+// before this fix), but never "reversed": a nickname-only reversal is as likely a DIFFERENT game whose mascots
+// collide (prod 2026-11: "LSU Tigers / Louisiana Tech Bulldogs" fuzzy-matched to "Mississippi State Bulldogs /
+// Jackson State Tigers") as the same game the other way round, so it is null and the pick stays PENDING.
+export function scoreRowOrientation(
+  pick: { homeTeam: string; awayTeam: string },
+  game: { homeTeam: string; awayTeam: string; sportKey?: string }
+): "same" | "reversed" | null {
+  const strict = teamOrientation(pick, game, game.sportKey);
+  if (strict) return strict;
+  const named = (pickName: string, gameName: string) => pickName.toLowerCase().includes(teamNickname(gameName));
+  const same = named(pick.homeTeam, game.homeTeam) && named(pick.awayTeam, game.awayTeam);
+  const reversed = named(pick.homeTeam, game.awayTeam) && named(pick.awayTeam, game.homeTeam);
+  return same && !reversed ? "same" : null;
+}
+
+// The bet types whose grade depends on which team was picked.
+const TEAM_SIDE_BET_TYPES = new Set(["MONEYLINE", "SPREAD", "TEAM_TOTAL"]);
+
+// The stored pickedSide, moved onto the score row. pickedSide is recorded against the PICK ROW's own home/away, so it
+// is first a team (the row's homeTeam or awayTeam), and that team is then found on the score row by name.
+//   - no stored side, or DRAW: unchanged (the text fallback in gradePick already reads the score row's own teams)
+//   - a team bet whose team can't be found on exactly one side of the score row: "UNMATCHED" - never graded
+export function pickedSideOnScoreRow(
+  pick: { betType: string; homeTeam: string; awayTeam: string; pickedSide?: PickedSide | null },
+  game: { homeTeam: string; awayTeam: string; sportKey?: string }
+): PickedSide | null | "UNMATCHED" {
+  if (pick.pickedSide !== "HOME" && pick.pickedSide !== "AWAY") return pick.pickedSide ?? null;
+  if (!TEAM_SIDE_BET_TYPES.has(pick.betType)) return pick.pickedSide;
+  const orientation = scoreRowOrientation(pick, game);
+  if (orientation === null) return "UNMATCHED";
+  if (orientation === "same") return pick.pickedSide;
+  return pick.pickedSide === "HOME" ? "AWAY" : "HOME";
+}
+
+export const SIDE_UNMATCHED_ON_SCORE_REASON =
+  "matched game, but the picked team can't be found on exactly one side of the final score (home/away listed differently) - needs manual grading";
+
 // Shared by gradePendingPicks and regradeFuzzyMatchedPicks - picks the right score
 // pair for the bet (final / half / quarter / period / first-inning) and runs
 // gradePick. Also exported for getPendingPicksForUser (picks.ts), which uses a
@@ -1044,13 +1086,17 @@ export function resolveOutcome(
     period: string;
     betDetail: string | null;
     homeTeam: string;
+    awayTeam: string;
     line: number | null;
     pickedSide?: PickedSide | null;
   },
   game: GradableGameResult
 ): GradeOutcome {
+  // By team, never by position: the score row may list the pick's teams the other way round (a neutral site).
+  const side = pickedSideOnScoreRow(pick, game);
+  if (side === "UNMATCHED") return null;
   const runGrade = (home: number, away: number): GradeOutcome =>
-    gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, pick.pickedSide);
+    gradePick(pick.betType, pick.betDetail ?? pick.homeTeam, pick.line, game.homeTeam, game.awayTeam, home, away, side);
 
   // NCAAB plays two halves: its stored linescoreJson is [1H, 2H, OT...], and
   // firstFive* holds linescore[0] (firstHalfFromLinescore, odds.ts). Only
@@ -1097,7 +1143,7 @@ export function resolveOutcome(
     if (pick.betType !== "MONEYLINE" || scope !== "FULL_GAME") return null;
     const reg = segmentScore("REGULATION", game);
     if (!reg) return null;
-    const onDraw = pick.pickedSide === "DRAW" || (!pick.pickedSide && threeWayWording(pick.betDetail) === "DRAW");
+    const onDraw = side === "DRAW" || (!side && threeWayWording(pick.betDetail) === "DRAW");
     if (onDraw) return gradeThreeWay("DRAW", reg.home, reg.away);
     // A team pick: gradePick's own side resolution (the stored pickedSide, or
     // its text match for a row without one), then a level score is a LOSS.

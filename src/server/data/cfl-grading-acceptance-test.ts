@@ -133,7 +133,7 @@ const rougeGame = {
 expect(
   "resolveOutcome: FULL_GAME ML on the 1-point winner -> WIN",
   resolveOutcome(
-    { betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Argonauts ML", homeTeam: "Toronto Argonauts", line: null, pickedSide: "HOME" },
+    { betType: "MONEYLINE", period: "FULL_GAME", betDetail: "Argonauts ML", homeTeam: "Toronto Argonauts", awayTeam: "Montreal Alouettes", line: null, pickedSide: "HOME" },
     rougeGame
   ),
   "WIN"
@@ -141,7 +141,7 @@ expect(
 expect(
   "resolveOutcome: FULL_GAME spread, Alouettes +2.5 in a 1-point loss -> WIN",
   resolveOutcome(
-    { betType: "SPREAD", period: "FULL_GAME", betDetail: "Alouettes +2.5", homeTeam: "Toronto Argonauts", line: 2.5, pickedSide: "AWAY" },
+    { betType: "SPREAD", period: "FULL_GAME", betDetail: "Alouettes +2.5", homeTeam: "Toronto Argonauts", awayTeam: "Montreal Alouettes", line: 2.5, pickedSide: "AWAY" },
     rougeGame
   ),
   "WIN"
@@ -149,7 +149,7 @@ expect(
 expect(
   "resolveOutcome: a FIRST_HALF CFL pick has no period source -> null (stays pending)",
   resolveOutcome(
-    { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Argonauts ML", homeTeam: "Toronto Argonauts", line: null, pickedSide: "HOME" },
+    { betType: "MONEYLINE", period: "FIRST_HALF", betDetail: "Argonauts ML", homeTeam: "Toronto Argonauts", awayTeam: "Montreal Alouettes", line: null, pickedSide: "HOME" },
     rougeGame
   ),
   null

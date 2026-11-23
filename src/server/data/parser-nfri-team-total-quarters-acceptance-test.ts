@@ -48,7 +48,7 @@ function imported(line: string): unknown[] {
 function gradeImported(line: string, game: GameResult, pickedSide: "HOME" | "AWAY" | null = null) {
   const p = parseCatalog("Test Capper\n" + line, ["Test Capper"]).picks[0];
   return resolveOutcome(
-    { betType: p.betType, period: p.period, betDetail: p.description, homeTeam: game.homeTeam, line: null, pickedSide },
+    { betType: p.betType, period: p.period, betDetail: p.description, homeTeam: game.homeTeam, awayTeam: game.awayTeam, line: null, pickedSide },
     game
   );
 }
@@ -284,7 +284,7 @@ for (const form of ["1st Q", "1QTR", "1st quater", "1Q", "first qtr"]) {
 check("no quarter scores for the game -> stays pending, never the full game", gradeImported("UNLV vs Hawaii over 13.5 1st Q", NO_LINESCORE), null);
 check(
   "a row stored FULL_GAME whose text names a quarter stays pending",
-  resolveOutcome({ betType: "TOTAL", period: "FULL_GAME", betDetail: "UNLV vs Hawaii over 13.5 1st Q", homeTeam: UNLV_HAWAII.homeTeam, line: null }, UNLV_HAWAII),
+  resolveOutcome({ betType: "TOTAL", period: "FULL_GAME", betDetail: "UNLV vs Hawaii over 13.5 1st Q", homeTeam: UNLV_HAWAII.homeTeam, awayTeam: UNLV_HAWAII.awayTeam, line: null }, UNLV_HAWAII),
   null
 );
 
