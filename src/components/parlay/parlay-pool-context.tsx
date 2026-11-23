@@ -302,7 +302,10 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
         pruned.length > 0 ||
         current.some((c) => {
           const k = keptById.get(c.pickId);
-          return k !== undefined && (k.status !== c.status || k.odds !== c.odds || k.gameTime !== c.gameTime || k.gameStatus !== c.gameStatus);
+          return (
+            k !== undefined &&
+            (k.status !== c.status || k.odds !== c.odds || k.gameTime !== c.gameTime || k.gameStatus !== c.gameStatus || JSON.stringify(k.liveState ?? null) !== JSON.stringify(c.liveState ?? null))
+          );
         });
       if (changed) {
         setPool((prev) => prev.flatMap((p) => (!ids.has(p.pickId) ? [p] : keptById.has(p.pickId) ? [keptById.get(p.pickId)!] : [])));

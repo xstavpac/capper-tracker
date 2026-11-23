@@ -28,6 +28,7 @@ import { combineOdds, decimalToAmerican, formatAmericanOdds, formatPayout, hasUs
 import { ANALYZING_STATUS, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
 import { prefersReducedMotion, type Reveal } from "@/components/parlay/use-build-reveal";
 import { isGameLive, LIVE_NOTE, type GameClock } from "@/lib/parlay/game-over";
+import { StartedLine } from "@/components/parlay/started-line";
 import { SWAP_TAB_KEYS, type BelowGate, type EngineLeg, type GeneratedParlay, type LeagueSlice, type LegRecord, type LegSwapOptions, type SwapOption, type SwapTabKey } from "@/lib/parlay/generator";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import { SELECTION_MODES, type SelectionMode } from "@/lib/parlay/selection";
@@ -174,6 +175,7 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
             </span>
           )}
         </GameLine>
+        <StartedLine game={pick} className="mt-0.5" />
         <p className="mt-0.5 text-[15px] font-bold leading-snug text-foreground [overflow-wrap:anywhere]">{pick.betDetail}</p>
         <p className="text-xs font-medium text-muted-foreground">
           <Link href={"/cappers/" + pick.capperId} className="text-foreground hover:underline">
@@ -313,6 +315,7 @@ export function SwapModal({
           <input type="radio" name={"swap-leg-" + index} value={id} checked={on} onChange={() => setSelected(id)} className="h-4 w-4 shrink-0 accent-brand-600" />
           <div className="min-w-0 flex-1">
             {tab === "OTHER_GAMES" && <GameLine pick={o.pick} gameLabel={o.gameLabel} gameTime={o.gameTime} />}
+            {tab === "OTHER_GAMES" && <StartedLine game={o.pick} className="mt-0.5" />}
             <p className="flex flex-wrap items-center gap-1.5 text-sm font-bold leading-snug text-foreground [overflow-wrap:anywhere]">
               {o.pick.betDetail}
               {o.current && (

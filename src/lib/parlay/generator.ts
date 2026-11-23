@@ -119,7 +119,8 @@ import {
 } from "@/lib/parlay/include-picks";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
-import { hasKickedOff, isGameOver, type GameClock } from "@/lib/parlay/game-over";
+import { isGameOver, type GameClock } from "@/lib/parlay/game-over";
+import { poolEligible } from "@/lib/parlay/game-progress";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 import { categoryFavDog, classifySwapCandidate, teamFavDog } from "@/lib/parlay/swap-classify";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
@@ -350,13 +351,16 @@ export type GeneratedParlay = {
 export const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 1000;
 
 // Reload when the pool is old, a game in it is over, or a game the full slate
-// drew from has kicked off (a live game stays in only as a target or a slip
-// pick's game).
+// drew from is no longer eligible (game-progress.ts poolEligible: kicked off with
+// no known progress, or past its sport's cutoff, by the state it was read with).
+// A started game within its cutoff stays; a target or a slip pick's game stays
+// whatever its progress. The reload re-reads every game's progress, so an
+// eligible started game survives it and one past its cutoff drops then.
 export function snapshotIsStale(snapshot: Pick<GeneratorSnapshot, "builtAt" | "games" | "slipPicks" | "targets">, now: Date): boolean {
   if (now.getTime() - new Date(snapshot.builtAt).getTime() > SNAPSHOT_MAX_AGE_MS) return true;
   const kept = new Set([...snapshot.targets, ...snapshot.slipPicks.map((p) => p.gameId)]);
   return (
-    snapshot.games.some((g) => isGameOver(g, now) || (hasKickedOff(g.gameTime, now) && !kept.has(g.gameId))) ||
+    snapshot.games.some((g) => isGameOver(g, now) || (!kept.has(g.gameId) && !poolEligible(g, now))) ||
     snapshot.slipPicks.some((p) => isGameOver(p, now))
   );
 }
@@ -947,8 +951,9 @@ export function buildGeneratedParlay(
 // Picks, the star, a record and the same-game rules but not the gate, marked belowGate,
 // after every pick that clears (they rank below it by construction). Other games never
 // does: it is the gate only.
-// Game started: when the swapped leg's own game has kicked off and isn't a target or a
-// slip pick's game, thisGame is empty and gameStarted is set, so the modal says so.
+// Game started: when the swapped leg's own game is past its progress cutoff (or kicked off
+// with no progress known) and isn't a target or a slip pick's game, thisGame is empty and
+// gameStarted is set, so the modal says so.
 export type LegAlternatives = { thisGame: SwapOption[]; otherGames: SwapOption[]; gameStarted?: true };
 
 export function legAlternatives(
@@ -998,9 +1003,10 @@ export function legAlternatives(
   const ctx: QualifyContext = { include: toIncludeSelection(settings.include), favoritesOnly: settings.favoritesOnly === true, snapshot, gate, scoreOf, priceFloor: settings.scoreModel !== "EDGE" };
   const slipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
   const targeted = snapshot.targets.length > 0;
-  // A game that started is only in play as a target or a slip pick's game (snapshotIsStale's rule).
+  // A started game is in play within its sport's progress cutoff, or as a target or a slip pick's game
+  // (snapshotIsStale's rule).
   const kept = new Set([...snapshot.targets, ...snapshot.slipPicks.map((p) => p.gameId)]);
-  const inPlay = (g: GeneratorGame) => !hasKickedOff(g.gameTime, now) || kept.has(g.gameId);
+  const inPlay = (g: GeneratorGame) => poolEligible(g, now) || kept.has(g.gameId);
   // With targets, generated legs come only from the targeted games and your picks' games (rule 2).
   const allowed = (g: GeneratorGame) => !targeted || kept.has(g.gameId) || g.gameId === swapped.gameId;
   const swappedGame = snapshot.games.find((g) => g.gameId === swapped.gameId);

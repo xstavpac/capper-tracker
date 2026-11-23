@@ -7,6 +7,7 @@ import type { PickCategoryKey } from "@/server/data/stats";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { PickOddsSource } from "@/lib/odds-source";
 import type { GameFeedStatus } from "@/lib/parlay/game-over";
+import type { GameLiveState } from "@/lib/parlay/game-progress";
 import { OTHER_GROUP_LABEL, TOTALS_GROUP_LABEL, sortTotalsPicks } from "@/lib/pick-team-group";
 import { PickCard } from "@/components/live/pick-card";
 import { TeamMark } from "@/components/live/team-mark";
@@ -82,6 +83,10 @@ export type ExpanderPick = {
   // is final, postponed or cancelled. Optional like datePosted: picks stored
   // before it existed don't carry it.
   gameStatus?: GameFeedStatus | null;
+  // A started game's progress and score (lib/parlay/game-progress.ts), set only by
+  // the Parlay code from the score feed (generator snapshot, slip check) - the Live
+  // board never sends it. Absent before kickoff and on picks stored without it.
+  liveState?: GameLiveState | null;
 };
 
 // Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card

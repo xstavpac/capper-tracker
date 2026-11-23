@@ -52,7 +52,8 @@ export function reconcileSlip(
     if (result) {
       pruned.push({ pickId: leg.pickId, label, result });
     } else {
-      kept.push({ ...leg, status: s.status, odds: s.odds, gameTime: s.kickoff ?? leg.gameTime, gameStatus: s.gameStatus });
+      // liveState is display-only ("Started · Q2 4:12 · 45-41"); odds always come from the pick row.
+      kept.push({ ...leg, status: s.status, odds: s.odds, gameTime: s.kickoff ?? leg.gameTime, gameStatus: s.gameStatus, liveState: s.liveState ?? null });
     }
   }
   return { kept, pruned };
