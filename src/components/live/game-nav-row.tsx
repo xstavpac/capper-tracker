@@ -59,8 +59,8 @@ export function GameNavRow({
       <div
         data-game-nav-row
         className={
-          "sticky top-0 z-20 -mx-3.5 mb-3 flex items-center justify-between gap-2 rounded-t-[18px] border-b border-[#E3E6EE]/70 bg-white/85 px-3.5 py-2.5 backdrop-blur-[18px] transition-shadow dark:border-[rgba(140,170,220,.18)] dark:bg-[rgba(20,32,58,.85)] " +
-          (stuck ? "shadow-[0_6px_12px_-6px_rgba(15,20,32,0.18)]" : "")
+          "sticky top-0 z-20 -mx-3.5 mb-3 flex items-center justify-between gap-2 rounded-t-[18px] border-b border-[#E3E6EE]/70 bg-white/85 px-3.5 py-2.5 transition-shadow dark:border-[rgba(140,170,220,.18)] dark:bg-[rgba(20,32,58,.85)] " +
+          (stuck ? "shadow-[0_1px_2px_rgba(17,26,46,.06)]" : "")
         }
       >
         <button

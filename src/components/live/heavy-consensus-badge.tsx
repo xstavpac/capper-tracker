@@ -51,7 +51,7 @@ export function HeavyConsensusBadge({ badge, className = "" }: { badge: HeavyBad
       {open && (
         <div
           role="tooltip"
-          className="absolute left-0 top-full z-20 mt-1 w-max max-w-[min(19rem,calc(100vw-2rem))] rounded-md border border-amber-500/35 bg-white px-2 py-1.5 text-[11px] font-medium leading-snug text-foreground shadow-[0_6px_18px_rgba(15,20,32,0.10)] dark:border-amber-400/30 dark:bg-card dark:shadow-none"
+          className="absolute left-0 top-full z-20 mt-1 w-max max-w-[min(19rem,calc(100vw-2rem))] rounded-md border border-amber-500/35 bg-white px-2 py-1.5 text-[11px] font-medium leading-snug text-foreground shadow-[0_1px_2px_rgba(17,26,46,.06)] dark:border-amber-400/30 dark:bg-card dark:shadow-none"
         >
           {details}
         </div>
