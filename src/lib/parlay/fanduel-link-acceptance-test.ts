@@ -23,7 +23,7 @@ import {
   buildFanDuelBetslipUrl,
   buildFanDuelLink,
   fanDuelLegTarget,
-  matchFanDuelOutcome,
+  matchFanDuelOutcome as matchFanDuelOutcomeFull,
   notSentDisplay,
   FANDUEL_BETSLIP_URL,
   type FanDuelDeps,
@@ -34,6 +34,15 @@ import {
 } from "@/lib/parlay/fanduel-link";
 import { SPORT_SEASON_CONFIG } from "@/lib/sport-seasons";
 import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
+
+// The ids and price only: the chosen outcome itself (FanDuelChosenOutcome) is pinned in
+// fanduel-neutral-site-side-acceptance-test.ts.
+const matchFanDuelOutcome = (...args: Parameters<typeof matchFanDuelOutcomeFull>) => {
+  const r = matchFanDuelOutcomeFull(...args);
+  if (!("outcome" in r)) return r;
+  const { outcome: _chosen, ...rest } = r;
+  return rest;
+};
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -235,15 +244,19 @@ function leg(over: Partial<FanDuelLegInput>): FanDuelLegInput {
     ...over,
   };
 }
+const BILLS = { team: "Buffalo Bills", opponent: "Los Angeles Rams" };
+const RAMS = { team: "Los Angeles Rams", opponent: "Buffalo Bills" };
+const GUARDIANS = { team: "Cleveland Guardians", opponent: "Tampa Bay Rays" };
+const RED_WINGS = { team: "Detroit Red Wings", opponent: "New Jersey Devils" };
 const target = (over: Partial<FanDuelLegInput>) => {
   const t = fanDuelLegTarget(leg(over));
   return t.ok ? t.target : "unsupported";
 };
-check("moneyline on the away team", target({}), { marketKey: "h2h", outcome: { side: "AWAY" } });
+check("moneyline on the away team", target({}), { marketKey: "h2h", outcome: { team: BILLS } });
 check("spread on the home team: its own signed line, more points is the easier way", target({ betType: "SPREAD", betDetail: "Rams -3.5", line: -3.5 }), {
   marketKey: "spreads",
   altMarketKey: "alternate_spreads",
-  outcome: { side: "HOME" },
+  outcome: { team: RAMS },
   point: -3.5,
   easier: "higher",
   maxLineMove: Infinity,
@@ -251,7 +264,7 @@ check("spread on the home team: its own signed line, more points is the easier w
 check("spread with no stored line reads it from the text", target({ betType: "SPREAD", betDetail: "Bills +3.5" }), {
   marketKey: "spreads",
   altMarketKey: "alternate_spreads",
-  outcome: { side: "AWAY" },
+  outcome: { team: BILLS },
   point: 3.5,
   easier: "higher",
   maxLineMove: Infinity,
@@ -289,16 +302,16 @@ check("passing touchdowns: exact line only", target({ betType: "PLAYER_PROP", be
   player: "Josh Allen",
   point: 1.5,
 });
-check("a first-half bet goes to the first-half market, never the full-game one", target({ period: "FIRST_HALF" }), { marketKey: "h2h_h1", outcome: { side: "AWAY" } });
+check("a first-half bet goes to the first-half market, never the full-game one", target({ period: "FIRST_HALF" }), { marketKey: "h2h_h1", outcome: { team: BILLS } });
 check("NFL first-half spread has its own alternate market; a quarter has none", [target({ betType: "SPREAD", betDetail: "Bills +0.5", line: 0.5, period: "FIRST_HALF" }), target({ betType: "TOTAL", betDetail: "Over 9.5", line: 9.5, period: "FIRST_QUARTER" })], [
-  { marketKey: "spreads_h1", altMarketKey: "alternate_spreads_h1", outcome: { side: "AWAY" }, point: 0.5, easier: "higher", maxLineMove: Infinity },
+  { marketKey: "spreads_h1", altMarketKey: "alternate_spreads_h1", outcome: { team: BILLS }, point: 0.5, easier: "higher", maxLineMove: Infinity },
   { marketKey: "totals_q1", outcome: { name: "Over" }, point: 9.5, easier: "lower", maxLineMove: 0.5 },
 ]);
 check("team total: the team's own market, the team where a prop has its player", target({ betType: "TEAM_TOTAL", betDetail: "Bills Over 24.5", line: 24.5 }), {
   marketKey: "team_totals",
   altMarketKey: "alternate_team_totals",
   outcome: { name: "Over" },
-  team: "AWAY",
+  team: BILLS,
   point: 24.5,
   easier: "lower",
   maxLineMove: Infinity,
@@ -341,12 +354,12 @@ check(
     target({ ...mlb, betType: "TEAM_TOTAL", betDetail: "Guardians Team Total Under 4.5", line: 4.5 }),
   ],
   [
-    { marketKey: "h2h_1st_5_innings", outcome: { side: "AWAY" } },
+    { marketKey: "h2h_1st_5_innings", outcome: { team: GUARDIANS } },
     { marketKey: "totals_p1", altMarketKey: "alternate_totals_p1", outcome: { name: "Over" }, point: 1.5, easier: "lower", maxLineMove: 0.5 },
-    { marketKey: "h2h_p3", outcome: { side: "HOME" } },
-    { marketKey: "h2h_3_way", outcome: { side: "HOME" } },
+    { marketKey: "h2h_p3", outcome: { team: RED_WINGS } },
+    { marketKey: "h2h_3_way", outcome: { team: RED_WINGS } },
     { marketKey: "h2h_3_way", outcome: { name: "Draw" } },
-    { marketKey: "team_totals", outcome: { name: "Under" }, team: "AWAY", point: 4.5, easier: "higher", maxLineMove: 0.5 },
+    { marketKey: "team_totals", outcome: { name: "Under" }, team: GUARDIANS, point: 4.5, easier: "higher", maxLineMove: 0.5 },
   ]
 );
 check("a moneyline naming neither team", target({ betDetail: "ML" }), "unsupported");

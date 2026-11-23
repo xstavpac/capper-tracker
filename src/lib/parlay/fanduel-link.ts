@@ -44,7 +44,19 @@ import {
   twoGamesFound,
 } from "@/lib/parlay/fanduel-reasons";
 
-export type FanDuelLegStatus = "matched" | "adjusted" | "over" | "not_found" | "ambiguous" | "needs_clarification" | "market_unavailable" | "line_unavailable" | "price_mismatch" | "unsupported" | "error";
+export type FanDuelLegStatus =
+  | "matched"
+  | "adjusted"
+  | "over"
+  | "not_found"
+  | "ambiguous"
+  | "needs_clarification"
+  | "side_unconfirmed"
+  | "market_unavailable"
+  | "line_unavailable"
+  | "price_mismatch"
+  | "unsupported"
+  | "error";
 
 // The pick's line and the FanDuel line sent in its place. `side` is null for a
 // spread, whose lines are signed for the pick's own team. `worse`: the sent
@@ -73,7 +85,26 @@ export type FanDuelLegResult = {
   sentLine: FanDuelSentLine | null; // "adjusted" only
   // A leg that IS sent but whose price sits far from the pick's (PRICE_MOVED_WARN_GAP). null otherwise.
   warning?: string | null;
+  // The selection as FanDuel lists it ("matched" / "adjusted", and a runner blocked by the side check): the runner's
+  // own name ("UAB Blazers"), the player or team beside it, the market it came from and its line. Shown in place of
+  // the pick's own label, so the panel says what is actually going into the betslip.
+  fanDuelSelection?: FanDuelSelectionShown | null;
+  // A team-sided leg (moneyline / spread / team total / 3-way): the pick's team, FanDuel's runner, and whether the
+  // runner is that team. A runner that is not is never sent; `ok: false` lets the panel flag it red.
+  sideCheck?: { pickTeam: string; runner: string; ok: boolean } | null;
 };
+
+export type FanDuelSelectionShown = { name: string; description: string | null; market: string; line: number | null };
+
+// FanDuel's selection in words, the way its betslip names it: "UAB Blazers — Moneyline",
+// "Rhode Island Rams +3.5 — Spread", "LeBron James Over 25.5 — Points", "Over 145.5 — Total".
+export function fanDuelSelectionText(sel: FanDuelSelectionShown): string {
+  const overUnder = sel.name === "Over" || sel.name === "Under";
+  const line = sel.line === null ? "" : " " + (!overUnder && sel.line > 0 ? "+" : "") + sel.line;
+  const who = sel.description ? sel.description + " " + sel.name : sel.name;
+  const market = sel.market.charAt(0).toUpperCase() + sel.market.slice(1);
+  return who + line + " — " + market;
+}
 
 export type FanDuelLinkResponse = { url: string | null; legs: FanDuelLegResult[] };
 
@@ -82,6 +113,7 @@ const NOT_SENT_LABEL: Record<Exclude<FanDuelLegStatus, "matched" | "adjusted">, 
   not_found: "Not found",
   ambiguous: "Ambiguous",
   needs_clarification: "Needs clarification",
+  side_unconfirmed: "Couldn't confirm side on FanDuel",
   market_unavailable: "Market unavailable",
   line_unavailable: "Line unavailable",
   price_mismatch: "Potentially incorrect market match",
@@ -112,6 +144,11 @@ export type FanDuelLegInput = {
   betDetail: string | null;
   // Which side import recorded for a moneyline / spread (Pick.pickedSide). Read before the text.
   pickedSide?: "HOME" | "AWAY" | "DRAW" | null;
+  // The home/away pickedSide was recorded against: the pick ROW's own teams. They can be the reverse of
+  // homeTeam/awayTeam below (the board's game, the Odds API's listing): at a neutral site ESPN, which resolves the
+  // pick at import, and the Odds API disagree on who is home. pickedSide is only ever read as a TEAM through these,
+  // never as a position on the board's game. Absent: the same as homeTeam/awayTeam.
+  sideTeams?: { homeTeam: string; awayTeam: string } | null;
   line: number | null;
   // A player prop's subject and stat as the import stored them (Pick.playerName /
   // Pick.propMarket), when it did. Preferred over reading betDetail's text.
@@ -157,18 +194,21 @@ export function buildFanDuelBetslipUrl(selections: FanDuelSelection[]): string |
 // Pick -> the market and outcome it names
 // ---------------------------------------------------------------------
 
-// What a leg is looking for in one event's FanDuel markets. `side` is the
-// pick's team for h2h/spreads (its name comes from the resolved event, so it
-// is spelled the way the feed spells it); `name` is Over / Under / Yes / Draw.
+// A team-sided bet's team, by name: the pick's own team and the other one in its game. The runner FanDuel sends must
+// resolve (teamNamesMatch, sport-scoped) to `team` and not to `opponent`. Never a home/away position.
+export type FanDuelTeamPick = { team: string; opponent: string };
+
+// What a leg is looking for in one event's FanDuel markets. `team` is the
+// pick's team for h2h/spreads, matched against each runner's own name; `name` is Over / Under / Yes / Draw.
 export type FanDuelLegTarget = {
   marketKey: string;
   // FanDuel's alternate-lines market for the same bet. Asked for only when the
   // main market doesn't have the pick's line.
   altMarketKey?: string;
-  outcome: { side: "HOME" | "AWAY" } | { name: "Over" | "Under" | "Yes" | "Draw" };
+  outcome: { team: FanDuelTeamPick } | { name: "Over" | "Under" | "Yes" | "Draw" };
   player?: string;
   // A team total: whose. The feed puts the team where a prop has its player.
-  team?: "HOME" | "AWAY";
+  team?: FanDuelTeamPick;
   point?: number;
   // How far FanDuel's line may sit from the point and still be sent in its
   // place. Absent: the line has to be the pick's own.
@@ -313,12 +353,40 @@ const OTHER_LEAGUE_MARKETS: Record<string, PeriodMarkets> = {
   FULL_GAME: { suffix: "", alternates: ["spreads", "totals"], teamTotals: false },
 };
 
-type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string; status?: "needs_clarification" | "market_unavailable" };
+type TargetResult = { ok: true; target: FanDuelLegTarget } | { ok: false; reason: string; status?: "needs_clarification" | "market_unavailable" | "side_unconfirmed" };
 const unsupported = (reason: string): TargetResult => ({ ok: false, reason });
 // A supported bet whose team the pick does not settle: a question for the user, never "not supported".
 // FanDuel does not sell this bet for the league (a period it has no market for): "Market unavailable", never another market.
 const marketUnavailable = (reason: string): TargetResult => ({ ok: false, reason, status: "market_unavailable" });
 const needsClarification = (reason: string): TargetResult => ({ ok: false, reason, status: "needs_clarification" });
+const sideUnconfirmed = (reason: string): TargetResult => ({ ok: false, reason, status: "side_unconfirmed" });
+
+// The pick's team, by name, for a moneyline / spread / team total. The stored side (Pick.pickedSide) first, read
+// against the teams it was recorded on (leg.sideTeams - the pick row's), else the text against the board's game.
+// That name is then found in the board's game by identity: exactly one of its two teams, or the leg is not sent.
+// "none": nothing says which team (a question for the user). "unconfirmed": a team was named, but the game's two
+// teams don't settle it - it matches neither or both.
+export function pickTeamOf(leg: FanDuelLegInput, betType: "MONEYLINE" | "SPREAD"): FanDuelTeamPick | "none" | "unconfirmed" {
+  const sportKey = leg.sportKey ?? undefined;
+  let named: string | null = null;
+  if (leg.pickedSide === "HOME" || leg.pickedSide === "AWAY") {
+    const recordedOn = leg.sideTeams ?? leg;
+    named = leg.pickedSide === "HOME" ? recordedOn.homeTeam : recordedOn.awayTeam;
+  } else {
+    const side = derivePickSide({ betType, betDetail: leg.betDetail, pickedSide: null }, leg, leg.leagueName);
+    if (side) named = side === "HOME" ? leg.homeTeam : leg.awayTeam;
+  }
+  if (named === null) return "none";
+  const isHome = teamNamesMatch(named, leg.homeTeam, sportKey);
+  const isAway = teamNamesMatch(named, leg.awayTeam, sportKey);
+  if (isHome === isAway) return "unconfirmed";
+  return isHome ? { team: leg.homeTeam, opponent: leg.awayTeam } : { team: leg.awayTeam, opponent: leg.homeTeam };
+}
+
+export const SIDE_UNCONFIRMED_PICK =
+  "Couldn't confirm side on FanDuel — the pick's team isn't exactly one of this game's two teams. Not sent; check the pick's team.";
+export const sideUnconfirmedRunner = (team: string) =>
+  "Couldn't confirm side on FanDuel — no single FanDuel selection in this market is " + team + ". Not sent; place this leg by hand.";
 
 function playerPropTarget(leg: FanDuelLegInput): TargetResult {
   const text = leg.betDetail ?? "";
@@ -407,33 +475,37 @@ export function fanDuelLegTarget(leg: FanDuelLegInput): TargetResult {
 
   // Team totals have no side of their own (derivePickSide answers only for a
   // moneyline or spread), so the team is read the way a moneyline's is.
-  const teamOf = (betType: string) => derivePickSide({ betType, betDetail: leg.betDetail, pickedSide: leg.betType === betType ? leg.pickedSide : null }, leg, leg.leagueName);
+  const teamOf = (betType: "MONEYLINE" | "SPREAD") => pickTeamOf({ ...leg, pickedSide: leg.betType === betType ? leg.pickedSide : null }, betType);
+  const sideProblem = (t: "none" | "unconfirmed") =>
+    t === "none" ? needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam)) : sideUnconfirmed(SIDE_UNCONFIRMED_PICK);
 
   if (leg.period === "REGULATION") {
     if (leg.sportKey !== NHL_SPORT_KEY || leg.betType !== "MONEYLINE") return unsupported(marketNotSupported(leg.leagueName, "only the moneyline in regulation"));
     if (threeWayWording(leg.betDetail) === "DRAW") return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { name: "Draw" } } };
-    const side = teamOf("MONEYLINE");
-    if (!side) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
-    return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { side } } };
+    const team = teamOf("MONEYLINE");
+    if (typeof team === "string") return sideProblem(team);
+    return { ok: true, target: { marketKey: HOCKEY_THREE_WAY_KEY, outcome: { team } } };
   }
 
   const period = (PERIOD_MARKETS[leg.sportKey] ?? OTHER_LEAGUE_MARKETS)[leg.period];
   if (!period) return marketUnavailable(marketNotOffered("no " + leg.period.toLowerCase().replace(/_/g, " ") + " bets for " + leg.leagueName));
 
   if (leg.betType === "MONEYLINE" || leg.betType === "SPREAD") {
-    const side = teamOf(leg.betType);
-    if (!side) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
-    if (leg.betType === "MONEYLINE") return { ok: true, target: { marketKey: "h2h" + period.suffix, outcome: { side } } };
+    const team = teamOf(leg.betType);
+    if (typeof team === "string") return sideProblem(team);
+    if (leg.betType === "MONEYLINE") return { ok: true, target: { marketKey: "h2h" + period.suffix, outcome: { team } } };
+    // Signed for the pick's own team, and compared with that team's runner's own point: the sign follows the team.
     const point = leg.line ?? extractLine("SPREAD", leg.betDetail ?? "");
     if (point === null) return unsupported("This spread has no line to match.");
-    return lineTarget(leg.sportKey, "spreads", period, { outcome: { side }, point, easier: "higher" });
+    return lineTarget(leg.sportKey, "spreads", period, { outcome: { team }, point, easier: "higher" });
   }
 
   if (leg.betType === "TOTAL" || leg.betType === "TEAM_TOTAL") {
     const teamTotal = leg.betType === "TEAM_TOTAL";
     if (teamTotal && !period.teamTotals) return marketUnavailable(marketNotOffered("no team totals for " + leg.leagueName + " " + leg.period.toLowerCase().replace(/_/g, " ")));
-    const team = teamTotal ? teamOf("MONEYLINE") : null;
-    if (teamTotal && !team) return needsClarification(sideNeedsClarification(leg.awayTeam, leg.homeTeam));
+    const teamRead = teamTotal ? teamOf("MONEYLINE") : null;
+    if (typeof teamRead === "string") return sideProblem(teamRead);
+    const team = teamRead;
     const side = totalSideFromText(leg.betDetail);
     if (!side) return unsupported("Couldn't tell if this total is Over or Under.");
     const point = leg.line ?? extractLine(leg.betType, leg.betDetail ?? "");
@@ -508,15 +580,31 @@ export type FanDuelMatchQuery = {
   // FanDuel has for that player in these markets (fanduel-player-match.ts), so
   // "Sabonis" finds "Domantas Sabonis". Used in place of `description`.
   player?: { name: string; sportKey?: string };
+  // A team-sided bet: the runner (the outcome's name) - for a team total, the outcome's description - is found by
+  // resolving each one FanDuel lists to a team (teamNamesMatch, sport-scoped). Exactly one listed name may be the
+  // pick's team and not its opponent; otherwise nothing is matched ("side_unconfirmed"). Used in place of
+  // outcomeName / description. Never a position, never the first runner.
+  teamOutcome?: FanDuelTeamPick & { sportKey?: string };
+  teamDescription?: FanDuelTeamPick & { sportKey?: string };
   point?: number;
   maxLineMove?: number;
   easier?: "lower" | "higher";
 };
 
+// The one name in `names` that is the pick's team and not its opponent, or null (none, or more than one).
+export function resolveRunnerTeam(names: string[], pick: FanDuelTeamPick & { sportKey?: string }): string | null {
+  const distinct = Array.from(new Set(names.filter((n) => n.trim() !== "")));
+  const hits = distinct.filter((n) => teamNamesMatch(n, pick.team, pick.sportKey) && !teamNamesMatch(n, pick.opponent, pick.sportKey));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// The outcome actually chosen, as FanDuel listed it.
+export type FanDuelChosenOutcome = { name: string; description: string | null; marketKey: string; point: number | null };
+
 export type FanDuelMatch =
-  | { status: "matched"; selection: FanDuelSelection; price: number }
-  | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number; worse: boolean; quality: FanDuelLineQuality }
-  | { status: "not_found" | "ambiguous" | "market_unavailable" | "line_unavailable"; reason: string };
+  | { status: "matched"; selection: FanDuelSelection; price: number; outcome: FanDuelChosenOutcome }
+  | { status: "adjusted"; selection: FanDuelSelection; price: number; fanDuelLine: number; worse: boolean; quality: FanDuelLineQuality; outcome: FanDuelChosenOutcome }
+  | { status: "not_found" | "ambiguous" | "market_unavailable" | "line_unavailable" | "side_unconfirmed"; reason: string };
 
 const AMBIGUOUS = "More than one FanDuel selection fits this pick.";
 
@@ -536,7 +624,19 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     return { status: "market_unavailable", reason: marketNotOffered("no " + marketLabel(query.marketKeys[0]) + " market for this game right now") };
   }
 
+  const inQuery = markets.filter((m) => query.marketKeys.includes(m.key));
+  let outcomeName = query.outcomeName;
+  if (query.teamOutcome) {
+    const runner = resolveRunnerTeam(inQuery.flatMap((m) => m.outcomes.map((o) => o.name)), query.teamOutcome);
+    if (runner === null) return { status: "side_unconfirmed", reason: sideUnconfirmedRunner(query.teamOutcome.team) };
+    outcomeName = runner;
+  }
   let description = query.description === undefined ? null : normalizeName(query.description);
+  if (query.teamDescription) {
+    const named = resolveRunnerTeam(inQuery.flatMap((m) => m.outcomes.map((o) => o.description ?? "")), query.teamDescription);
+    if (named === null) return { status: "side_unconfirmed", reason: sideUnconfirmedRunner(query.teamDescription.team) };
+    description = normalizeName(named);
+  }
   if (query.player) {
     const names = markets.flatMap((m) => m.outcomes.map((o) => o.description ?? "")).filter((n) => n !== "");
     const player = resolveFanDuelPlayer(query.player.name, query.player.sportKey, names);
@@ -554,7 +654,7 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
       };
     }
   }
-  type Found = { selection: FanDuelSelection; price: number };
+  type Found = { selection: FanDuelSelection; price: number; outcome: FanDuelChosenOutcome };
   // By line (null for a bet with no line), from the best-ranked market there.
   const byLine = new Map<number | null, { rank: number; found: Map<string, Found> }>();
   let withoutIds = 0;
@@ -562,7 +662,7 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
     for (const market of markets) {
       if (market.key !== key) continue;
       for (const outcome of market.outcomes) {
-        if (outcome.name !== query.outcomeName) continue;
+        if (outcome.name !== outcomeName) continue;
         if (description !== null && normalizeName(outcome.description ?? "") !== description) continue;
         if (query.point !== undefined && typeof outcome.point !== "number") continue;
         const line = query.point === undefined ? null : outcome.point!;
@@ -574,7 +674,11 @@ export function matchFanDuelOutcome(query: FanDuelMatchQuery, markets: FanDuelMa
         let at = byLine.get(line);
         if (at && at.rank < rank) continue;
         if (!at) byLine.set(line, (at = { rank, found: new Map() }));
-        at.found.set(selection.marketId + "|" + selection.selectionId, { selection, price: outcome.price });
+        at.found.set(selection.marketId + "|" + selection.selectionId, {
+          selection,
+          price: outcome.price,
+          outcome: { name: outcome.name, description: outcome.description ?? null, marketKey: market.key, point: typeof outcome.point === "number" ? outcome.point : null },
+        });
       }
     }
   });
@@ -665,8 +769,13 @@ function clockET(ms: number, otherMs: number): string {
 // carries in-play events, and their markets are read at send time.
 function eventForLeg(leg: FanDuelLegInput, events: FanDuelEvent[]): EventMatch {
   const start = new Date(leg.gameTime).getTime();
+  // Either orientation: a leg's side is a team name (pickTeamOf), never a home/away position, so a listing with home
+  // and away the other way round (a neutral site) is the same game.
+  const sk = leg.sportKey ?? undefined;
   const sameTeams = events.filter(
-    (e) => teamNamesMatch(e.homeTeam, leg.homeTeam, leg.sportKey ?? undefined) && teamNamesMatch(e.awayTeam, leg.awayTeam, leg.sportKey ?? undefined)
+    (e) =>
+      (teamNamesMatch(e.homeTeam, leg.homeTeam, sk) && teamNamesMatch(e.awayTeam, leg.awayTeam, sk)) ||
+      (teamNamesMatch(e.homeTeam, leg.awayTeam, sk) && teamNamesMatch(e.awayTeam, leg.homeTeam, sk))
   );
   const gap = (e: FanDuelEvent) => Math.abs(new Date(e.commenceTime).getTime() - start);
   const candidates = sameTeams.filter((e) => gap(e) <= EVENT_TIME_WINDOW_MS);
@@ -752,17 +861,12 @@ export function otherLeaguesForTeam(teamName: string, sportKey: string): string[
 }
 
 // The stored team(s) the pick is on: its side when the pick settles one, else both.
+// By team identity (pickTeamOf), never by the board game's home/away position.
 function pickTeams(leg: FanDuelLegInput): string[] {
   const sideBet = leg.betType === "TEAM_TOTAL" ? "MONEYLINE" : leg.betType;
-  const side =
-    leg.pickedSide === "HOME" || leg.pickedSide === "AWAY"
-      ? leg.pickedSide
-      : sideBet === "MONEYLINE" || sideBet === "SPREAD"
-        ? derivePickSide({ betType: sideBet, betDetail: leg.betDetail, pickedSide: null }, leg, leg.leagueName)
-        : null;
-  if (side === "HOME") return [leg.homeTeam];
-  if (side === "AWAY") return [leg.awayTeam];
-  return [leg.homeTeam, leg.awayTeam];
+  if (sideBet !== "MONEYLINE" && sideBet !== "SPREAD") return [leg.homeTeam, leg.awayTeam];
+  const team = pickTeamOf(leg, sideBet);
+  return typeof team === "string" ? [leg.homeTeam, leg.awayTeam] : [team.team];
 }
 
 // Check 3's question for one leg: which other in-season leagues to look in, or none. Only a leg whose stored game is
@@ -819,8 +923,20 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     reason: string | null,
     fanDuelOdds: number | null = null,
     sentLine: FanDuelSentLine | null = null,
-    warning: string | null = null
-  ) => results.set(leg.pickId, { pickId: leg.pickId, status, reason, pickOdds: leg.odds, fanDuelOdds, sentLine, warning });
+    warning: string | null = null,
+    shown: Pick<FanDuelLegResult, "fanDuelSelection" | "sideCheck"> = {}
+  ) =>
+    results.set(leg.pickId, {
+      pickId: leg.pickId,
+      status,
+      reason,
+      pickOdds: leg.odds,
+      fanDuelOdds,
+      sentLine,
+      warning,
+      fanDuelSelection: shown.fanDuelSelection ?? null,
+      sideCheck: shown.sideCheck ?? null,
+    });
 
   // 1. Games that are over and unsupported markets never reach the feed. A live
   // game's leg goes on like any other: its ids and line are read from FanDuel
@@ -908,7 +1024,31 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
       return;
     }
     let warning: string | null = null;
+    let shown: Pick<FanDuelLegResult, "fanDuelSelection" | "sideCheck"> = {};
     if (match.status === "matched" || match.status === "adjusted") {
+      // Last guard before a selection goes in the betslip: a team-sided bet's runner, as FanDuel lists it, is
+      // resolved to a team again, independently of how it was found. Not the pick's team, or also its opponent:
+      // not sent, whatever the price.
+      const teamPick = "team" in target.outcome ? target.outcome.team : target.team;
+      const runner = "team" in target.outcome ? match.outcome.name : target.team ? (match.outcome.description ?? "") : null;
+      const sk = leg.sportKey ?? undefined;
+      const sideCheck =
+        teamPick && runner !== null
+          ? { pickTeam: teamPick.team, runner, ok: teamNamesMatch(runner, teamPick.team, sk) && !teamNamesMatch(runner, teamPick.opponent, sk) }
+          : null;
+      shown = {
+        fanDuelSelection: {
+          name: match.outcome.name,
+          description: match.outcome.description,
+          market: (match.outcome.marketKey.startsWith("alternate_") ? "alternate " : "") + marketLabel(match.outcome.marketKey),
+          line: match.outcome.point,
+        },
+        sideCheck,
+      };
+      if (sideCheck && !sideCheck.ok) {
+        settle(leg, "side_unconfirmed", sideUnconfirmedRunner(sideCheck.pickTeam), null, null, null, shown);
+        return;
+      }
       // A price nowhere near the pick's is a different bet, whatever the market and line say: not sent, and never
       // shown as an adjusted line.
       const priced = checkPrice(leg, target, match.price, match.status === "adjusted" ? match.fanDuelLine : target.point, hasKickedOff(leg.gameTime, deps.now));
@@ -920,11 +1060,11 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     }
     if (match.status === "matched") {
       selections.set(leg.pickId, match.selection);
-      settle(leg, "matched", null, match.price, null, warning);
+      settle(leg, "matched", null, match.price, null, warning, shown);
     } else if (match.status === "adjusted") {
       selections.set(leg.pickId, match.selection);
       const side = "name" in target.outcome && (target.outcome.name === "Over" || target.outcome.name === "Under") ? target.outcome.name : null;
-      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse, quality: match.quality, delta: Math.round((match.fanDuelLine - target.point!) * 100) / 100 }, warning);
+      settle(leg, "adjusted", null, match.price, { pick: target.point!, fanDuel: match.fanDuelLine, side, worse: match.worse, quality: match.quality, delta: Math.round((match.fanDuelLine - target.point!) * 100) / 100 }, warning, shown);
     } else {
       settle(leg, match.status, match.reason);
     }
@@ -933,11 +1073,16 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
     Array.from(byEvent.values()).map(async (wanted) => {
       const { event } = wanted[0];
       const sportKey = event.sportKey;
-      const teamName = (side: "HOME" | "AWAY") => (side === "HOME" ? event.homeTeam : event.awayTeam);
+      // A team-sided leg is matched by each runner's own team name, never by the event's home/away.
       const query = ({ leg, target }: Wanted, marketKeys: string[], nearest: boolean): FanDuelMatchQuery => ({
         marketKeys,
-        outcomeName: "side" in target.outcome ? teamName(target.outcome.side) : target.outcome.name,
-        ...(target.team ? { description: teamName(target.team) } : target.player ? { player: { name: target.player, sportKey: leg.sportKey ?? undefined } } : {}),
+        outcomeName: "team" in target.outcome ? "" : target.outcome.name,
+        ...("team" in target.outcome ? { teamOutcome: { ...target.outcome.team, sportKey: leg.sportKey ?? undefined } } : {}),
+        ...(target.team
+          ? { teamDescription: { ...target.team, sportKey: leg.sportKey ?? undefined } }
+          : target.player
+            ? { player: { name: target.player, sportKey: leg.sportKey ?? undefined } }
+            : {}),
         point: target.point,
         ...(nearest && !exactLadderOnly.has(leg.pickId) ? { maxLineMove: target.maxLineMove, easier: target.easier } : {}),
       });
@@ -954,7 +1099,7 @@ export async function buildFanDuelLink(legs: FanDuelLegInput[], deps: FanDuelDep
         // counts here: the nearest line is chosen once every line is in hand.
         const alt = w.target.altMarketKey !== undefined && w.target.point !== undefined;
         const match = matchFanDuelOutcome(query(w, [w.target.marketKey], !alt), main);
-        if (alt && (match.status === "not_found" || match.status === "market_unavailable" || match.status === "line_unavailable")) missed.push(w);
+        if (alt && (match.status === "not_found" || match.status === "market_unavailable" || match.status === "line_unavailable" || match.status === "side_unconfirmed")) missed.push(w);
         else finish(w, match);
       }
       if (!main || missed.length === 0) return;

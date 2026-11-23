@@ -335,6 +335,9 @@ async function loadLegs(userId: string, pickIds: string[]): Promise<Map<string, 
       period: pick.period,
       betDetail: pick.rawBetDetail,
       pickedSide: row.pickedSide,
+      // pickedSide was recorded against the ROW's home/away (ESPN's, at import); the board's game below can list
+      // them the other way round at a neutral site. The leg reads the side as this row's team, never as a position.
+      sideTeams: { homeTeam: row.homeTeam, awayTeam: row.awayTeam },
       line: pick.line,
       homeTeam: pick.homeTeam,
       awayTeam: pick.awayTeam,
