@@ -35,6 +35,7 @@ import { segmentUnmatchedReason } from "@/lib/pending-pick-reason";
 import { firstHalfLabelPrefixForChipSet } from "@/lib/bet-type-filter";
 import {
   findMatchingGameResult,
+  nicknameOnlyNoMatchReason,
   resolveOutcome,
   resolvePlayerProp,
   isTextSideAmbiguous,
@@ -218,7 +219,7 @@ export async function getPendingPicksForUser(userId: string): Promise<PendingPic
       } else if (ageHours > UNMATCHED_CHECK_DELAY_HOURS) {
         const match = await findMatchingGameResult(sportKey!, p);
         if (!match) {
-          unmatchedReason = "no matching game found";
+          unmatchedReason = (await nicknameOnlyNoMatchReason(sportKey!, p)) ?? "no matching game found";
         } else if (p.betType === "PLAYER_PROP") {
           // Player props resolve differently (player-level box-score data,
           // not resolveOutcome/gradePick's team-score path) - reuses the same
