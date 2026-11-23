@@ -1,5 +1,5 @@
 import { unstable_cache, revalidateTag } from "next/cache";
-import { matchScoreEitherWay } from "@/lib/score-orientation";
+import { matchScoreEitherWay, teamOrientation } from "@/lib/score-orientation";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { sameEasternDay, easternDateKey, closestByTime, withinDateDriftDays, APP_TIME_ZONE } from "@/lib/dates";
@@ -2469,9 +2469,16 @@ export function matchScoreToGame(
 // spell differently ("LA Clippers" / "Los Angeles Clippers", "Michigan State
 // Spartans" / "Michigan St Spartans") resolved to null here, and every
 // ML/spread/total pick on it was stored at the -110 default (2026-11-10).
-// Home and away still have to agree: a feed that lists a neutral-site game the
-// other way round does not match, because reading side "home" off it would
-// price the other team.
+//
+// Either orientation (neutral-site games, see score-orientation.ts): ESPN and the
+// Odds API disagree on which team is home (Auburn/Notre Dame, UNLV/Rutgers 2026-11-19),
+// and a strict home-to-home match left every pick on such a game at the -110 default.
+// A game listed the other way round is returned MIRRORED (mirrorOddsGame): homeTeam /
+// awayTeam swapped so they follow the caller's orientation, which is what every reader
+// keys a side off (side "home" -> oddsGame.homeTeam -> the outcome with that name).
+// Outcomes are keyed by team name, never by side, so a team's price and signed spread
+// point stay with that team. Without the mirror, side "home" would read the other team.
+// Nearest start wins across both orientations, the same rule as matchScoreToGame.
 //
 // Which day's snapshot: the game's own ET day once that day is over, else today's
 // (pastSnapshotDateFor). A game that tipped before ET midnight is only in its own
@@ -2485,13 +2492,38 @@ export async function resolveOddsGame(
 ): Promise<OddsGame | null> {
   const pastFetchDate = pastSnapshotDateFor(game.commenceTime);
   const oddsGames = pastFetchDate === undefined ? await getOdds(sportKey) : await getOdds(sportKey, pastFetchDate);
-  const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(g.awayTeam, game.awayTeam, sportKey)
-  );
+  return pickOddsGameEitherWay(oddsGames, game, sportKey);
+}
+
+// The pure body of resolveOddsGame: the odds game for this team pair in either
+// orientation, nearest start wins, returned in the caller's orientation. On a tie
+// in start time the same-orientation listing is kept (closestByTime keeps the
+// first, and same-orientation candidates are listed first).
+export function pickOddsGameEitherWay(
+  oddsGames: OddsGame[],
+  game: { homeTeam: string; awayTeam: string; commenceTime: string },
+  sportKey: string
+): OddsGame | null {
+  const same: OddsGame[] = [];
+  const reversed: OddsGame[] = [];
+  for (const g of oddsGames) {
+    const o = teamOrientation(g, game, sportKey);
+    if (o === "same") same.push(g);
+    else if (o === "reversed") reversed.push(g);
+  }
+  const candidates = [...same, ...reversed];
   if (candidates.length === 0) return null;
 
   const gameStart = new Date(game.commenceTime).getTime();
-  return closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
+  const best = closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
+  return same.includes(best) ? best : mirrorOddsGame(best);
+}
+
+// An odds game with home and away swapped. Only the two team fields move: every
+// market outcome is keyed by its team's (or player's / Over / Under / Draw) name,
+// so prices and signed spread points already belong to the right team.
+export function mirrorOddsGame(g: OddsGame): OddsGame {
+  return { ...g, homeTeam: g.awayTeam, awayTeam: g.homeTeam };
 }
 
 // The favored side of a game's head-to-head (moneyline) market: "HOME"/"AWAY"

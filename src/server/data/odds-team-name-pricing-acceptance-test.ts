@@ -147,11 +147,14 @@ async function main() {
     expect(`${h} v ${a}: resolves now (keyed)`, (await resolveOddsGame(sk, game, async () => events)) !== null, true);
   }
 
-  // ---- 5. home/away still have to agree ------------------------------------------------------------------------
+  // ---- 5. neutral site: home/away reversed between feeds ------------------------------------------------------------------------
 
   // 2026-11-08: the schedule had Nebraska at home, the snapshot listed Providence at home (neutral site).
   const flipped: OddsLoader = async () => [{ id: "x", sportKey: NCAAB, homeTeam: "Providence Friars", awayTeam: "Nebraska Cornhuskers", commenceTime: "2026-11-08T00:00:00Z", bookmakers: [] }];
-  expect("home/away reversed between feeds: no match (side 'home' would read the other team's price)", await resolveOddsGame(NCAAB, { homeTeam: "Nebraska Cornhuskers", awayTeam: "Providence Friars", commenceTime: "2026-11-08T00:00:00Z" }, flipped), null);
+  // Matched since the neutral-site fix, and handed back MIRRORED into the caller's orientation, so side "home" reads
+  // Nebraska's own outcome (neutral-site-odds-pricing-acceptance-test.ts covers every market).
+  const flippedHit = await resolveOddsGame(NCAAB, { homeTeam: "Nebraska Cornhuskers", awayTeam: "Providence Friars", commenceTime: "2026-11-08T00:00:00Z" }, flipped);
+  expect("home/away reversed between feeds: matched, returned in the caller's orientation", flippedHit && [flippedHit.id, flippedHit.homeTeam, flippedHit.awayTeam], ["x", "Nebraska Cornhuskers", "Providence Friars"]);
 
   if (failures > 0) {
     console.log(`\n${failures} assertion(s) FAILED`);

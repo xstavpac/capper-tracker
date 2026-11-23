@@ -17,9 +17,7 @@
 //
 // Run with:
 //   npx tsx src/server/data/doubleheader-odds-resolution-acceptance-test.ts
-import { closestByTime } from "@/lib/dates";
-import { teamNamesMatch } from "@/lib/team-name-match";
-import type { OddsGame } from "@/server/data/odds";
+import { pickOddsGameEitherWay, type OddsGame } from "@/server/data/odds";
 
 let failures = 0;
 function check(label: string, actual: unknown, expected: unknown) {
@@ -28,19 +26,14 @@ function check(label: string, actual: unknown, expected: unknown) {
   if (!pass) failures++;
 }
 
-// Mirrors resolveOddsGame's own body exactly (odds.ts) - team-matched
-// candidates, then closest by commenceTime to the resolved game's own start.
+// resolveOddsGame's own pure body (odds.ts pickOddsGameEitherWay): team-matched
+// candidates in either orientation, then closest by commenceTime.
 function resolveOddsGameCore(
   oddsGames: OddsGame[],
   game: { homeTeam: string; awayTeam: string; commenceTime: string },
   sportKey = "baseball_mlb"
 ): OddsGame | null {
-  const candidates = oddsGames.filter(
-    (g) => teamNamesMatch(g.homeTeam, game.homeTeam, sportKey) && teamNamesMatch(g.awayTeam, game.awayTeam, sportKey)
-  );
-  if (candidates.length === 0) return null;
-  const gameStart = new Date(game.commenceTime).getTime();
-  return closestByTime(candidates, (g) => new Date(g.commenceTime).getTime(), gameStart);
+  return pickOddsGameEitherWay(oddsGames, game, sportKey);
 }
 
 const oddsGame = (id: string, home: string, away: string, commenceTime: string): OddsGame => ({
