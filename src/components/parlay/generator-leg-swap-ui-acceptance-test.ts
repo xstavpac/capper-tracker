@@ -279,7 +279,8 @@ async function main() {
   await click(modalButton("Update Leg"));
   check("reduced motion: replaced at once, the modal closed, no overlay", pickOf(0)?.pickId === target && modals() === 0 && el.querySelector("[data-swap-overlay]") === null, legText(0));
   check("the other legs stay exactly as they were", shownPicks().slice(1).map((p) => p.pickId).join() === before.slice(1).map((p) => p.pickId).join());
-  check("a 'Swapped' tag on leg 1 only", Boolean(legRows()[0].querySelector("[data-swapped-tag]")) && legRows().slice(1).every((r) => !r.querySelector("[data-swapped-tag]")));
+  check("the arrival highlight on the swapped leg only", Boolean(legRows()[0].hasAttribute("data-arrive")) && legRows().slice(1).every((r) => !r.hasAttribute("data-arrive")));
+  check("a 'Swapped' tag on leg 1 only",Boolean(legRows()[0].querySelector("[data-swapped-tag]")) && legRows().slice(1).every((r) => !r.querySelector("[data-swapped-tag]")));
   check("banner status: 'Leg 1 swapped · Combined odds updated'", (el.querySelector("[data-swap-status]")?.textContent ?? "").includes(swappedStatus(1)));
   const c1 = combineOdds(shownPicks());
   check("combined price: combineOdds on the current legs", c1.status === "AVAILABLE" && oddsShown() === formatAmericanOdds(c1.american), `${oddsShown()} vs ${c1.status === "AVAILABLE" ? formatAmericanOdds(c1.american) : c1.status}`);
@@ -358,9 +359,21 @@ async function main() {
     await choose(rowIds()[0]);
     await click(modalButton("Update Leg"));
   } else await click(modalButton("Cancel"));
-  await click(button("Regenerate: Another parlay of comparable strength") ?? buttons().find((b) => (b.textContent ?? "").includes("Regenerate")));
+  const beforeRegen = new Set(shownPicks().map((p) => p.pickId));
+  await click(button("Regenerate:Another parlay of comparable strength") ?? buttons().find((b) => (b.textContent ?? "").includes("Regenerate")));
   await waitUntil(() => text().includes("Your parlay is ready") && !text().includes("Regenerating…"), "the regenerated parlay");
   check("Regenerate: no Swapped tags, no modal, no swap status", el.querySelectorAll("[data-swapped-tag]").length === 0 && modals() === 0 && !text().includes("swapped · Combined odds updated"));
+  {
+    // Only the legs that differ from the parlay shown before the Regenerate land highlighted.
+    const after = shownPicks();
+    const lit = legRows().map((r) => r.hasAttribute("data-arrive"));
+    const expected = after.map((p) => !beforeRegen.has(p.pickId));
+    check(
+      "Regenerate: the arrival highlight on the changed legs only (at least one changed, at least one kept)",
+      JSON.stringify(lit) === JSON.stringify(expected) && expected.some(Boolean) && expected.some((x) => !x),
+      `lit=${JSON.stringify(lit)} changed=${JSON.stringify(expected)}`
+    );
+  }
 
   await act(() => root.unmount());
   el.remove();

@@ -32,6 +32,7 @@ import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-
 import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/components/parlay/hybrid-mode";
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
 import { useBuildReveal } from "@/components/parlay/use-build-reveal";
+import { changedLegPickIds } from "@/lib/parlay/changed-legs";
 import { formatGameTime, formatOdds, GeneratorResult } from "@/components/parlay/generator-result";
 import { StartedLine } from "@/components/parlay/started-line";
 import { reconcileMix, selectedCategories, toggleInclude, type PickMix } from "@/lib/parlay/include-picks";
@@ -193,6 +194,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   const [error, setError] = useState<string | null>(null);
   // Set by a Regenerate that couldn't vary: why (subset-ui.ts). The parlay shown stays.
   const [noAlternative, setNoAlternative] = useState<NoAlternativeReason | null>(null);
+  // After a Regenerate: the legs that differ from the parlay shown before it (changed-legs.ts), the only
+  // ones that land highlighted. Null after anything else (Generate, a rebuild, Reset all).
+  const [changedPickIds, setChangedPickIds] = useState<ReadonlySet<string> | null>(null);
   // The run log (run-trace.ts): the trace of a build made here is sent to the server, fire and forget. It is
   // diagnostics - a failure is ignored and never touches the parlay.
   const session = useRef(
@@ -215,7 +219,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
 
   // The records Your Picks shows beside each pick - the same call the old
   // slip list made, once per change of picks.
-  // Best / Diversified / Explore: how Regenerate draws (not Generate). Remembered per user, best-effort.
+  // Best / Diversified / Explore: how Generate and Regenerate draw. Remembered per user, best-effort.
   const [selectionMode, setSelectionModeState] = useState<SelectionMode>(DEFAULT_SELECTION_MODE);
   useEffect(() => {
     setSelectionModeState(readStoredMode(userId));
@@ -281,6 +285,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
       }
       if (animate && kind === "regenerate") seq = build.start();
       setNoAlternative(null);
+      setChangedPickIds(kind === "regenerate" && parlay ? changedLegPickIds(parlay.legs, res.parlay.legs) : null);
       setParlay(res.parlay);
       setAsBuilt(res.parlay);
       setBuiltFor(key);
@@ -682,6 +687,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           noAlternative={noAlternative}
           unavailableTargetLabels={(parlay?.unavailableTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
           onRegenerate={() => void run("regenerate", true)}
+          changedPickIds={changedPickIds}
           selectionMode={selectionMode}
           onSelectionMode={setSelectionMode}
           onSent={() => {
@@ -699,7 +705,11 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
             },
           }}
           // Every swapped leg back: the parlay as built (no request, no rebuild).
-          onResetAll={() => asBuilt && setParlay(asBuilt)}
+          onResetAll={() => {
+            if (!asBuilt) return;
+            setChangedPickIds(null);
+            setParlay(asBuilt);
+          }}
         />
       )}
       {!build.reveal && parlay && builtFor === key && parlay.legs.length === 0 && (
