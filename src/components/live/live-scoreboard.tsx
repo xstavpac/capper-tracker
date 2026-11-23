@@ -156,7 +156,7 @@ export function LiveScoreboard({
           const staleOdds = isLive ? " opacity-50" : "";
 
           return (
-            <div key={game.id} id={liveGameCardId(game.id)} className="live-panel rounded-card border p-[15px] transition-shadow hover:shadow-md">
+            <div key={game.id} id={liveGameCardId(game.id)} className="live-panel rounded-card border p-[15px]">
               {/* Slip mode only: target this game for the generator (outside the card's link). */}
               <TargetGameCheckbox
                 className="mb-1.5"

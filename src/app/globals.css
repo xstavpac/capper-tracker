@@ -30,10 +30,9 @@ html {
     background: linear-gradient(180deg, #f1f6fd 0%, #eaf1fa 100%);
   }
   .live-panel {
-    @apply backdrop-blur-[18px];
     background: rgba(255, 255, 255, 0.58);
     border-color: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 6px 22px rgba(40, 80, 150, 0.22);
+    box-shadow: 0 1px 2px rgba(17, 26, 46, 0.06);
   }
   .live-card {
     background: rgba(255, 255, 255, 0.5);
@@ -65,7 +64,7 @@ html {
   .live-seg-on {
     background: #ffffff;
     color: #1d4fd8;
-    box-shadow: 0 1px 4px rgba(40, 80, 150, 0.18);
+    box-shadow: 0 1px 2px rgba(17, 26, 46, 0.06);
   }
   .live-seg-off {
     color: #475a78;
@@ -79,7 +78,7 @@ html {
   .dark .live-panel {
     background: rgba(20, 32, 58, 0.55);
     border-color: rgba(140, 170, 220, 0.18);
-    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   }
   .dark .live-card {
     background: rgba(255, 255, 255, 0.04);

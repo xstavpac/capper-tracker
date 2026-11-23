@@ -2,7 +2,7 @@
    SKIN ONLY: no width, height, padding, margin, gap, grid or font-size here (the record tiles' text sizes are
    the one exception the design asks for: cqw, capped at today's px, see .lv-cell). Accent bars are painted
    inside the rounded box (a ::before with border-radius:inherit and a 4px stripe, or a clipped bar on tiles),
-   glows are box-shadows, motion is a one-time fade-in and a hover lift. Dark theme keeps today's surfaces and
+   no glows (a crisp neutral 1px shadow at most), motion is a one-time fade-in and a hover lift. Dark theme keeps today's surfaces and
    takes only the bars, glows and pills. */
 
 @keyframes lv-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -16,58 +16,58 @@
 .lv-cell .lv-tile .lv-pct{font-size:min(14px,8.8cqw);font-weight:800}
 
 .lv-tile{position:relative;overflow:hidden;--c:#94a3b8;animation:lv-rise .7s cubic-bezier(.2,.7,.2,1) both;animation-delay:calc(var(--n,0) * 55ms);transition:transform .25s ease,box-shadow .25s ease,border-color .25s ease,filter .15s}
-.lv-tile.lv-g{--c:#16a34a;background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.28) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#f2fcf7 0,#d6f2e4 100%);border-color:rgba(34,197,94,.38);box-shadow:inset 0 1px 0 #fff,0 8px 18px -10px rgba(22,163,74,.55)}
-.lv-tile.lv-r{--c:#ef4444;background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.28) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#fff2f3 0,#fbd9dd 100%);border-color:rgba(239,68,68,.34);box-shadow:inset 0 1px 0 #fff,0 8px 18px -10px rgba(220,38,38,.5)}
-.lv-tile.lv-g.lv-hi{border-color:rgba(22,163,74,.7);box-shadow:inset 0 1px 0 #fff,0 0 0 1px rgba(34,197,94,.25),0 10px 24px -8px rgba(22,163,74,.7)}
-.lv-tile.lv-r.lv-lo{background:linear-gradient(225deg,rgba(255,255,255,.7) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.25) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#fff0f1 0,#f8cdd3 100%);border-color:rgba(220,38,38,.55);box-shadow:inset 0 1px 0 #fff,0 10px 24px -10px rgba(185,28,28,.6)}
-.lv-tile.lv-n{background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%),linear-gradient(180deg,rgba(255,255,255,.75),rgba(236,242,251,.75));box-shadow:inset 0 1px 0 #fff,0 8px 18px -12px rgba(37,99,235,.35)}
+.lv-tile.lv-g{--c:#16a34a;background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.28) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#f2fcf7 0,#d6f2e4 100%);border-color:rgba(34,197,94,.38);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
+.lv-tile.lv-r{--c:#ef4444;background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.28) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#fff2f3 0,#fbd9dd 100%);border-color:rgba(239,68,68,.34);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
+.lv-tile.lv-g.lv-hi{border-color:rgba(22,163,74,.7);box-shadow:inset 0 1px 0 #fff,0 0 0 1px rgba(34,197,94,.25),0 1px 2px rgba(17,26,46,.06)}
+.lv-tile.lv-r.lv-lo{background:linear-gradient(225deg,rgba(255,255,255,.7) 0,rgba(255,255,255,0) 30%,rgba(255,255,255,.25) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#fff0f1 0,#f8cdd3 100%);border-color:rgba(220,38,38,.55);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
+.lv-tile.lv-n{background:linear-gradient(225deg,rgba(255,255,255,.75) 0,rgba(255,255,255,0) 30%),linear-gradient(180deg,rgba(255,255,255,.75),rgba(236,242,251,.75));box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
 /* The open tile keeps its ring (the ring utility's box-shadow would be replaced by the ones above). */
-.lv-tile.lv-on{box-shadow:0 0 0 2px #3b82f6,inset 0 1px 0 #fff,0 10px 24px -10px rgba(37,99,235,.55)}
-.lv-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1.7cqw;min-width:3px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 70%,#fff),var(--c));box-shadow:0 0 12px var(--c);z-index:1;pointer-events:none}
+.lv-tile.lv-on{box-shadow:0 0 0 2px #3b82f6,inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
+.lv-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:1.7cqw;min-width:3px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 70%,#fff),var(--c));z-index:1;pointer-events:none}
 .lv-tile::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.7) 50%,transparent 65%);transform:translateX(-130%);pointer-events:none}
 .lv-tile:hover{transform:translateY(-2px)}
 .lv-tile:hover::after{transform:translateX(130%);transition:transform .9s ease}
 /* win % bar: same 4px track, a gradient fill with a glow, no ball and no moving streak */
 .lv-tile .lv-bar{overflow:visible;background:rgba(15,23,42,.1);box-shadow:inset 0 1px 2px rgba(15,23,42,.12)}
-.lv-tile.lv-g .lv-bar>div{background:linear-gradient(90deg,#4ade80,#16a34a);box-shadow:0 0 12px 0 var(--c)}
-.lv-tile.lv-r .lv-bar>div{background:linear-gradient(90deg,#f87171,#dc2626);box-shadow:0 0 12px 0 var(--c)}
+.lv-tile.lv-g .lv-bar>div{background:linear-gradient(90deg,#4ade80,#16a34a)}
+.lv-tile.lv-r .lv-bar>div{background:linear-gradient(90deg,#f87171,#dc2626)}
 
 /* ---- Panels (record card, Games list, game detail) ---- */
-.lv-gpanel.lv-gpanel{background:rgba(255,255,255,.74);border-color:rgba(255,255,255,.85);box-shadow:0 22px 50px -18px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.9);animation:lv-rise .7s cubic-bezier(.2,.7,.2,1) both}
+.lv-gpanel.lv-gpanel{background:rgba(255,255,255,.74);border-color:rgba(255,255,255,.85);box-shadow:0 1px 2px rgba(17,26,46,.06),inset 0 1px 0 rgba(255,255,255,.9);animation:lv-rise .7s cubic-bezier(.2,.7,.2,1) both}
 .lv-gpanel.lv-late{animation-delay:.5s}
-.lv-gpanel .lv-ico{background:radial-gradient(circle,#fff 0,#e3ecff 72%);box-shadow:0 0 0 1px #cadbfb,0 6px 14px -4px rgba(37,99,235,.5),0 0 18px rgba(59,130,246,.4)}
+.lv-gpanel .lv-ico{background:radial-gradient(circle,#fff 0,#e3ecff 72%);box-shadow:0 0 0 1px #cadbfb}
 .lv-gpanel h2{font-weight:700}
 
 /* Games list cards: a soft blue-white sheen; the selected one gets the blue accent bar and glow */
-.lv-gcard.lv-gcard{position:relative;background:linear-gradient(225deg,rgba(255,255,255,.8),rgba(255,255,255,0) 28%),linear-gradient(180deg,#fff,#f1f5fc);box-shadow:inset 0 1px 0 #fff,0 8px 18px -14px rgba(37,99,235,.45)}
-.lv-gcard.lv-on{background:linear-gradient(225deg,rgba(255,255,255,.8),rgba(255,255,255,0) 28%),linear-gradient(180deg,#fff,#e6effd);border-color:rgba(37,99,235,.7);box-shadow:0 0 0 1px #2563eb,0 0 0 4px rgba(37,99,235,.1),0 14px 28px -14px rgba(37,99,235,.6)}
-.lv-gcard.lv-on::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(90deg,#3b82f6 4px,transparent 4px);filter:drop-shadow(0 0 6px #2563eb);pointer-events:none}
+.lv-gcard.lv-gcard{position:relative;background:linear-gradient(225deg,rgba(255,255,255,.8),rgba(255,255,255,0) 28%),linear-gradient(180deg,#fff,#f1f5fc);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
+.lv-gcard.lv-on{background:linear-gradient(225deg,rgba(255,255,255,.8),rgba(255,255,255,0) 28%),linear-gradient(180deg,#fff,#e6effd);border-color:rgba(37,99,235,.7);box-shadow:0 0 0 1px #2563eb,0 1px 2px rgba(17,26,46,.06)}
+.lv-gcard.lv-on::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(90deg,#3b82f6 4px,transparent 4px);pointer-events:none}
 .lv-live.lv-live{background:linear-gradient(180deg,#ffe3e5,#fbc9ce);color:#dc2626;font-weight:800;box-shadow:inset 0 1px 0 #fff}
 
 /* Game detail: team groups get the sheen, their own colour as the accent bar, and a soft shadow */
-.lv-team{position:relative;background-image:linear-gradient(225deg,rgba(255,255,255,.75),rgba(255,255,255,0) 26%);box-shadow:inset 0 1px 0 #fff,0 10px 22px -14px var(--bar,rgba(37,99,235,.5))}
+.lv-team{position:relative;background-image:linear-gradient(225deg,rgba(255,255,255,.75),rgba(255,255,255,0) 26%);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
 .lv-team::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(90deg,var(--bar,#2563eb) 4px,transparent 4px);pointer-events:none}
-.lv-next.lv-next{background:linear-gradient(180deg,#4b83f5,#1f55d6);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 10px 20px -8px rgba(37,99,235,.7)}
-.lv-prev.lv-prev{background:rgba(255,255,255,.7);border-color:rgba(255,255,255,.9);box-shadow:0 4px 10px -6px rgba(37,99,235,.4)}
+.lv-next.lv-next{background:linear-gradient(180deg,#4b83f5,#1f55d6);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 2px rgba(17,26,46,.06)}
+.lv-prev.lv-prev{background:rgba(255,255,255,.7);border-color:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(17,26,46,.06)}
 
 /* Live progress bar: glowing gradient fill on an inset track (no ball, no streak) */
 .lv-pbar.lv-pbar{overflow:visible;background:rgba(15,23,42,.1);box-shadow:inset 0 1px 2px rgba(15,23,42,.12)}
-.lv-pbar>div{background:linear-gradient(90deg,#f87171,#dc2626);box-shadow:0 0 12px #ef4444}
+.lv-pbar>div{background:linear-gradient(90deg,#f87171,#dc2626)}
 
 /* ---- Dark theme: today's surfaces stay; bars, glows and pills carry over ---- */
-.dark .lv-tile.lv-g,.dark .lv-tile.lv-g.lv-hi{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.4);box-shadow:0 8px 18px -12px rgba(22,163,74,.55)}
+.dark .lv-tile.lv-g,.dark .lv-tile.lv-g.lv-hi{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.4);box-shadow:none}
 .dark .lv-tile.lv-g.lv-hi{border-color:rgba(52,211,153,.7)}
-.dark .lv-tile.lv-r,.dark .lv-tile.lv-r.lv-lo{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.4);box-shadow:0 8px 18px -12px rgba(220,38,38,.5)}
+.dark .lv-tile.lv-r,.dark .lv-tile.lv-r.lv-lo{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.4);box-shadow:none}
 .dark .lv-tile.lv-r.lv-lo{border-color:rgba(248,113,113,.7)}
 .dark .lv-tile.lv-n{background:rgba(255,255,255,.04);box-shadow:none}
 .dark .lv-tile.lv-on{box-shadow:0 0 0 2px #60a5fa}
 .dark .lv-cell .lv-tile .lv-rec{text-shadow:none}
 .dark .lv-tile::after{background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.12) 50%,transparent 65%)}
 .dark .lv-tile .lv-bar,.dark .lv-pbar.lv-pbar{background:rgba(255,255,255,.1);box-shadow:none}
-.dark .lv-gpanel.lv-gpanel{background:rgba(20,32,58,.55);border-color:rgba(140,170,220,.18);box-shadow:0 6px 22px rgba(0,0,0,.35)}
-.dark .lv-gpanel .lv-ico{background:rgba(59,130,246,.15);box-shadow:0 0 0 1px rgba(96,165,250,.35),0 0 14px rgba(59,130,246,.35)}
+.dark .lv-gpanel.lv-gpanel{background:rgba(20,32,58,.55);border-color:rgba(140,170,220,.18);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.dark .lv-gpanel .lv-ico{background:rgba(59,130,246,.15);box-shadow:0 0 0 1px rgba(96,165,250,.35)}
 .dark .lv-gcard.lv-gcard{background:rgba(255,255,255,.04);box-shadow:none}
-.dark .lv-gcard.lv-on{background:rgba(59,130,246,.1);border-color:#60a5fa;box-shadow:0 0 0 1px #60a5fa,0 0 0 4px rgba(96,165,250,.12)}
+.dark .lv-gcard.lv-on{background:rgba(59,130,246,.1);border-color:#60a5fa;box-shadow:0 0 0 1px #60a5fa}
 .dark .lv-live.lv-live{background:rgba(239,68,68,.15);color:#f87171;box-shadow:none}
 .dark .lv-team{background-image:none;box-shadow:none}
 .dark .lv-prev.lv-prev{background:rgb(var(--card));border-color:rgb(var(--border));box-shadow:none}
@@ -80,5 +80,5 @@
 .lv-next.lv-next:not(:disabled):hover{filter:brightness(.94)}
 
 /* Games list O/U box */
-.lv-gcard .live-ou{background:linear-gradient(180deg,#fff,#e9f0fc);box-shadow:inset 0 1px 0 #fff,0 4px 10px -6px rgba(37,99,235,.5)}
+.lv-gcard .live-ou{background:linear-gradient(180deg,#fff,#e9f0fc);box-shadow:inset 0 1px 0 #fff,0 1px 2px rgba(17,26,46,.06)}
 .dark .lv-gcard .live-ou{background:rgba(110,155,214,.16);box-shadow:none}
