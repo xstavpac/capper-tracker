@@ -11,7 +11,7 @@
 // the link doesn't hold all of them, that is said outright, per game.
 import { useEffect, useState } from "react";
 import { LABEL, PILL_OUTLINE, PILL_PRIMARY } from "@/components/parlay/parlay-controls";
-import { notSentDisplay, type FanDuelLegResult, type FanDuelLinkResponse, type FanDuelSentLine } from "@/lib/parlay/fanduel-link";
+import { fanDuelSelectionText, notSentDisplay, type FanDuelLegResult, type FanDuelLinkResponse, type FanDuelSentLine } from "@/lib/parlay/fanduel-link";
 import { incompleteSameGameGroups } from "@/lib/parlay/same-game-display";
 
 // gameId / gameLabel are what group legs by game for the same-game notice; a
@@ -30,14 +30,30 @@ export const formatLineDistance = (delta: number) => Math.abs(delta).toFixed(1) 
 
 const isSent = (leg: FanDuelLegResult) => leg.status === "matched" || leg.status === "adjusted";
 
+// A red flag when FanDuel's runner is not the pick's team. The server never sends such a leg; this makes one
+// impossible to miss if it ever reached the panel.
+function SideMismatch({ leg }: { leg: FanDuelLegResult }) {
+  if (!leg.sideCheck || leg.sideCheck.ok) return null;
+  return (
+    <p role="alert" className="mt-0.5 text-xs font-semibold text-red-700 dark:text-red-300">
+      <span className="mr-1.5 whitespace-nowrap rounded-full bg-red-100 px-1.5 py-0.5 dark:bg-red-500/15">Wrong side</span>
+      FanDuel's selection is {leg.sideCheck.runner}, not {leg.sideCheck.pickTeam}
+    </p>
+  );
+}
+
 function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string }) {
   if (leg.status === "matched" || leg.status === "adjusted") {
     const moved = leg.fanDuelOdds !== null && leg.pickOdds !== null && leg.fanDuelOdds !== leg.pickOdds;
     const line = leg.sentLine;
+    // FanDuel's own runner and market - what is going into the betslip - with the pick's label under it.
+    const selection = leg.fanDuelSelection ? fanDuelSelectionText(leg.fanDuelSelection) : null;
     return (
       <li className="flex items-baseline justify-between gap-3 py-1.5">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{betDetail}</p>
+          <p className="text-[13px] font-medium text-foreground [overflow-wrap:anywhere]">{selection ?? betDetail}</p>
+          {selection && <p className="text-xs font-medium text-muted-foreground [overflow-wrap:anywhere]">Your pick: {betDetail}</p>}
+          <SideMismatch leg={leg} />
           {line && (
             <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
               {line.quality === "worse" && (
@@ -74,6 +90,7 @@ function LegLine({ leg, betDetail }: { leg: FanDuelLegResult; betDetail: string 
       <p className="text-xs font-medium text-muted-foreground">
         <span className="rounded-full bg-muted px-1.5 py-0.5 font-semibold">{notSent.label}</span> {notSent.reason}
       </p>
+      <SideMismatch leg={leg} />
     </li>
   );
 }
