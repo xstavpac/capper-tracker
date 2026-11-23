@@ -3,14 +3,18 @@
 // client state. Defaults are omitted from the URL to keep links short.
 import type { ScorecardWindow } from "@/server/data/stats";
 
-export const RANGE_OPTIONS: { key: string; window: ScorecardWindow; label: string }[] = [
-  { key: "all", window: "ALL", label: "All time" },
-  { key: "today", window: "TODAY", label: "Today" },
-  { key: "yesterday", window: "YESTERDAY", label: "Yesterday" },
-  { key: "7d", window: "LAST_7", label: "Last 7 days" },
-  { key: "30d", window: "LAST_30", label: "Last 30 days" },
-  { key: "60d", window: "LAST_60", label: "Last 60 days" },
+// `label` is the dropdown's; `pill` is the short text on the banner's single-row pills.
+export const RANGE_OPTIONS: { key: string; window: ScorecardWindow; label: string; pill: string }[] = [
+  { key: "all", window: "ALL", label: "All time", pill: "All time" },
+  { key: "today", window: "TODAY", label: "Today", pill: "Today" },
+  { key: "yesterday", window: "YESTERDAY", label: "Yesterday", pill: "Yesterday" },
+  { key: "7d", window: "LAST_7", label: "Last 7 days", pill: "7 days" },
+  { key: "30d", window: "LAST_30", label: "Last 30 days", pill: "30 days" },
 ];
+
+// 30 days is the longest /cappers range. A bookmarked or shared "?range=60d" link lands on 30 days
+// (not All time). The 60-day ScorecardWindow itself stays: the capper detail page still uses it.
+const RETIRED_RANGES: Record<string, string> = { "60d": "30d" };
 
 export const MIN_PICKS_OPTIONS = [0, 5, 10, 20, 50];
 export const DEFAULT_MIN_PICKS = 10;
@@ -44,7 +48,9 @@ type Raw = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export function parseCappersParams(raw: Raw, leagues: string[]): CappersParams {
-  const rangeOpt = RANGE_OPTIONS.find((r) => r.key === first(raw.range)) ?? RANGE_OPTIONS[0];
+  const rangeRaw = first(raw.range);
+  const rangeKey = (rangeRaw !== undefined && RETIRED_RANGES[rangeRaw]) || rangeRaw;
+  const rangeOpt = RANGE_OPTIONS.find((r) => r.key === rangeKey) ?? RANGE_OPTIONS[0];
   const minRaw = Number(first(raw.min));
   const sort = SORT_OPTIONS.find((s) => s.key === first(raw.sort))?.key ?? "roi";
   const league = first(raw.league);
