@@ -15,8 +15,8 @@
 //
 // The price shown for a started game is still the pregame snapshot price.
 // startedPriceLabel says what that price is: an estimate while the score is
-// unchanged (0-0, score present), otherwise a pregame line awaiting a live
-// price. A missing score counts as changed, never as 0-0.
+// unchanged (0-0, score present), otherwise just the pregame line (live pricing
+// is not built yet). A missing score counts as changed, never as 0-0.
 //
 // Pure and client-safe: the state arrives from the cached score feed with the
 // snapshot (server/data/live-state.ts); nothing here reads a database.
@@ -146,7 +146,7 @@ export function startedStateLine(leagueName: string, state: GameLiveState | null
 }
 
 export const PRICE_EST_UNCHANGED = "est. · score unchanged";
-export const PRICE_PREGAME_PENDING = "pregame line · live price coming";
+export const PRICE_PREGAME_LINE = "pregame line";
 
 // What the pregame price on a started game is. "unchanged" only on a present 0-0
 // (or a delayed start the feed still calls preview); a missing score is "changed".
@@ -158,5 +158,5 @@ export function startedPriceKind(game: { gameStatus?: GameClock["gameStatus"]; l
 }
 
 export function startedPriceLabel(game: { gameStatus?: GameClock["gameStatus"]; liveState?: GameLiveState | null }): string {
-  return startedPriceKind(game) === "unchanged" ? PRICE_EST_UNCHANGED : PRICE_PREGAME_PENDING;
+  return startedPriceKind(game) === "unchanged" ? PRICE_EST_UNCHANGED : PRICE_PREGAME_LINE;
 }
