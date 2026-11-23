@@ -124,8 +124,8 @@ async function main() {
       return;
     }
 
-    // The picks read is #301's statement plus the one "playerName" column, byte for byte.
-    const fixture = STATEMENT_FIXTURES.find((f) => f.name === "/picks date range, 19 columns (getFilteredPicksForUser, #301 + playerName)");
+    // The picks read is #301's statement plus the "playerName" and "enteredLive" columns, byte for byte.
+    const fixture = STATEMENT_FIXTURES.find((f) => f.name === "/picks date range, 20 columns (getFilteredPicksForUser, #301 + playerName + enteredLive)");
     const picksReads = captured.flat().filter((s) => /^SELECT "picks"\."id", "picks"\."capperId"/.test(s) && /"picks"\."gameTime" >= /.test(s));
     // One picks read per request. Without a capper or status filter it is the
     // fixture itself; the capper + status request adds those two conditions.

@@ -468,6 +468,13 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
+    "name": "/picks date range, 20 columns (getFilteredPicksForUser, #301 + playerName + enteredLive)",
+    "run": "2026-11-23 enteredLive",
+    "sql": "SELECT \"public\".\"picks\".\"id\", \"public\".\"picks\".\"capperId\", \"public\".\"picks\".\"sportId\", \"public\".\"picks\".\"homeTeam\", \"public\".\"picks\".\"awayTeam\", \"public\".\"picks\".\"betType\"::text, \"public\".\"picks\".\"betDetail\", \"public\".\"picks\".\"odds\", \"public\".\"picks\".\"line\", \"public\".\"picks\".\"period\"::text, \"public\".\"picks\".\"units\", \"public\".\"picks\".\"gameTime\", \"public\".\"picks\".\"status\"::text, \"public\".\"picks\".\"gradedAt\", \"public\".\"picks\".\"pickedSide\"::text, \"public\".\"picks\".\"propMarket\"::text, \"public\".\"picks\".\"playerName\", \"public\".\"picks\".\"gameNumber\", \"public\".\"picks\".\"category\", \"public\".\"picks\".\"enteredLive\" FROM \"public\".\"picks\" WHERE (\"public\".\"picks\".\"userId\" = $1 AND \"public\".\"picks\".\"gameTime\" >= $2 AND \"public\".\"picks\".\"gameTime\" < $3) ORDER BY \"public\".\"picks\".\"gameTime\" DESC OFFSET $4",
+    "expectLabel": "/picks",
+    "expectFlags": []
+  },
+  {
     "name": "grading sport lookup, id only (getSportIdByName, #311)",
     "run": "aacbcd6",
     "sql": "SELECT \"public\".\"sports\".\"id\" FROM \"public\".\"sports\" WHERE (\"public\".\"sports\".\"name\" = $1 AND 1=1) LIMIT $2 OFFSET $3",

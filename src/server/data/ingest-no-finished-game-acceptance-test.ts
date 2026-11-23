@@ -136,7 +136,11 @@ function main() {
   expect("Telegram ingest: the import runs with realTimeIngest: true", /runCatalogImportForUser\([\s\S]*?realTimeIngest: true,[\s\S]*?\}\);/.test(telegram), true);
   expect("Telegram ingest: review drafts are built with realTimeIngest: true", telegram.includes("buildReviewDrafts(result.questions, { realTimeIngest: true })"), true);
   const orchestrator = src("catalog-import-orchestrator.ts");
-  expect("orchestrator passes the hook through to importPicksForUser", orchestrator.includes("{ realTimeIngest: hooks.realTimeIngest === true }"), true);
+  expect(
+    "orchestrator passes the hook through to importPicksForUser",
+    /importPicksForUser\([^;]*?\{\s*realTimeIngest: hooks\.realTimeIngest === true[,\s]/.test(orchestrator),
+    true
+  );
   const core = src("bulk-import-core.ts");
   expect("both lookups (first try and retry) carry the rule", (core.match(/lookupGame\(liveSportKey, nicknames, item\.gameNumber, getOdds, realTimeIngest\)/g) ?? []).length, 2);
   expect("lookupGame hands it to both resolvers", (core.match(/excludeFinal \}\)/g) ?? []).length >= 2, true);

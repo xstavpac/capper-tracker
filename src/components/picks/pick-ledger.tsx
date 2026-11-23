@@ -9,6 +9,7 @@ import { GREEN, RED, TINTS } from "@/components/dashboard/panel-shell";
 import { updatePickStatusAction, deletePickAction, loadOlderPicksAction, reloadOlderPickRowAction } from "@/server/actions/picks";
 import type { LedgerSection, PickPhase } from "@/lib/pick-display";
 import { groupByDay, olderDayHeading, olderDayKey, type OlderPicksCursor, type OlderPicksQuery } from "@/lib/older-picks";
+import { LiveEntryChip } from "@/components/picks/live-entry-chip";
 
 // Serializable row model built on the server (page.tsx) - all display strings
 // are precomputed there via lib/pick-display so this file is layout only.
@@ -31,6 +32,7 @@ export type LedgerRow = {
   resultUnitsText: string | null; // "+0.91u" / "-1u" for WIN/LOSS
   consensus: string | null;
   consensusHref: string | null; // the game's /live page, when today's slate has it
+  enteredLive: boolean; // imported while the game was in progress (Pick.enteredLive) - the "Live entry" chip
 };
 
 // A section's own record and net units, shown in its header (Settled only).
@@ -263,6 +265,7 @@ function Row({ row, showDate, onChanged, n }: { row: LedgerRow; showDate: boolea
           <span className="rounded-full bg-[#EEF0F4] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none tracking-[0.05em] text-[#5B6275] dark:bg-muted dark:text-muted-foreground">
             {row.tag}
           </span>
+          {row.enteredLive && <LiveEntryChip />}
         </div>
         <div className={"mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-medium " + MUTED}>
           <span className="pk-av flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#E6ECFF] text-[9px] font-bold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">

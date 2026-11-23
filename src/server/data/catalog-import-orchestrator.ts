@@ -30,6 +30,7 @@ import {
 import {
   runTeamScheduleCheck,
   runTeamWideScheduleCheck,
+  runTeamInProgressCheck,
   runLeagueActivityCheck,
   runCollegeLineCheck,
   runCapperLeagueHistory,
@@ -39,6 +40,7 @@ import { getImportFeedTeams } from "@/server/data/import-feed-teams";
 import { getCachedNflRosterFullNames } from "@/server/data/nfl-roster-cache";
 import { getCapperRoster } from "@/server/data/capper-roster";
 import { recordImportSkippedLines, parseSkippedLineEntries, type SkippedLineEntry } from "@/server/data/import-skipped-lines";
+import type { DedupPickRow } from "@/server/data/pick-dedup";
 
 export type CatalogQuestion =
   // "Cardinals - which league?" The form shows `options` (label / sport / nickname) as buttons.
@@ -50,7 +52,10 @@ export type CatalogQuestion =
   // "No number in this total - use the market line?" The form shows the proposed line.
   | { type: "MISSING_TOTAL_LINE"; pick: ParsedPick; inferredLine: number; reason: "missing" | "garbled" }
   // "Did you mean <existing capper>?" Answers: use the suggestion, or "no, genuinely new".
-  | { type: "CAPPER_FUZZY"; rawName: string; suggestion: string; pick: ParsedPick };
+  | { type: "CAPPER_FUZZY"; rawName: string; suggestion: string; pick: ParsedPick }
+  // "Game is 3 days away - is this the right game?" Fully matched and priced (row): a yes saves it as is. Raised only
+  // by the import itself (importPicksForUser's holdFarFuture).
+  | { type: "FAR_FUTURE_GAME"; pick: ParsedPick; row: DedupPickRow };
 
 export type CatalogImportHooks = {
   // Applied to the parsed picks BEFORE ambiguous teams are auto-resolved (ingest uses it to prefer an allowed league).
@@ -110,6 +115,7 @@ export function autoResolveAmbiguousPicksForServer(
   return runAmbiguousHierarchy(picks, priorChoices, {
     runScheduleCheck: runTeamScheduleCheck,
     runWideScheduleCheck: runTeamWideScheduleCheck,
+    runInProgressCheck: runTeamInProgressCheck,
     runLeagueActivityCheck: (sports, referenceDate) => runLeagueActivityCheck(sports, referenceDate.toISOString()),
     runCollegeLineCheck,
     // Without a user there is no history to read.
@@ -239,6 +245,8 @@ export async function runCatalogImportForUser(
   const totalFlags = afterFuzzy.length > 0 ? await previewMissingTotalLinesCore(afterFuzzy.map((p) => toItem(p, p.capperName))) : {};
 
   const toImport: BulkImportItem[] = [];
+  // Parallel to toImport: the parsed pick each item came from (a held far-future item becomes a question about it).
+  const toImportPicks: ParsedPick[] = [];
   const skippedDuplicates: { capperName: string; sportName: string; raw: string }[] = [];
   afterFuzzy.forEach((p, i) => {
     if (flags[i]) {
@@ -247,6 +255,7 @@ export async function runCatalogImportForUser(
       questions.push({ type: "MISSING_TOTAL_LINE", pick: p, inferredLine: totalFlags[i].inferredLine, reason: totalFlags[i].reason });
     } else {
       toImport.push(toItem(p, p.capperName));
+      toImportPicks.push(p);
     }
   });
 
@@ -256,7 +265,12 @@ export async function runCatalogImportForUser(
   const ambiguityLog = resolved.logs.map((l) => ({ key: l.ambiguousName, sport: l.resolvedSport, method: l.method, count: l.pickCount }));
   const importResult =
     toImport.length > 0 || skippedDuplicates.length > 0
-      ? await importPicksForUser(userId, toImport, skippedDuplicates, ambiguityLog, { realTimeIngest: hooks.realTimeIngest === true })
+      ? await importPicksForUser(userId, toImport, skippedDuplicates, ambiguityLog, {
+          realTimeIngest: hooks.realTimeIngest === true,
+          // Nobody is watching this import: a game days away is never saved without a person's yes.
+          holdFarFuture: true,
+          onFarFutureHeld: (i, row) => questions.push({ type: "FAR_FUTURE_GAME", pick: toImportPicks[i], row }),
+        })
       : null;
 
   return {

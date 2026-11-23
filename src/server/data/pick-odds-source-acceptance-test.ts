@@ -94,7 +94,11 @@ check("a stated price is never replaced by the feed's", resolvePickPrice({ odds:
   check("wiring: nothing else in the resolver assigns odds", /(^|[^.\w])odds\s*=[^=]/m.test(resolver.replace("const { odds, oddsSource } = resolvePickPrice(item, feedPrice);", "")), false);
   // The sixth is the NBA prop price (nba-prop-odds.ts).
   check("wiring: six feed lookups set feedPrice", (resolver.match(/feedPrice = (\w+Price|nba\.price);/g) ?? []).length, 6);
-  check("wiring: the import row carries oddsSource", /toInsert\.push\(\{[^}]*\bodds,\n\s*oddsSource,/.test(src), true);
+  check(
+    "wiring: the import row carries oddsSource",
+    /const row: DedupPickRow = \{[^}]*\bodds,\n\s*oddsSource,/.test(src) && /toInsert\.push\(row\);/.test(src),
+    true
+  );
 }
 
 // ---- 5. database ----

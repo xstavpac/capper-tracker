@@ -126,6 +126,8 @@ export type PickInsertData = {
   oddsCapturedAt?: Date | null;
   oddsBook?: string | null;
   oddsNullReason?: string | null;
+  // Set by the bulk import when the matched game was already in progress (Pick.enteredLive). Omitted = false.
+  enteredLive?: boolean;
   // Only ever set by pick-recipients.ts, on a copy delivered to a recipient (never on a user's own pick).
   isRecipientCopy?: boolean;
   sourcePickId?: string | null;

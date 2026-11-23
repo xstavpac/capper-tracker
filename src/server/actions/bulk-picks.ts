@@ -63,7 +63,9 @@ export async function bulkImportPicksAction(
   ambiguity: unknown = []
 ): Promise<BulkImportResult> {
   const user = await requireUser();
-  return importPicksForUser(user.id, items, skippedDuplicates, ambiguity);
+  // A pick matched to a game days away is saved only with the review screen's "Yes, this game" on it
+  // (confirmFarFuture); otherwise it comes back in farFutureHeld.
+  return importPicksForUser(user.id, items, skippedDuplicates, ambiguity, { holdFarFuture: true });
 }
 
 // ---- MLP (moneyline parlay) import ----

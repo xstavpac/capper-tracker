@@ -315,6 +315,8 @@ export const FILTERED_PICK_SELECT = {
   playerName: true,
   gameNumber: true,
   category: true,
+  // The ledger row's "Live entry" chip (Pick.enteredLive): one boolean per row.
+  enteredLive: true,
 } as const satisfies Prisma.PickSelect;
 
 export async function getFilteredPicksForUser(userId: string, filters: PickFilters) {

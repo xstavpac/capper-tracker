@@ -91,5 +91,6 @@ export function toLedgerRow(
     resultUnitsText: decidedUnits,
     consensus: ctx.consensus,
     consensusHref: ctx.consensusHref,
+    enteredLive: p.enteredLive,
   };
 }

@@ -129,21 +129,34 @@ async function main() {
   check("only football that day -> NCAAF, no prompt", await one("Duke -4.5", [DUKE_NCAAF]), "NCAAF");
   check("basketball tonight, football posted later: the tiebreaker keeps asking", await one("Duke -4.5", [DUKE_NCAAB], [DUKE_NCAAB, DUKE_NCAAF]), "PROMPT NCAAF/NCAAB");
 
-  // ---- A game already started or final doesn't count, for a shared school ----
-  // `games`: [sport, start]. The fake answers the plain question with every game and
-  // the not-started one with games after `now`, like the real checker.
+  // ---- A game already final doesn't count, for a shared school; a game in progress decides it ----
+  // `games`: [sport, start]. A fake game lasts 3 hours: final once that has passed, in progress
+  // before. The fake answers the plain question with every game, the upcomingOnly one with every
+  // game not yet final, and the in-progress check with the game under way, like the real checkers.
+  const GAME_MS = 3 * 3600000;
+  const isFinal = (start: string, now: Date) => Date.parse(start) + GAME_MS <= now.getTime();
+  const isLive = (start: string, now: Date) => Date.parse(start) <= now.getTime() && !isFinal(start, now);
   const timed = (games: [string, string][], now: Date): ScheduleChecker => async (queries) =>
     Object.fromEntries(
       queries.map((q) => [
         q.nickname + "|" + q.sport,
-        q.nickname === "duke blue devils" && games.some(([sport, start]) => sport === q.sport && (!q.upcomingOnly || Date.parse(start) > now.getTime())),
+        q.nickname === "duke blue devils" && games.some(([sport, start]) => sport === q.sport && (!q.upcomingOnly || !isFinal(start, now))),
       ])
+    );
+  const inProgress = (games: [string, string][], now: Date): ScheduleChecker => async (queries) =>
+    Object.fromEntries(
+      queries.map((q) => [q.nickname + "|" + q.sport, q.nickname === "duke blue devils" && games.some(([sport, start]) => sport === q.sport && isLive(start, now))])
     );
   const SAT_MORNING = new Date("2026-11-14T15:00:00Z");
   const timedOne = async (line: string, games: [string, string][], now = SAT_MORNING) => {
     const log = console.log;
     console.log = () => {};
-    const res = await runAmbiguousHierarchy(parse([line]).picks, {}, { runScheduleCheck: timed(games, now), runWideScheduleCheck: timed(games, now), now });
+    const res = await runAmbiguousHierarchy(parse([line]).picks, {}, {
+      runScheduleCheck: timed(games, now),
+      runWideScheduleCheck: timed(games, now),
+      runInProgressCheck: inProgress(games, now),
+      now,
+    });
     console.log = log;
     return outcome(res.picks[0]);
   };
@@ -151,7 +164,9 @@ async function main() {
   check("football Sat, basketball Sun, both upcoming -> still a prompt", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T19:30:00Z"], ["NCAAB", "2026-11-15T21:00:00Z"]]), "PROMPT NCAAF/NCAAB");
   check("both upcoming the same day -> still a prompt", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T17:00:00Z"], ["NCAAB", "2026-11-15T01:00:00Z"]]), "PROMPT NCAAF/NCAAB");
   check("both final -> falls back to every game, as before: still a prompt, not dropped", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T01:00:00Z"], ["NCAAB", "2026-11-14T00:30:00Z"]]), "PROMPT NCAAF/NCAAB");
-  check("a game already under way counts as started -> the other league", await timedOne("Duke -4.5", [["NCAAB", "2026-11-14T14:30:00Z"], ["NCAAF", "2026-11-14T19:30:00Z"]]), "NCAAF");
+  // Changed 2026-11-23: a game under way used to count as started, sending this line to the other league.
+  check("a game under way decides it -> that game's league", await timedOne("Duke -4.5", [["NCAAB", "2026-11-14T14:30:00Z"], ["NCAAF", "2026-11-14T19:30:00Z"]]), "NCAAB");
+  check("a football game under way, basketball tonight -> NCAAF", await timedOne("Duke -4.5", [["NCAAF", "2026-11-14T13:30:00Z"], ["NCAAB", "2026-11-15T00:00:00Z"]]), "NCAAF");
   const asked: boolean[] = [];
   const recording: ScheduleChecker = async (qs) => {
     qs.forEach((q) => asked.push(Boolean(q.upcomingOnly)));

@@ -60,12 +60,18 @@ export async function ingestTelegramBatch(input: IngestBatchInput, config: Inges
     const drafts = await buildReviewDrafts(result.questions, { realTimeIngest: true });
 
     const imported = result.importResult?.success ? result.importResult.imported : 0;
-    // Lines that were lost for a reason nobody chose (as opposed to a filter or a duplicate doing its job).
+    // Lines that were lost for a reason nobody chose (as opposed to a filter or a duplicate doing its job). A pick the
+    // import held for a far-future game is in the import's own `skipped`, but it is not lost: it is one of the review
+    // items counted in pendingReview below, so it is taken out here and counted once.
     const unexpected =
       result.unresolvedLines.length +
       result.noCapperLines.length +
       result.heldParlays.length +
-      (result.importResult ? (result.importResult.success ? result.importResult.skipped : 1) : 0);
+      (result.importResult
+        ? result.importResult.success
+          ? result.importResult.skipped - result.importResult.farFutureHeld.length
+          : 1
+        : 0);
     const skipped = unexpected + result.duplicatesSkipped + result.hookSkipped;
     const pendingReview = drafts.length;
 

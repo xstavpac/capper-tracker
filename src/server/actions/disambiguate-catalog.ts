@@ -4,6 +4,7 @@ import { requireUser } from "@/server/auth";
 import {
   runTeamScheduleCheck,
   runTeamWideScheduleCheck,
+  runTeamInProgressCheck,
   runLeagueActivityCheck,
   runCollegeLineCheck,
   runCapperLeagueHistory,
@@ -24,6 +25,11 @@ export async function checkAmbiguousTeamSchedules(queries: ScheduleCheckQuery[])
 export async function checkAmbiguousTeamWideSchedules(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
   await requireUser();
   return runTeamWideScheduleCheck(queries);
+}
+
+export async function checkAmbiguousTeamInProgress(queries: ScheduleCheckQuery[]): Promise<Record<string, boolean>> {
+  await requireUser();
+  return runTeamInProgressCheck(queries);
 }
 
 export async function checkAmbiguousLeagueActivity(sports: string[], referenceIso: string): Promise<Record<string, boolean>> {

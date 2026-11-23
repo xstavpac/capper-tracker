@@ -2154,7 +2154,56 @@ function isConfirmedMissingPartnerLeg(only: ScoreGame, gameNumber: 1 | 2 | null)
 //
 // `finishedOnly` is set only by a real-time ingest lookup (excludeFinal) that found nothing because every game the
 // team had in the window was already final: the caller logs "already final when posted" instead of "no game".
-export type ScheduleCandidateResult = { game: ScoreGame | null; doubleheaderBothLegsFinal: boolean; finishedOnly?: boolean };
+//
+// `skippedCurrent` is diagnostics only (resolveGameAndOdds logs it; nothing decides on it): set when a game was
+// matched but it is NOT the team's current score-feed game - the one in progress at referenceTime, else the latest
+// one already final by then on the same slate day. That is the "the intended game was live or just finished and the
+// matcher rolled to another one" case, logged so its frequency is visible.
+export type ScheduleCandidateResult = {
+  game: ScoreGame | null;
+  doubleheaderBothLegsFinal: boolean;
+  finishedOnly?: boolean;
+  skippedCurrent?: { homeTeam: string; awayTeam: string; commenceTime: string; status: ScoreGame["status"] };
+};
+
+// A game in progress at `at`: the score feed says live, or still says preview although its start has passed (the
+// feed lags a few minutes at first pitch / tip-off). Bounded so a stale preview row from hours ago never reads as
+// live. Final, postponed and cancelled are never in progress.
+const IN_PROGRESS_PREVIEW_GRACE_MS = 6 * 3600000;
+export function isInProgressAt(g: { status?: string; commenceTime: string }, at: Date): boolean {
+  if (g.status === "live") return true;
+  if (g.status !== "preview") return false;
+  const start = Date.parse(g.commenceTime);
+  return start <= at.getTime() && at.getTime() - start <= IN_PROGRESS_PREVIEW_GRACE_MS;
+}
+
+// The team's current game in the score feed (see ScheduleCandidateResult.skippedCurrent): in progress at
+// `referenceTime`, else the latest one already final by then on the same slate day (a final from an earlier day is
+// the team's LAST game, and rolling past it to the next one is the normal case, not worth a log line). null when
+// the team has neither.
+function currentScoreGame(teamScores: ScoreGame[], referenceTime: Date): ScoreGame | null {
+  const live = teamScores.find((g) => isInProgressAt(g, referenceTime));
+  if (live) return live;
+  const finals = teamScores
+    .filter(
+      (g) =>
+        g.status === "final" &&
+        Date.parse(g.commenceTime) <= referenceTime.getTime() &&
+        sameSlateDay(new Date(g.commenceTime), referenceTime)
+    )
+    .sort((a, b) => Date.parse(b.commenceTime) - Date.parse(a.commenceTime));
+  return finals[0] ?? null;
+}
+
+function withSkippedCurrent(r: ScheduleCandidateResult, teamScores: ScoreGame[], referenceTime: Date): ScheduleCandidateResult {
+  if (!r.game) return r;
+  const current = currentScoreGame(teamScores, referenceTime);
+  if (!current || current === r.game || current.id === r.game.id) return r;
+  return {
+    ...r,
+    skippedCurrent: { homeTeam: current.homeTeam, awayTeam: current.awayTeam, commenceTime: current.commenceTime, status: current.status },
+  };
+}
 
 function noMatch(): ScheduleCandidateResult {
   return { game: null, doubleheaderBothLegsFinal: false };
@@ -2282,11 +2331,13 @@ export function resolveScheduleGameFromFeeds(
   const markFinishedOnly = (r: ScheduleCandidateResult): ScheduleCandidateResult =>
     rules.excludeFinal && !r.game && !r.doubleheaderBothLegsFinal && finishedScores.length > 0 ? { ...r, finishedOnly: true } : r;
 
+  const done = (r: ScheduleCandidateResult) => withSkippedCurrent(r, teamScores, referenceTime);
+
   const sameDayScores = fromScores.filter((g) => sameSlateDay(new Date(g.commenceTime), referenceTime));
-  if (sameDayScores.length > 0) return pickBestScheduleCandidate(sameDayScores, referenceTime, gameNumber);
+  if (sameDayScores.length > 0) return done(pickBestScheduleCandidate(sameDayScores, referenceTime, gameNumber));
 
   const scoresUpcoming = fromScores.filter((g) => g.status !== "final");
-  if (scoresUpcoming.length > 0) return pickBestScheduleCandidate(scoresUpcoming, referenceTime, gameNumber);
+  if (scoresUpcoming.length > 0) return done(pickBestScheduleCandidate(scoresUpcoming, referenceTime, gameNumber));
 
   const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g) && !isFinishedGame(g)).map(oddsGameToScheduleGame);
   const fromSchedule = scheduleGames.filter(
@@ -2297,9 +2348,9 @@ export function resolveScheduleGameFromFeeds(
       !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
   );
   const ahead = [...fromOdds, ...fromSchedule];
-  if (ahead.length > 0) return pickBestScheduleCandidate(ahead, referenceTime, gameNumber);
+  if (ahead.length > 0) return done(pickBestScheduleCandidate(ahead, referenceTime, gameNumber));
 
-  return markFinishedOnly(pickBestScheduleCandidate(fromScores, referenceTime, gameNumber));
+  return done(markFinishedOnly(pickBestScheduleCandidate(fromScores, referenceTime, gameNumber)));
 }
 
 // How far apart an odds/schedule listing and a finished score-feed game may start and still be the same game (the
@@ -2323,10 +2374,18 @@ export type ResolveGameOpts = {
   // Where the odds feed comes from - see createRequestOddsLoader. Defaults to
   // getOddsForSport.
   getOdds?: OddsLoader;
-  // Only a game that hasn't started by referenceTime counts: no live or final
-  // score-feed game, nothing whose start time has passed. The disambiguation
-  // check asks this for a shared college school (ambiguous-hierarchy.ts step 2).
+  // Only a game still to play or IN PROGRESS at referenceTime counts: a game
+  // already final is out. The disambiguation check asks this for a shared
+  // college school (ambiguous-hierarchy.ts step 2): Friday's final basketball
+  // game does not make a Saturday-morning line basketball. A game in progress
+  // still counts - a pick entered while a team is playing is about that game
+  // (until 2026-11-23 a started game was excluded too, so an Oklahoma State
+  // line entered during a live basketball game was filed as the football game).
   upcomingOnly?: boolean;
+  // Only a game in progress at referenceTime counts (isInProgressAt). The
+  // disambiguation hierarchy's in-progress check (step 2) asks this: a team
+  // with a game going on right now is the team a pick entered now is about.
+  inProgressOnly?: boolean;
   // Real-time ingest only (a Telegram message imported as it arrives - see telegram-ingest.ts): a game the score
   // feed already has as FINAL is never a candidate, at any step of resolveScheduleGameFromFeeds - not the same-day
   // step, not the last resort, and not as its odds-feed twin. The import runs when the message arrives, so "final
@@ -2335,8 +2394,10 @@ export type ResolveGameOpts = {
   excludeFinal?: boolean;
 };
 
-function notStartedBy(g: { commenceTime: string; status?: string }, referenceTime: Date): boolean {
-  return (g.status === undefined || g.status === "preview") && Date.parse(g.commenceTime) > referenceTime.getTime();
+// upcomingOnly's rule: not final. A score-feed game is live or preview (postponed / cancelled never reach a pool -
+// isUnplayed); an odds-feed game carries no status and is pregame by construction.
+function notFinal(g: { status?: string }): boolean {
+  return g.status !== "final";
 }
 
 // Async wrapper around resolveScheduleGameFromFeeds. The score feed is fetched
@@ -2370,13 +2431,25 @@ async function fetchFeedOrEmpty<T>(label: string, fetch: () => Promise<T[]>): Pr
 async function resolveScheduleGame(
   sportKey: string,
   matchesTeam: (g: { homeTeam: string; awayTeam: string }) => boolean,
-  { referenceTime = new Date(), nearTermOnly = false, gameNumber = null, getOdds = getOddsForSport, upcomingOnly = false, excludeFinal = false }: ResolveGameOpts
+  {
+    referenceTime = new Date(),
+    nearTermOnly = false,
+    gameNumber = null,
+    getOdds = getOddsForSport,
+    upcomingOnly = false,
+    inProgressOnly = false,
+    excludeFinal = false,
+  }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
   const teamMatches = (g: { homeTeam: string; awayTeam: string }) =>
-    matchesTeam(g) && (!upcomingOnly || notStartedBy(g as { homeTeam: string; awayTeam: string; commenceTime: string; status?: string }, referenceTime));
+    matchesTeam(g) &&
+    (!upcomingOnly || notFinal(g as { status?: string })) &&
+    // Every game handed in here (score, odds, schedule feeds) carries commenceTime; the parameter type is narrower.
+    (!inProgressOnly || isInProgressAt(g as typeof g & { status?: string; commenceTime: string }, referenceTime));
   const scoreGames = await fetchFeedOrEmpty("score", () => getLiveScoresForSport(sportKey));
 
-  if (nearTermOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);
+  // In progress means the score feed: the odds feed is pregame by construction.
+  if (nearTermOnly || inProgressOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);
 
   const scoreHasUpcoming = scoreGames.some(
     (g) => teamMatches(g) && g.status !== "final" && !isUnplayed(g.status) && withinResolveWindow(g.commenceTime, referenceTime)

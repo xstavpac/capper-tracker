@@ -57,13 +57,18 @@ import {
 //                    gets), and every later step works from what is left.
 //                    One candidate left resolves the key. Skipped entirely
 //                    when the lookup fails or finds no active league.
-//   2. schedule   - exactly one candidate has a game today (primary signal).
+//   2. schedule   - exactly one candidate has a game IN PROGRESS at import
+//                    time: that decides it outright, before anything else in
+//                    this step (a pick entered while a team is playing is about
+//                    that game). Otherwise exactly one candidate has a game today
+//                    (primary signal).
 //                    For a shared college school (a question between NCAAF and
-//                    NCAAB only), a game already started or final at import
-//                    time doesn't count, for this check and its tiebreaker: a
-//                    Saturday-morning "Duke -4.5" after Friday's basketball final
-//                    is the football game. If neither league has a game still to
-//                    play, the check reads every game as before.
+//                    NCAAB only), a game already final at import time doesn't
+//                    count, for this check and its tiebreaker: a Saturday-morning
+//                    "Duke -4.5" after Friday's basketball final is the football
+//                    game. A game in progress still counts. If neither league has
+//                    a game still to play or in progress, the check reads every
+//                    game as before.
 //   3. season      - calendar fallback: exactly one candidate is in season
 //                    (used only when the schedule check was inconclusive or
 //                    the feed errored out).
@@ -167,7 +172,7 @@ export type LeagueActivityChecker = (sports: string[], referenceDate: Date) => P
 export type ScheduleCheckQuery = {
   nickname: string;
   sport: string;
-  // Only a game not yet started counts (see step 2, for a shared college school).
+  // Only a game not yet final counts - still to play or in progress (see step 2, for a shared college school).
   upcomingOnly?: boolean;
 };
 
@@ -192,6 +197,10 @@ export type HierarchyDeps = {
   // inconclusive, so the near-term decision stands as it did before this
   // tiebreaker existed.
   runWideScheduleCheck: ScheduleChecker;
+  // Step 2's in-progress lookup: keyed like runScheduleCheck, true when that candidate has a game going on right
+  // now. Optional: without it no key is ever decided this way, exactly as before it existed. A rejection only
+  // switches this check off.
+  runInProgressCheck?: ScheduleChecker;
   // Step 1b's feed lookup. Optional: without it no candidate is ever dropped
   // for league inactivity, exactly as before the step existed.
   runLeagueActivityCheck?: LeagueActivityChecker;
@@ -523,7 +532,7 @@ export async function runAmbiguousHierarchy(
   const teamKeys = uniqueKeys.filter((key) => !isPlayerAmbiguityKey(key));
   const keysNeedingResolution = teamKeys.filter((key) => !decided.has(key));
   let scheduleResults: Record<string, boolean> = {};
-  // The same question asked of games not yet started, for a shared college
+  // The same question asked of games not yet final, for a shared college
   // school's key (see step 2 in the header). `upcomingKeys` is the keys it decides.
   let upcomingResults: Record<string, boolean> = {};
   const upcomingKeys = new Set<string>();
@@ -542,6 +551,8 @@ export async function runAmbiguousHierarchy(
     return (key: string, o: AmbiguousOption) => Boolean((upcomingKeys.has(key) ? u : p)[o.nickname + "|" + o.sport]);
   };
   let scheduleCheckFailed = false;
+  // Which candidates have a game in progress right now (deps.runInProgressCheck).
+  let inProgressResults: Record<string, boolean> = {};
   // Every key's own withGameToday subset, captured even when inconclusive
   // (0 or 2+ matches) - step 5's cross-check needs this partial evidence,
   // not just whether it was decisive enough to fully resolve the key.
@@ -554,10 +565,19 @@ export async function runAmbiguousHierarchy(
     const upcomingQueries = collegeKeys.flatMap((key) =>
       optionsFor(key).map((o) => ({ nickname: o.nickname, sport: o.sport, upcomingOnly: true }))
     );
+    // In-progress check, alongside: its own failure only switches it off.
+    const inProgressPromise: Promise<Record<string, boolean>> = deps.runInProgressCheck
+      ? deps.runInProgressCheck(queries).catch((err: unknown) => {
+          // eslint-disable-next-line no-console -- deliberate, user-requested audit trail
+          console.log("[catalog-disambiguation] in-progress check failed, skipping it:", err instanceof Error ? err.message : err);
+          return {} as Record<string, boolean>;
+        })
+      : Promise.resolve({});
     try {
-      [scheduleResults, upcomingResults] = await Promise.all([
+      [scheduleResults, upcomingResults, inProgressResults] = await Promise.all([
         deps.runScheduleCheck(queries),
         upcomingQueries.length > 0 ? deps.runScheduleCheck(upcomingQueries) : Promise.resolve({} as Record<string, boolean>),
+        inProgressPromise,
       ]);
       for (const key of collegeKeys) {
         if (optionsFor(key).some((o) => upcomingResults[o.nickname + "|" + o.sport])) upcomingKeys.add(key);
@@ -578,6 +598,15 @@ export async function runAmbiguousHierarchy(
     const tentativeWinners = new Map<string, AmbiguousOption>();
     for (const key of keysNeedingResolution) {
       const options = optionsFor(key);
+      // A game in progress decides outright: a pick entered while exactly one candidate is playing is about that
+      // game - no tiebreaker (another league's game later this week does not make it that one), no upcoming-only
+      // rule. Line plausibility still gates it below, as it gates every schedule decision.
+      const playingNow = scheduleCheckFailed ? [] : options.filter((o) => inProgressResults[o.nickname + "|" + o.sport]);
+      if (playingNow.length === 1) {
+        scheduleSignalByKey.set(key, playingNow);
+        decided.set(key, { choice: playingNow[0], method: "schedule", reason: "only " + playingNow[0].sport + " has a game in progress" });
+        continue;
+      }
       const withGameToday = options.filter((o) => sched(key, o));
       if (!scheduleCheckFailed) scheduleSignalByKey.set(key, withGameToday);
       if (withGameToday.length === 1) tentativeWinners.set(key, withGameToday[0]);

@@ -16,7 +16,9 @@ import {
   findFavoredSide,
   createRequestOddsLoader,
   pastSnapshotDateFor,
+  isInProgressAt,
   type OddsLoader,
+  type ScheduleCandidateResult,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
@@ -31,6 +33,7 @@ import { nhlAnytimeGoalSide } from "@/lib/nhl-prop";
 import { normalizeNbaNPlus, parseNbaProp } from "@/lib/nba-prop";
 import { threeWayWording } from "@/lib/nhl-three-way";
 import { isInvalidOdds } from "@/lib/pick-validation";
+import { isFarFutureGame, farFutureWarning } from "@/lib/far-future-game";
 import { TEAM_NICKNAME_CANONICAL, stripTeamNamesFromPlayerName } from "@/lib/parse-catalog";
 import { sideForNickname } from "@/lib/team-name-match";
 import { normalizeName } from "@/lib/fuzzy-match";
@@ -84,6 +87,9 @@ export type BulkImportItem = {
   // possible duplicate. Without it the server refuses a duplicate, whatever
   // the client did or did not flag (see insertPicksDeduped).
   overrideDuplicate?: boolean;
+  // The review screen's explicit "Yes, this game" on a pick whose matched game is past its sport's far-future threshold
+  // (lib/far-future-game.ts). Without it an import that holds far-future picks (holdFarFuture) does not save one.
+  confirmFarFuture?: boolean;
 };
 
 // A pick the user (or the default) excluded as a possible duplicate. These
@@ -108,6 +114,11 @@ export type BulkImportResult =
       // capper and game (or sent twice in this import) with no "Import anyway"
       // on them. Not inserted.
       duplicatesSkipped: string[];
+      // holdFarFuture only: picks matched to a game past its sport's far-future threshold with no confirmFarFuture on
+      // them. Not inserted ("<capper> - <pick>: <warning>").
+      farFutureHeld: string[];
+      // Picks inserted against a game already in progress (Pick.enteredLive), for the result's "Live entry" marker.
+      enteredLive: string[];
       // Set only when the ENTIRE batch was rejected by the Free-plan pick
       // limit (never a partial import) - distinct from `errors`, which is
       // per-item failures unrelated to billing (bad data, unresolved game,
@@ -140,7 +151,13 @@ export const UNMATCHED_RETRY_DELAY_MS = 1000;
 
 // excludeFinal: real-time ingest only - a game already final when the message arrives is never matched (see
 // ResolveGameOpts.excludeFinal in odds.ts). Manual paste passes false and matches exactly as before.
-function lookupGame(liveSportKey: string, nicknames: string[], gameNumber: 1 | 2 | null, getOdds: OddsLoader, excludeFinal = false) {
+function lookupGame(
+  liveSportKey: string,
+  nicknames: string[],
+  gameNumber: 1 | 2 | null,
+  getOdds: OddsLoader,
+  excludeFinal = false
+): Promise<ScheduleCandidateResult> {
   if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds, excludeFinal });
   if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds, excludeFinal });
   return Promise.resolve({ game: null, doubleheaderBothLegsFinal: false, finishedOnly: false });
@@ -240,6 +257,10 @@ export async function resolveGameAndOdds(
   // Real-time ingest only: unmatched because every game the team had in the window was already final when the
   // message arrived (the pick was posted after its game). False everywhere else.
   finishedBeforePost: boolean;
+  // The matched game was already in progress at import (Pick.enteredLive). False when unmatched.
+  enteredLive: boolean;
+  // The matched game starts more than FAR_FUTURE_HOURS after the import (lib/far-future-game.ts). False when unmatched.
+  farFuture: boolean;
 }> {
   let homeTeam = item.description;
   let awayTeam = "-";
@@ -260,6 +281,7 @@ export async function resolveGameAndOdds(
   let resolvedGameNumber: 1 | 2 | null = null;
   let doubleheaderBothLegsFinal = false;
   let finishedBeforePost = false;
+  let enteredLive = false;
 
   const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
   const resolvable = Boolean(liveSportKey && RESOLVABLE_SPORT_KEYS.includes(liveSportKey));
@@ -293,6 +315,23 @@ export async function resolveGameAndOdds(
       homeTeam = game.homeTeam;
       awayTeam = game.awayTeam;
       gameTime = new Date(game.commenceTime);
+      // Already being played (Pick.enteredLive). Priced exactly like any started game: the capper's own odds when the
+      // line has them, else the game's last pre-game price (#446, pricing.forGame) - never left unpriced, so the pick
+      // keeps its FAV/DOG category and mlFavoredSide like every other. A game already FINAL is not "entered live".
+      enteredLive = isInProgressAt(game, importedAt);
+      if (lookup.skippedCurrent) {
+        // Diagnostics only: how often a pick lands on another game while the team's current one was live or final.
+        console.log(
+          "[import-match] matched a game other than the team's current one",
+          JSON.stringify({
+            sport: item.sportName,
+            description: item.description,
+            realTimeIngest,
+            matched: { homeTeam, awayTeam, commenceTime: game.commenceTime, status: game.status },
+            current: lookup.skippedCurrent,
+          })
+        );
+      }
 
       if (game.doubleHeaderStatus === "Y" || game.doubleHeaderStatus === "S") {
         // Confirmed part of a real MLB doubleheader - stamp whichever leg
@@ -338,7 +377,9 @@ export async function resolveGameAndOdds(
         mlFavoredSide = await findFavoredSide(liveSportKey, game, getOdds);
       }
 
-      if (!item.hasExplicitOdds && item.betType === "PLAYER_PROP") {
+      // Every feed price lookup below: only for a line with no price of its own.
+      const priceFromFeed = !item.hasExplicitOdds;
+      if (priceFromFeed && item.betType === "PLAYER_PROP") {
         // Separate from the MONEYLINE/SPREAD/TOTAL path below - a player
         // prop has no home/away side, so it needs its own parsed identity
         // (player + market + Over/Under + line) rather than the
@@ -423,7 +464,7 @@ export async function resolveGameAndOdds(
             feedPrice = propPrice;
           }
         }
-      } else if (!item.hasExplicitOdds && isThreeWay) {
+      } else if (priceFromFeed && isThreeWay) {
         // Priced from h2h_3_way and nothing else. The 2-way h2h price includes
         // overtime and the shootout - a different bet - so there is no
         // fallback to it: no 3-way price means the line keeps its own.
@@ -431,7 +472,7 @@ export async function resolveGameAndOdds(
         if (threeWayPrice !== null) {
           feedPrice = threeWayPrice;
         }
-      } else if (!item.hasExplicitOdds) {
+      } else if (priceFromFeed) {
         // A non-TOTAL bet is priced off the same side pickedSide captured
         // above, and not at all when that is null (a same-mascot matchup, a
         // line naming both teams, a nickname ending neither team's name): a
@@ -531,6 +572,8 @@ export async function resolveGameAndOdds(
     resolvedGameNumber,
     doubleheaderBothLegsFinal,
     finishedBeforePost,
+    enteredLive,
+    farFuture: matched && isFarFutureGame(item.sportName, gameTime, importedAt),
   };
 }
 
@@ -544,13 +587,16 @@ export async function resolveGameAndOdds(
 
 // The game a preview row resolved to - gameTime as an ISO string so it
 // crosses the server-action boundary unchanged.
-export type PreviewMatchedGame = { homeTeam: string; awayTeam: string; gameTime: string };
+// inProgress: the game was already being played when the preview resolved it (the import stores enteredLive).
+export type PreviewMatchedGame = { homeTeam: string; awayTeam: string; gameTime: string; inProgress: boolean };
 
 // previewBulkImportOdds plus the matchup each row resolved to, for the Match
-// results panel's "Away @ Home - time" sub-line. Purely additive: `games` is
-// read off the SAME resolveGameAndOdds result the odds come from - no extra
-// lookup. A row with the capper's own odds is still never resolved here (as
-// before), so it has no entry and the panel falls back to its own text.
+// results panel's "Away @ Home - time" sub-line and its far-future warning
+// (lib/far-future-game.ts). `games` is read off the SAME resolveGameAndOdds
+// result the odds come from - no extra lookup. Every row is matched, the
+// capper's-own-odds rows included (they need the warning as much as any): for
+// those resolveGameAndOdds reads no price, so `odds` only ever carries rows
+// without one, as before.
 export async function previewBulkImportMatchesCore(
   items: ResolvableItem[]
 ): Promise<{ odds: Record<number, number>; games: Record<number, PreviewMatchedGame> }> {
@@ -562,10 +608,13 @@ export async function previewBulkImportMatchesCore(
   const games: Record<number, PreviewMatchedGame> = {};
   await Promise.all(
     items.map(async (item, i) => {
-      if (item.hasExplicitOdds) return;
-      const { odds, matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { altLines: true, buyPropOdds: true, pricing });
-      if (matched && odds !== item.odds) enriched[i] = odds;
-      if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString() };
+      const { odds, matched, homeTeam, awayTeam, gameTime, enteredLive } = await resolveGameAndOdds(item, getOdds, {
+        altLines: true,
+        buyPropOdds: true,
+        pricing,
+      });
+      if (matched && !item.hasExplicitOdds && odds !== item.odds) enriched[i] = odds;
+      if (matched) games[i] = { homeTeam, awayTeam, gameTime: gameTime.toISOString(), inProgress: enteredLive };
     })
   );
   return { odds: enriched, games };
@@ -798,7 +847,15 @@ export async function importPicksForUser(
   ambiguity: unknown = [],
   // realTimeIngest: set only by the Telegram ingest (catalog-import-orchestrator, from telegram-ingest.ts) - a game
   // already final when the message arrived is never matched (resolveGameAndOdds). The manual paste never sets it.
-  { realTimeIngest = false }: { realTimeIngest?: boolean } = {}
+  // holdFarFuture: a pick matched to a game past its sport's far-future threshold (lib/far-future-game.ts) is not saved
+  // unless its item says confirmFarFuture - it is listed in farFutureHeld, and onFarFutureHeld gets the row it
+  // would have inserted (the Telegram ingest parks that row in the review queue). The manual paste and the ingest
+  // both set it; left off, every matched pick is saved as before.
+  {
+    realTimeIngest = false,
+    holdFarFuture = false,
+    onFarFutureHeld,
+  }: { realTimeIngest?: boolean; holdFarFuture?: boolean; onFarFutureHeld?: (itemIndex: number, row: DedupPickRow) => void } = {}
 ): Promise<BulkImportResult> {
   const user = { id: userId };
   const getOdds = createRequestOddsLoader();
@@ -843,6 +900,9 @@ export async function importPicksForUser(
   const errors: string[] = [];
   const unmatchedGames: string[] = [];
   const doubleheaderBothFinal: string[] = [];
+  const farFutureHeld: string[] = [];
+  // toInsert positions whose game was already in progress (row.enteredLive), for the result's "Live entry" list.
+  const enteredLiveIdx = new Set<number>();
   // Every item that resolves cleanly gets queued here, not inserted yet -
   // the pick-limit check has to see the FULL batch size before any row is
   // written, or a Free user at 995 picks importing 20 could see the first 5
@@ -893,6 +953,8 @@ export async function importPicksForUser(
         resolvedGameNumber,
         doubleheaderBothLegsFinal,
         finishedBeforePost,
+        enteredLive,
+        farFuture,
       } = outcome.resolved;
       if (resolvable && !matched) {
         // Don't persist this item at all - homeTeam/awayTeam/gameTime from
@@ -953,7 +1015,7 @@ export async function importPicksForUser(
       const ungradedNbaProp =
         item.betType === "PLAYER_PROP" && !playerProp && item.sportName.toUpperCase() === "NBA" ? parseNbaProp(item.description) : null;
 
-      toInsert.push({
+      const row: DedupPickRow = {
         capperName: item.capperName,
         sportName: item.sportName,
         homeTeam,
@@ -972,9 +1034,19 @@ export async function importPicksForUser(
         playerName: playerProp?.playerName ?? ungradedNbaProp?.playerName,
         propMarket: playerProp?.propMarket,
         gameNumber: resolvedGameNumber,
+        // Only when true: every other row's insert stays exactly what it was (the column defaults to false).
+        ...(enteredLive ? { enteredLive: true } : {}),
         overrideDuplicate: item.overrideDuplicate === true,
         raw: item.raw,
-      });
+      };
+      // A game days away is more often the wrong game than an advance post: not saved without the user's yes.
+      if (holdFarFuture && farFuture && item.confirmFarFuture !== true) {
+        farFutureHeld.push(item.capperName + " - " + item.description + ": " + farFutureWarning(gameTime, Date.now()) + " (" + awayTeam + " @ " + homeTeam + ")");
+        onFarFutureHeld?.(i, row);
+        continue;
+      }
+      toInsert.push(row);
+      if (enteredLive) enteredLiveIdx.add(toInsert.length - 1);
       fallback.push(!resolvable);
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
@@ -1068,6 +1140,8 @@ export async function importPicksForUser(
       unmatchedGames,
       doubleheaderBothFinal,
       duplicatesSkipped,
+      farFutureHeld,
+      enteredLive: [],
       pickLimitBlocked: { message: result.message, remaining: result.remaining },
     };
   }
@@ -1080,6 +1154,10 @@ export async function importPicksForUser(
     unmatchedGames,
     doubleheaderBothFinal,
     duplicatesSkipped,
+    farFutureHeld,
+    enteredLive: result.insertedIndexes
+      .filter((rowIndex) => enteredLiveIdx.has(rowIndex))
+      .map((rowIndex) => toInsert[rowIndex].capperName + " - " + (toInsert[rowIndex].betDetail ?? "")),
     ...(recipientsFailed > 0 ? { recipientsFailed } : {}),
   };
 }
@@ -1149,6 +1227,7 @@ export function createPickRowResolver({ realTimeIngest = false }: { realTimeInge
           playerName: playerProp?.playerName ?? ungradedNbaProp?.playerName,
           propMarket: playerProp?.propMarket,
           gameNumber: r.resolvedGameNumber,
+          ...(r.enteredLive ? { enteredLive: true } : {}),
           overrideDuplicate: false,
           raw: item.raw,
         },

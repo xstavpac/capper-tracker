@@ -434,6 +434,11 @@ model Pick {
     // GameResult.gameNumber match when this is set, instead of its normal closest-start-time tiebreak, so two
     // legs of a traditional doubleheader (which can start minutes apart) can never grade against each other.
 
+  enteredLive Boolean @default(false) // true when the import matched this pick to a game already IN PROGRESS
+    // (bulk-import-core resolveGameAndOdds, isInProgressAt). Priced like any started game: the capper's own odds, else
+    // the game's last pre-game price (#446). A display marker only ("Live entry"); graded as normal.
+    // false for every pick created before this column (no backfill) and for every manually entered pick.
+
   category        String? // pickCategory() (stats.ts) result, stamped once at insert by createPicksWithEntitlementCheck
     // so the /cappers aggregates can GROUP BY it in SQL instead of re-deriving it per pick in JS. TEXT, not an enum:
     // PickCategoryKey includes generated segment keys, and an enum would need a migration per new key. null is a
@@ -1772,6 +1777,7 @@ enum IngestQuestionType {
   PLAYER_AMBIGUITY
   MISSING_TOTAL_LINE
   CAPPER_FUZZY
+  FAR_FUTURE_GAME // matched to a game more than its sport's far-future threshold after the message (lib/far-future-game.ts)
 }
 
 enum IngestReviewStatus {
