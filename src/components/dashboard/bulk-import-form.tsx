@@ -290,7 +290,8 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
   // game today) -> calendar season as a fallback -> pick-text context, in
   // that order, before anything is shown to the user as a question. See
   // lib/ambiguous-hierarchy.ts for the actual hierarchy.
-  async function handleParse() {
+  async function handleParse(source?: string) {
+    const pasted = source ?? text;
     setResult(null);
     setEnrichedOdds({});
     setMatchedGames({});
@@ -315,7 +316,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
       unresolved,
       unresolvedCapperNames,
       droppedAsHeaders,
-    } = parseCatalog(text, existingCapperNames, rosterFullNames, feedTeams);
+    } = parseCatalog(pasted, existingCapperNames, rosterFullNames, feedTeams);
     const parlaySplit = splitByCapper(parlayItems);
     setParlays(parlaySplit.withCapper);
     // Last-resort pass: hand the lines parseCatalog couldn't place to the
@@ -331,7 +332,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     setUnresolvedReasons({});
     if (unresolved.length > 0) {
       try {
-        const res = await recoverUnresolvedPicksAction(text, existingCapperNames);
+        const res = await recoverUnresolvedPicksAction(pasted, existingCapperNames);
         recovered = res.recovered;
         effectiveItems = [...items, ...recovered];
         unresolvedAfter = res.stillUnresolved;
@@ -871,6 +872,19 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
     setImportError(null);
   }
 
+  // A line read as a team's moneyline (fromBareTeamLine) that is really a capper's
+  // name: mark it as a header in the pasted text with the '*' escape and parse again,
+  // so the picks below it attach to that capper.
+  function readBareTeamLineAsHeader(raw: string) {
+    const lines = text.split(/\r?\n/);
+    const at = lines.findIndex((l) => l.trim() === raw.trim());
+    if (at < 0) return;
+    lines[at] = "*" + lines[at].trim();
+    const next = lines.join("\n");
+    setText(next);
+    void handleParse(next);
+  }
+
   function renderRow(e: Entry) {
     const { p, idx } = e;
     const isAmbiguous = Boolean(p.ambiguous);
@@ -927,6 +941,15 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
             )}
           </div>
         </div>
+
+        {p.fromBareTeamLine && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-900 dark:text-amber-200">
+            <span>Read as moneyline — is this a capper name?</span>
+            <button type="button" onClick={() => readBareTeamLineAsHeader(p.raw)} className={promptLinkClass}>
+              Use as capper name
+            </button>
+          </div>
+        )}
 
         {ambiguousKey && ambiguousGroup && (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-900 dark:text-amber-200">
@@ -1105,7 +1128,7 @@ export function BulkImportForm({ existingCapperNames, nameDecisions = [] }: { ex
             </p>
             <button
               type="button"
-              onClick={handleParse}
+              onClick={() => handleParse()}
               disabled={!text.trim() || resolving}
               className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-full bg-brand-600 px-6 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >

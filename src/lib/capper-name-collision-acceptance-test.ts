@@ -132,11 +132,12 @@ expect(
   ])
 );
 expect(
-  "same for a team name nobody has saved",
+  "a team name nobody has saved, under an active capper, is that capper's moneyline",
   run("Porter Picks\nYankees ML\n\nSeattle Mariners\nDodgers ML", []),
   only([
     ["Porter Picks", "MLB", "MONEYLINE", "Yankees ML", ["yankees"]],
-    ["Seattle Mariners", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
+    ["Porter Picks", "MLB", "MONEYLINE", "Seattle Mariners", ["mariners"]],
+    ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]],
   ])
 );
 expect(
