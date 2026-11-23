@@ -285,7 +285,6 @@ async function main() {
       const s = { ...snapshotOf(req.slipPickIds), builtAt: clock.toISOString() };
       return { snapshot: s, parlay: buildGeneratedParlay(s, req.settings, null, clock) };
     },
-    reuse: { userId: () => "u1", store: null },
   });
   const inputs = { leagues: ["MLB"], slipPickIds: [], targets: [] };
   const g = await session.generate(inputs, base);

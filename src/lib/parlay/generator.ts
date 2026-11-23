@@ -63,12 +63,16 @@
 //      picks are never filtered. With no more usable picks than the leg count,
 //      rule 1 holds unchanged: every one is in.
 //
-// Generate (no `variation`) is deterministic: the same snapshot and settings
-// always give the same parlay. Regenerate (`variation`) gives another parlay:
-// a weighted draw without replacement, weight exp(beta x edge) x a reuse
-// penalty for recently shown legs, beta from the selection mode (selection.ts);
-// the same constraints hold in every draw. Nothing outside the gate is ever
-// drawn. Slip picks and targets are the same in every build.
+// With no `variation` a build is deterministic - the rank order: the same
+// snapshot and settings always give the same parlay (the frozen fixtures, the
+// backtests). Generate passes a generate variation (generateVariation): one
+// weighted draw on the click's seed, weight exp(beta x (score - top)), beta from
+// the selection mode, no exposure penalty - so two clicks differ, Best barely.
+// Regenerate (`variation`) gives another parlay: the same draw times an exposure
+// penalty for every bet and game this result card has shown (selection.ts), never
+// a combination already shown. The same constraints hold in every draw. Nothing
+// outside the gate is ever drawn. Slip picks and targets are the same in every
+// build; under Your picks only (rule 6) Generate stays the strongest subset.
 import type { CapperLeagueRecords, PropMarketRecord } from "@/server/data/picks";
 import type { PropMarketKey } from "@/lib/prop-market-key";
 import type { CategoryBreakdownItem } from "@/server/data/stats";
@@ -83,16 +87,20 @@ import {
   deriveSeed,
   enumerateCombos,
   fillLegs,
+  gameExposureKey,
   legTrace,
+  NO_EXPOSURE,
   orderCandidates,
   SELECTION_BETA,
+  SELECTION_MODES,
   seededRng as selectionRng,
   selectLegs,
   STANDARD_DRAW_TRIES,
   SUBSET_DRAW_TRIES,
+  type DrawOptions,
+  type Exposure,
   type FillRules,
   type Ranked,
-  type RecentLeg,
   type SelectionCandidate,
   type SelectionLegTrace,
   type SelectionMode,
@@ -196,21 +204,41 @@ export type ScoreModelSetting = "RECORD" | "EDGE";
 // The star's filter on one candidate. Off keeps every pick.
 export const keepsFavorite = (favoritesOnly: boolean, pick: Pick<GeneratorPick, "capperIsFavorite">): boolean => !favoritesOnly || pick.capperIsFavorite === true;
 
-// A Regenerate: the seed to draw with, and the generated legs (pick ids) of
-// the parlays already shown, newest first. Also:
-//   mode       - Best / Diversified / Explore (selection.ts), Diversified when absent;
-//   recentLegs - legs to weigh down (betKey + when shown), none when absent;
-//   shown      - every combination (legSetKey) shown on this result card, which
-//                Your picks only never repeats; `history`'s when absent.
+// A draw: the seed to draw with, and the varied legs (pick ids) of the parlays
+// already shown on this result card, newest first. Also:
+//   mode     - Best / Diversified / Explore (selection.ts), Diversified when absent;
+//   generate - a Generate's draw (generateVariation): one draw, no exposure penalty,
+//              nothing rejected as shown, Hedge / Contrarian as with no draw, and
+//              Your picks only's subset the strongest, as with no draw;
+//   exposure - Regenerate: how often this card has shown each bet and game, weighed
+//              down (selection.ts); none when absent;
+//   shown    - every combination (legSetKey) shown on this result card, which
+//              Regenerate never repeats; `history`'s when absent.
 //   enumerationBudget - tests only: a smaller node / time budget for Your picks only's enumeration.
 export type Variation = {
   seed: number;
   history: string[][];
   mode?: SelectionMode;
-  recentLegs?: RecentLeg[];
+  generate?: true;
+  exposure?: Exposure;
   shown?: string[];
   enumerationBudget?: { nodes?: number; ms?: number };
 };
+
+// What a Generate request carries (the server action and the session): the click's seed and the mode.
+export type GenerateDraw = { seed: number; mode: SelectionMode };
+
+// A Generate's draw as a Variation.
+export const generateVariation = (draw: GenerateDraw): Variation => ({ seed: draw.seed >>> 0, mode: draw.mode, generate: true, history: [] });
+
+// A Generate draw from an untrusted request, or null (the build is then the rank order).
+export function parseGenerateDraw(raw: unknown): GenerateDraw | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { seed, mode } = raw as Record<string, unknown>;
+  if (typeof seed !== "number" || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return null;
+  const m = SELECTION_MODES.find((x) => x === mode);
+  return m ? { seed, mode: m } : null;
+}
 
 // ---------------------------------------------------------------------------
 // Output
@@ -343,9 +371,18 @@ export type GeneratedParlay = {
   // under rule 6 - which the client adds to its history, and their legSetKey.
   historyIds: string[];
   generatedKey: string;
-  // The same legs' betKeys (selection.ts): what the next Regenerate weighs down.
+  // The same legs' betKeys (selection.ts): what the session counts into the card's
+  // exposure, with historyGameKeysOf's games.
   historyBetKeys?: string[];
 };
+
+// The games (gameExposureKey) a parlay's generated legs are on, for the card's exposure: a game
+// holding one of your picks is never counted, so it is never weighed down. Your picks only's subset
+// has none (every leg is a slip pick).
+export function historyGameKeysOf(parlay: Pick<GeneratedParlay, "legs">): string[] {
+  const slipGames = new Set(parlay.legs.filter((l) => l.source === "SLIP").map((l) => l.gameId));
+  return Array.from(new Set(parlay.legs.filter((l) => l.source === "GENERATED" && !slipGames.has(l.gameId)).map((l) => gameExposureKey(l.pick))));
+}
 
 // A snapshot older than this is reloaded before the next build.
 export const SNAPSHOT_MAX_AGE_MS = 2 * 60 * 1000;
@@ -609,21 +646,28 @@ export function buildGeneratedParlay(
   let selectionTrace: SelectionTrace | null = null;
   const mode: SelectionMode = variation?.mode ?? DEFAULT_SELECTION_MODE;
   const beta = SELECTION_BETA[mode];
-  const recentLegs = variation?.recentLegs ?? [];
-  const shownKeys = new Set(variation ? (variation.shown ?? variation.history.map((ids) => legSetKey(ids))) : []);
-  const onScreen = variation && variation.history.length > 0 ? legSetKey(variation.history[0]) : null;
-  const drawAt = (i: number) => ({ rng: selectionRng(deriveSeed(variation!.seed, i)), beta, recentLegs, now: now.getTime() });
+  // A Regenerate (not a Generate's draw): the exposure penalty, the shown combinations and Hedge's draw are its alone.
+  const regenerate = variation && !variation.generate ? variation : null;
+  const exposure = regenerate?.exposure ?? NO_EXPOSURE;
+  const shownKeys = new Set(regenerate ? (regenerate.shown ?? regenerate.history.map((ids) => legSetKey(ids))) : []);
+  const onScreen = regenerate && regenerate.history.length > 0 ? legSetKey(regenerate.history[0]) : null;
+  // Draw i of this build. Generated legs carry the card's exposure on a Regenerate; slip picks (Your picks only's subset) never do.
+  const drawAt = (i: number, penalize = true): DrawOptions => ({ rng: selectionRng(deriveSeed(variation!.seed, i)), beta, ...(regenerate && penalize ? { exposure } : {}) });
+  // Whether this build draws at all: a Regenerate, or a Generate outside Your picks only's subset (that one stays the strongest).
+  const draws = regenerate !== null || (variation?.generate === true && !subset);
   const baseTrace = (): SelectionTrace => ({
-    trigger: variation ? "REGENERATE" : "GENERATE",
-    mode: variation ? mode : null,
-    beta: variation ? beta : null,
-    seed: variation ? variation.seed : null,
+    trigger: regenerate ? "REGENERATE" : "GENERATE",
+    mode: draws ? mode : null,
+    beta: draws ? beta : null,
+    seed: draws ? variation!.seed : null,
     legs: [],
     reuseHits: 0,
   });
   const finishTrace = (tr: SelectionTrace, picked: Ranked<unknown>[]) => {
     tr.legs = picked.map(legTrace);
-    tr.reuseHits = picked.filter((r) => r.reuse < 1).length;
+    tr.reuseHits = picked.filter((r) => r.legReuse < 1).length;
+    const gameHits = picked.filter((r) => r.gameReuse < 1).length;
+    if (gameHits > 0) tr.gameReuseHits = gameHits;
     return tr;
   };
   if (subset) {
@@ -634,7 +678,7 @@ export function buildGeneratedParlay(
     for (const a of liveSlip)
       for (const b of liveSlip)
         if (a !== b && a.gameId === b.gameId && blocks(buildOf.get(a.pickId)!, buildOf.get(b.pickId)!).blocked) blocked.add(a.pickId + "|" + b.pickId);
-    const v = subsetSelection(liveSlip, scoreOf, blocked, legCount, maxPerGame, variation, shownKeys, onScreen, drawAt);
+    const v = subsetSelection(liveSlip, scoreOf, blocked, legCount, maxPerGame, regenerate, shownKeys, onScreen, (i) => drawAt(i, false));
     slipLegs = v.chosen.map((r) => r.item);
     subsetVariety = v.variety;
     selectionTrace = finishTrace({ ...baseTrace(), ...v.trace }, v.chosen);
@@ -730,10 +774,19 @@ export function buildGeneratedParlay(
     // The slip picks were drawn above (1b); nothing is generated.
     variety = subsetVariety;
   } else {
-    // selection.ts, on the edge, under the same constraints as above.
+    // selection.ts, on the score, under the same constraints as above. A game holding a
+    // slip pick carries no gameKey, so it is never weighed down.
     const cands: SelectionCandidate<Candidate>[] = eligible
       .flatMap((g) => candidatesOf.get(g.gameId)!)
-      .map((c) => ({ item: c, id: c.pick.pickId, betKey: betKeyOf(c.pick), gameId: c.game.gameId, score: c.score, category: c.category }));
+      .map((c) => ({
+        item: c,
+        id: c.pick.pickId,
+        betKey: betKeyOf(c.pick),
+        gameId: c.game.gameId,
+        score: c.score,
+        category: c.category,
+        ...(slipOnGame.has(c.game.gameId) ? {} : { gameKey: gameExposureKey(c.pick) }),
+      }));
     const fill: FillRules<Candidate, GeneratorPick> = {
       need,
       maxPerGame,
@@ -751,7 +804,11 @@ export function buildGeneratedParlay(
     const primary = selectLegs(orderCandidates(cands, null), fill);
     let picked = primary.chosen;
     tr.repaired = primary.repaired;
-    if (variation) {
+    if (variation?.generate) {
+      // Generate: one draw on the click's seed, no exposure. Never shorter than the rank order's parlay.
+      const d = selectLegs(orderCandidates(cands, drawAt(0)), fill).chosen;
+      if (d.length >= picked.length) picked = d;
+    } else if (regenerate) {
       let found: Ranked<Candidate>[] | null = null;
       let fallback: Ranked<Candidate>[] | null = null;
       let rejected = 0;
@@ -778,6 +835,18 @@ export function buildGeneratedParlay(
   // not the same as nothing new of comparable strength.
   const noAlternativeReason: GeneratedParlay["noAlternativeReason"] = variety !== "NO_ALTERNATIVE" ? null : !subset && need <= 0 ? "ALL_PICKS_USED" : "NO_COMPARABLE";
   const historyIds = subset ? slipLegs.map((p) => p.pickId) : chosen.map((c) => c.pick.pickId);
+  // The run log's view of how this build varied (selection.ts VarietyTrace).
+  if (selectionTrace) {
+    const previous = variation && variation.history.length > 0 ? new Set(variation.history[0]) : null;
+    selectionTrace.outcome = {
+      variety,
+      noAlternativeReason,
+      changed: previous ? historyIds.filter((id) => !previous.has(id)).length : null,
+      previous: previous ? previous.size : null,
+      eligibleGames: subset ? new Set(liveSlip.map((p) => p.gameId)).size : gamesWithCandidates.length,
+      legsNeeded: subset ? legCount : need,
+    };
+  }
 
   // The funnel, for the run trace: counted from what the steps above actually did.
   traced((t) => {
@@ -884,10 +953,10 @@ export function buildGeneratedParlay(
 
   // Hedge's alternates go through selection.ts: the top one on Generate, a
   // mode-weighted draw (one seed per leg) on Regenerate.
-  const hedgeSelect: HedgeSelect = { draw: variation ? { seed: deriveSeed(variation.seed, "hedge"), beta } : null, picked: [] };
+  const hedgeSelect: HedgeSelect = { draw: regenerate ? { seed: deriveSeed(regenerate.seed, "hedge"), beta } : null, picked: [] };
   const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, trace, hedgeSelect, priceFloor));
   // Contrarian's the same way, on its own sub-seed.
-  const contrarianSelect: HedgeSelect = { draw: variation ? { seed: deriveSeed(variation.seed, "contrarian"), beta } : null, picked: [] };
+  const contrarianSelect: HedgeSelect = { draw: regenerate ? { seed: deriveSeed(regenerate.seed, "contrarian"), beta } : null, picked: [] };
   const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, trace, contrarianSelect, priceFloor));
   traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
   if (selectionTrace) {

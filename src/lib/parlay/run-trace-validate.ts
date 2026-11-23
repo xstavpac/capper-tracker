@@ -26,6 +26,7 @@ import {
   type SwapLegTrace,
   type SwapModeTrace,
 } from "@/lib/parlay/run-trace";
+import type { VarietyTrace } from "@/lib/parlay/selection";
 
 // A browser trace bigger than this (serialized) is stored without its detail.
 export const MAX_CLIENT_TRACE_BYTES = 150_000;
@@ -206,9 +207,27 @@ function cleanSelectionLegs(v: unknown): SelectionTraceShape["legs"] {
     const rank = count(l.rank, 100_000);
     const weight = finite(l.weight, 0, 1);
     if (!id || rank === null || weight === null) continue;
-    out.push({ id, rank, weight, ...(l.reused === true ? { reused: true } : {}) });
+    out.push({ id, rank, weight, ...(l.reused === true ? { reused: true } : {}), ...(l.gameReused === true ? { gameReused: true } : {}) });
   }
   return out;
+}
+// extras.selection.outcome (selection.ts VarietyTrace): how a build varied.
+const VARIETIES = ["BEST", "VARIED", "NO_ALTERNATIVE"] as const;
+const NO_ALTERNATIVE_REASONS = ["ALL_PICKS_USED", "NO_COMPARABLE"] as const;
+function cleanOutcome(v: unknown): VarietyTrace | null {
+  if (!isObj(v)) return null;
+  const variety = VARIETIES.find((x) => x === v.variety);
+  const eligibleGames = count(v.eligibleGames, 100_000);
+  const legsNeeded = count(v.legsNeeded, 1000);
+  if (!variety || eligibleGames === null || legsNeeded === null) return null;
+  return {
+    variety,
+    noAlternativeReason: NO_ALTERNATIVE_REASONS.find((x) => x === v.noAlternativeReason) ?? null,
+    changed: count(v.changed, 1000),
+    previous: count(v.previous, 1000),
+    eligibleGames,
+    legsNeeded,
+  };
 }
 function cleanSelection(v: unknown): SelectionTraceShape | null {
   if (!isObj(v)) return null;
@@ -221,6 +240,8 @@ function cleanSelection(v: unknown): SelectionTraceShape | null {
   const rejectedCombos = count(v.rejectedCombos, 1_000_000);
   const combos = count(v.combos, 10_000_000);
   const repaired = count(v.repaired, 1000);
+  const gameReuseHits = count(v.gameReuseHits, 1000);
+  const outcome = cleanOutcome(v.outcome);
   return {
     trigger: v.trigger,
     mode,
@@ -235,6 +256,8 @@ function cleanSelection(v: unknown): SelectionTraceShape | null {
     ...(v.budgetExhausted === true ? { budgetExhausted: true } : {}),
     ...(v.exhausted === true ? { exhausted: true } : {}),
     ...(repaired !== null ? { repaired } : {}),
+    ...(gameReuseHits !== null ? { gameReuseHits } : {}),
+    ...(outcome ? { outcome } : {}),
   };
 }
 

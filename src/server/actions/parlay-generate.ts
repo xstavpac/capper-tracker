@@ -31,7 +31,10 @@ import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import {
   buildGeneratedParlay,
+  generateVariation,
+  parseGenerateDraw,
   type FillFrom,
+  type GenerateDraw,
   type GeneratedParlay,
   type GeneratorSettings,
   type GeneratorSnapshot,
@@ -46,6 +49,9 @@ export type GenerateRequest = {
   slipPickIds: string[];
   targets: GenerateTarget[];
   settings: GeneratorSettings;
+  // The Generate click's seed and selection mode (generator-session.ts): the parlay is that draw,
+  // the same one the browser would build. Absent or invalid: the rank order (deterministic).
+  draw?: GenerateDraw;
 };
 
 export type GenerateResponse = { snapshot: GeneratorSnapshot; parlay: GeneratedParlay };
@@ -59,7 +65,7 @@ const okId = (v: unknown): v is string => typeof v === "string" && v.length > 0 
 // Never trusted as sent: ids only, bounded, leagues from the Live list.
 function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
   if (typeof raw !== "object" || raw === null) return { error: INVALID_REQUEST };
-  const { leagues, slipPickIds, targets, settings } = raw as Record<string, unknown>;
+  const { leagues, slipPickIds, targets, settings, draw } = raw as Record<string, unknown>;
   if (!Array.isArray(leagues) || !leagues.every((l) => typeof l === "string" && LIVE_LABELS.has(l))) return { error: INVALID_REQUEST };
   if (!Array.isArray(slipPickIds) || !Array.isArray(targets)) return { error: INVALID_REQUEST };
   if (slipPickIds.length > MAX_POOL_REQUEST_PICKS || targets.length > MAX_POOL_REQUEST_PICKS) return { error: TOO_MANY };
@@ -79,7 +85,9 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
   if (rejection) return rejection;
   const fillFrom: FillFrom = s.fillFrom === "YOUR_PICKS_ONLY" ? "YOUR_PICKS_ONLY" : "BEST_AVAILABLE";
   const include = toIncludeSelection(s.include);
+  const parsedDraw = parseGenerateDraw(draw);
   return {
+    ...(parsedDraw ? { draw: parsedDraw } : {}),
     leagues: Array.from(new Set(leagues as string[])),
     slipPickIds: Array.from(new Set(slipPickIds as string[])),
     targets: parsedTargets,
@@ -121,7 +129,7 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   const { snapshot } = loaded;
   let parlay: GeneratedParlay;
   try {
-    parlay = buildGeneratedParlay(snapshot, req.settings, null, now, trace);
+    parlay = buildGeneratedParlay(snapshot, req.settings, req.draw ? generateVariation(req.draw) : null, now, trace);
   } catch (err) {
     trace.error("ENGINE_ERROR", err);
     await recordGeneratorRun(user.id, trace.finish());
