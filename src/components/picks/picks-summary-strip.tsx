@@ -5,13 +5,10 @@ import type { UniquePicksResult } from "@/lib/unique-picks";
 import { GREEN, RED, StatCard } from "@/components/dashboard/stat-card";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
-// picks-skin.css: the tile's colour (accent bar, edge, glow, icon ring) and the heavier value.
-const SKIN = "pk-tile ";
-const V = (cls?: string) => (cls ?? "text-foreground") + " pk-v";
 const GREEN_TILE = "bg-[#DCF7E6] text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400";
 const RED_TILE = "bg-[#FFE0E0] text-[#DC2626] dark:bg-red-500/15 dark:text-red-400";
 const VIOLET_TILE = "bg-[#EDE2FF] text-violet-600 dark:bg-violet-500/15 dark:text-violet-400";
-const BLUE_TILE = "bg-[#E1ECFF] text-blue-600 dark:bg-blue-500/15 dark:text-blue-400";
+const BLUE_TILE = "bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400";
 const AMBER_TILE = "bg-[#FFE9C7] text-amber-600 dark:bg-amber-500/15 dark:text-amber-400";
 
 const signed = (n: number, digits: number, suffix: string) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(digits) + suffix;
@@ -41,14 +38,12 @@ export function PicksSummaryStrip({
   const avgStake = decided ? summary.unitsRisked / settled : 0;
   const down = summary.netUnits < 0;
   return (
-    <div className="pk-tiles grid auto-rows-fr grid-cols-2 gap-3.5 md:grid-cols-3 min-[1100px]:grid-cols-5">
+    <div className="grid auto-rows-fr grid-cols-2 gap-3.5 md:grid-cols-3 min-[1100px]:grid-cols-5">
       <StatCard
         compactMobile
         label="Record"
-        className={SKIN + "pk-g"}
         icon={<TrophyIcon className={ICON} />}
-        iconClass={GREEN_TILE + " pk-ic"}
-        valueClass={V()}
+        iconClass={GREEN_TILE}
         color="#16A34A"
         value={summary.wins + "–" + summary.losses + "–" + summary.pushes}
         sub={rate === null ? "No settled picks" : rate + "% win rate · all picks"}
@@ -56,10 +51,8 @@ export function PicksSummaryStrip({
       <StatCard
         compactMobile
         label="Unique picks"
-        className={SKIN + "pk-bl"}
         icon={<CopyIcon className={ICON} />}
-        iconClass={BLUE_TILE + " pk-ic"}
-        valueClass={V()}
+        iconClass={BLUE_TILE}
         color="#2563EB"
         value={unique.wins + "–" + unique.losses + "–" + unique.pushes}
         sub={(uniqueRate === null ? "No settled picks" : uniqueRate + "% win rate") + " · " + unique.unique + " unique of " + unique.total}
@@ -68,11 +61,10 @@ export function PicksSummaryStrip({
         compactMobile
         label="Net units"
         icon={down ? <TrendingDownIcon className={ICON} /> : <TrendingUpIcon className={ICON} />}
-        className={SKIN + (down ? "pk-rd" : "pk-g")}
-        iconClass={(down ? RED_TILE : GREEN_TILE) + " pk-ic"}
+        iconClass={down ? RED_TILE : GREEN_TILE}
         color={down ? "#DC2626" : "#16A34A"}
         value={signed(summary.netUnits, 2, "u")}
-        valueClass={V(tone(summary.netUnits))}
+        valueClass={tone(summary.netUnits)}
         sub={decided ? avgStake.toFixed(2) + "u avg stake · " + settled + " settled" : "No settled picks"}
         series={series ?? undefined}
       />
@@ -80,20 +72,18 @@ export function PicksSummaryStrip({
         compactMobile
         label="ROI"
         icon={<PercentIcon className={ICON} />}
-        className={SKIN + "pk-pu"}
-        iconClass={VIOLET_TILE + " pk-ic"}
+        iconClass={VIOLET_TILE}
         color="#7C3AED"
         value={decided ? signed(summary.roi, 1, "%") : "–"}
-        valueClass={V(decided ? tone(summary.roi) : undefined)}
+        valueClass={decided ? tone(summary.roi) : undefined}
         sub={"on " + summary.unitsRisked.toFixed(2) + " units risked"}
       />
       <StatCard
         compactMobile
         label="Still to play"
-        className={SKIN + "pk-am max-sm:col-span-2"}
+        className="max-sm:col-span-2"
         icon={<ClockIcon className={ICON} />}
-        iconClass={AMBER_TILE + " pk-ic"}
-        valueClass={V()}
+        iconClass={AMBER_TILE}
         color="#D97706"
         value={String(live + later)}
         sub={

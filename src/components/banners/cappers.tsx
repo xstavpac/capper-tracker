@@ -12,7 +12,8 @@ const USER = (x: number, y: number, s: number, fill: string) => (
 );
 
 export const CAPPERS_BANNER: BannerDef = {
-  spec: { ...STANDARD, tx: 102, baseline: 49, ts: 29, dh: 0, controlsTop: 58, icon: { cx: 43, cy: 52, r: 22 } },
+  // dh: the title-motto divider, Parlay's (the other banner with a controls row under its title line).
+  spec: { ...STANDARD, tx: 102, baseline: 49, ts: 29, dh: 24, controlsTop: 58, icon: { cx: 43, cy: 52, r: 22 } },
   bg: (k) => (
     <StandardBg
       k={k}

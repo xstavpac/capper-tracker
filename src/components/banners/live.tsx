@@ -1,4 +1,4 @@
-import { Flows, Nodes, SharedDefs, glowId, vars, type BannerDef } from "./banner-parts";
+import { Flows, Nodes, STANDARD, SharedDefs, glowId, vars, type BannerDef } from "./banner-parts";
 
 // The Live banner (banners/bettingview-live-banner.html): the transmitter icon with its shockwave rings and
 // pulsing red core (only this banner has them), five trails, the waveform and the HOME / AWAY chip.
@@ -18,15 +18,16 @@ export const LIVE_BANNER: BannerDef = {
     edge: "#3b82f6",
     shadow: "rgba(59,130,246,.18)",
     ink: "#0b2a6b",
-    motto: "#0b3b99",
+    // The motto matches the other banners' (STANDARD: size, spacing, color).
+    motto: STANDARD.motto,
     div: "#0b2a6b",
     tx: 118,
     baseline: 68,
     ts: 29,
     tls: -0.5,
     dh: 26,
-    ms: 10.5,
-    mls: 2.4,
+    ms: STANDARD.ms,
+    mls: STANDARD.mls,
     icon: { cx: 60, cy: 58, r: 27.5 },
   },
   bg: (k) => (

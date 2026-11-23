@@ -8,7 +8,7 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 // or pushes only) has no win % to show: a neutral dash and an empty bar, never a red "0%".
 // `tinted` (/live) also washes the whole card in that color - soft green with a green border at 50%
 // and up, soft red with a red border below - and colors the market name to match; without it
-// the card is the neutral white stat-card surface, which /dashboard dresses in the /picks tile trim (`trim`).
+// the card is the neutral white stat-card surface, which /dashboard dresses in the calm tile trim (`trim`).
 // `onToggle` makes the card a button; `active` rings the one that is open.
 // `pickCount` (/live) is today's picks in the market: the solid blue capsule under the record, or nothing
 // at 0. Its row is reserved either way, so the cards in a row keep one height and their bars line up.
@@ -69,7 +69,7 @@ export function CategoryCard({
   pickCount?: number;
   // /live (frost): the tile's place in the grid, for the staggered fade-in of live-skin.css.
   skinIndex?: number;
-  // /dashboard: the /picks stat-tile trim (picks-skin.css .pk-tile), green at 50% and up, red below.
+  // /dashboard: the calm green / red tile trim (category-tile.css .ct-tile), green at 50% and up, red below.
   // Skin only: its edge is an inset ring, so the tile keeps its size.
   trim?: boolean;
 }) {
@@ -77,14 +77,13 @@ export function CategoryCard({
   const good = getRecordColor(winPct) === "green";
   // frost (/live): a slightly deeper green so the text on the green glass tile clears 5:1 (#15803D is 4.5:1 there).
   const tone = good ? (frost ? "text-[#14773A] dark:text-emerald-400" : GREEN) : RED;
-  // /live skin (components/live/live-skin.css): green / red / neutral surface, a stronger edge at 58%+ and at
-  // 45% and below, and the open tile's ring.
+  // Green / red come from category-tile.css (ct-g / ct-r), one source for both pages. /live skin
+  // (components/live/live-skin.css): green / red / neutral surface and the open tile's ring.
+  const ct = good ? " ct-g" : " ct-r";
   const skin = frost
-    ? " lv-tile " +
-      (tinted && decided ? (good ? "lv-g" + (winPct >= 58 ? " lv-hi" : "") : "lv-r" + (winPct <= 45 ? " lv-lo" : "")) : "lv-n") +
-      (active ? " lv-on" : "")
+    ? " lv-tile " + (tinted && decided ? (good ? "lv-g" : "lv-r") + ct : "lv-n") + (active ? " lv-on" : "")
     : trim
-      ? " pk-tile " + (good ? "pk-g" : "pk-rd")
+      ? " ct-tile" + ct
       : "";
   return (
     <div

@@ -1,7 +1,7 @@
 import { DEFAULT_CHIP_SET, PICK_CATEGORY_LABELS, type CategoryBreakdownItem } from "@/server/data/stats";
 import { CategoryCard } from "@/components/dashboard/category-card";
 
-// All-time record by market, one card each in the /picks stat-tile trim, green or red by its win %
+// All-time record by market, one card each in the calm tile trim (category-tile.css), green or red by its win %
 // (see CategoryCard `trim`). Always the same six markets in
 // the same order (DEFAULT_CHIP_SET), so the grid never changes shape: `items` only holds the markets
 // with a decided pick, and the rest are drawn at 0-0.
