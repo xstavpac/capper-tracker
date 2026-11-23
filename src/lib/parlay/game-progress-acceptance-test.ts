@@ -12,7 +12,7 @@ import {
   inningNumber,
   poolEligible,
   PRICE_EST_UNCHANGED,
-  PRICE_PREGAME_PENDING,
+  PRICE_PREGAME_LINE,
   startedPriceLabel,
   startedStateLine,
   withinProgressCutoff,
@@ -73,10 +73,10 @@ check("not started: in", poolEligible({ gameTime: LATER, leagueName: "NBA" }, NO
 
 // ---- 4. price label: scoreMissing is changed, never 0-0 ----
 check("0-0 with the score present: est. · score unchanged", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1 }) }), PRICE_EST_UNCHANGED);
-check("score changed: pregame line · live price coming", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, away: 2, home: 0 }) }), PRICE_PREGAME_PENDING);
-check("scoreMissing (shown as 0-0 by the feed): treated as changed", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, scoreMissing: true }) }), PRICE_PREGAME_PENDING);
-check("a null side: treated as changed", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, home: null }) }), PRICE_PREGAME_PENDING);
-check("no state: treated as changed", startedPriceLabel({ gameStatus: "live" }), PRICE_PREGAME_PENDING);
+check("score changed: pregame line", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, away: 2, home: 0 }) }), PRICE_PREGAME_LINE);
+check("scoreMissing (shown as 0-0 by the feed): treated as changed", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, scoreMissing: true }) }), PRICE_PREGAME_LINE);
+check("a null side: treated as changed", startedPriceLabel({ gameStatus: "live", liveState: state({ period: 1, home: null }) }), PRICE_PREGAME_LINE);
+check("no state: treated as changed", startedPriceLabel({ gameStatus: "live" }), PRICE_PREGAME_LINE);
 check("delayed start: unchanged", startedPriceLabel({ gameStatus: "preview" }), PRICE_EST_UNCHANGED);
 
 // ---- 2. the state line ----
@@ -183,7 +183,7 @@ async function main() {
   const { StartedLine } = (await import("@/components/parlay/started-line")) as { StartedLine: typeof StartedLineType };
   const html = (g: Parameters<typeof StartedLineType>[0]["game"]) => renderToStaticMarkup(React.createElement(StartedLine, { game: g, now: NOW }));
   const shown = html({ gameTime: STARTED, gameStatus: "live", leagueName: "NBA", liveState: state({ period: 2, clock: "4:12", away: 45, home: 41 }) });
-  check("rendered: state line and the pending-price label", [shown.includes("Started · Q2 4:12 · 45-41"), shown.includes(PRICE_PREGAME_PENDING)], [true, true]);
+  check("rendered: state line and the pregame-line label", [shown.includes("Started · Q2 4:12 · 45-41"), shown.includes(PRICE_PREGAME_LINE)], [true, true]);
   const zero = html({ gameTime: STARTED, gameStatus: "live", leagueName: "NHL", liveState: state({ period: 1, clock: "12:00" }) });
   check("rendered: 0-0 says est. · score unchanged", [zero.includes("Started · P1 12:00 · 0-0"), zero.includes(PRICE_EST_UNCHANGED)], [true, true]);
   check("rendered: nothing before kickoff or once final", [html({ gameTime: LATER, leagueName: "NBA" }), html({ gameTime: STARTED, gameStatus: "final", leagueName: "NBA" })], ["", ""]);

@@ -4,7 +4,7 @@
 // Pure: no DB, no network (liveStateOf only). Run with:
 //   npx tsx src/server/data/live-state-acceptance-test.ts
 import { liveStateOf } from "@/server/data/live-state";
-import { startedPriceLabel, PRICE_PREGAME_PENDING, PRICE_EST_UNCHANGED } from "@/lib/parlay/game-progress";
+import { startedPriceLabel, PRICE_PREGAME_LINE, PRICE_EST_UNCHANGED } from "@/lib/parlay/game-progress";
 import type { ScoreGame } from "@/server/data/odds";
 
 let failures = 0;
@@ -36,7 +36,7 @@ const row = (over: Partial<ScoreGame>): ScoreGame => ({
 check("NBA live row: period, clock, away/home score", liveStateOf(row({}), GAME, "basketball_nba"), { period: 2, clock: "4:12", inningHalf: null, inning: null, away: 45, home: 41, scoreMissing: false });
 const missing = liveStateOf(row({ scores: [{ name: "Indiana Pacers", score: "0" }, { name: "Chicago Bulls", score: "0" }], scoreMissing: true }), GAME, "basketball_nba");
 check("scoreMissing is kept even though the feed shows 0-0", missing?.scoreMissing, true);
-check("...and the price label reads it as changed", startedPriceLabel({ gameStatus: "live", liveState: missing }), PRICE_PREGAME_PENDING);
+check("...and the price label reads it as changed", startedPriceLabel({ gameStatus: "live", liveState: missing }), PRICE_PREGAME_LINE);
 const zero = liveStateOf(row({ scores: [{ name: "Indiana Pacers", score: "0" }, { name: "Chicago Bulls", score: "0" }] }), GAME, "basketball_nba");
 check("a real 0-0 reads as unchanged", startedPriceLabel({ gameStatus: "live", liveState: zero }), PRICE_EST_UNCHANGED);
 check("a blank score is missing", liveStateOf(row({ scores: [{ name: "Indiana Pacers", score: "" }, { name: "Chicago Bulls", score: "3" }] }), GAME, "basketball_nba")?.scoreMissing, true);
