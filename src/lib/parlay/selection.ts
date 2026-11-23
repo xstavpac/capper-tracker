@@ -1,14 +1,20 @@
 // The Parlay Generator's selection layer: which of the gated,
-// scored candidates become legs. It reads lib/parlay/scoring.ts's edge directly
-// (rankScore, in percentage points) - no -110 equivalent, no tie bands. Pure and
-// client-safe: no React, no server imports, no storage.
+// scored candidates become legs. It reads the generator's score directly
+// (rankScore x 100: record-score.ts's combined win %, in points) - no -110
+// equivalent, no tie bands. Pure and client-safe: no React, no server imports,
+// no storage.
 //
-//   Generate   - deterministic. Score descending, then betKey, then pick id; the
-//                same input always gives the same legs.
-//   Regenerate - weighted sampling without replacement, weight
-//                exp(beta * score) x reuse penalty, on a seedable RNG (Gumbel
-//                top-k: the same distribution as drawing one leg at a time).
-//                The mode (Best / Diversified / Explore) sets beta.
+//   Rank order - score descending, then betKey, then pick id (orderCandidates
+//                with no draw). What `rank` means, and what a build with no
+//                draw (the server's deterministic Primary, the frozen fixtures,
+//                the backtests) takes.
+//   A draw     - weighted sampling without replacement, weight
+//                exp(beta * (score - top)) x exposure penalty, on a seedable RNG
+//                (Gumbel top-k: the same distribution as drawing one leg at a
+//                time). The mode (Best / Diversified / Explore) sets beta.
+//                Generate draws on a fresh seed per click with no exposure
+//                penalty; Regenerate draws with the penalty for every bet and
+//                game already shown on this result card.
 //
 // Either way the order is filled greedily under the constraints, inside the
 // fill, never as an after-filter:
@@ -29,6 +35,7 @@
 // completes with nothing unseen; a node or wall-clock budget running out first
 // is BUDGET_EXHAUSTED, never exhaustion.
 import { describePick, describeProp } from "@/lib/parlay/relationship-classifier";
+import { easternDateKey } from "@/lib/dates";
 
 // ---------------------------------------------------------------------------
 // Modes and tunables
@@ -37,15 +44,30 @@ export type SelectionMode = "BEST" | "DIVERSIFIED" | "EXPLORE";
 export const SELECTION_MODES: readonly SelectionMode[] = ["BEST", "DIVERSIFIED", "EXPLORE"];
 export const DEFAULT_SELECTION_MODE: SelectionMode = "DIVERSIFIED";
 
-// Per percentage point of edge. Gated picks sit around +2.6 to +10 points at the
-// default gate, so a 4-point gap weighs ~25x under Best, ~4x under Diversified and
-// ~1.6x under Explore.
-export const SELECTION_BETA: Record<SelectionMode, number> = { BEST: 0.8, DIVERSIFIED: 0.35, EXPLORE: 0.12 };
+// Per point of combined win %. Measured on prod Regenerate traces (2026-11): a gated pool
+// runs ~13-20 points from its top pick to its last (rank 2-3 ~3 points behind the top,
+// rank 7-10 ~7, rank 16-20 ~10, rank 21+ ~13). The draw's noise (Gumbel, sd ~1.3 in
+// log-weight) is worth 1.3 / beta points: ~1.3 under Best, so a Generate lands on the top
+// parlay or a game or two from it; ~3.7 under Diversified; ~11 under Explore, a reach
+// across most of the pool. A 4-point gap weighs ~55x under Best, ~4x under Diversified
+// and ~1.6x under Explore. (The old 0.8 / 0.35 / 0.12 were set for the edge model's
+// +2.6 to +10 range; Best is a little sharper now so a Generate in Best stays near the top.)
+// Chosen on the fixture pools in generator-variety-acceptance-test.ts.
+export const SELECTION_BETA: Record<SelectionMode, number> = { BEST: 1.0, DIVERSIFIED: 0.35, EXPLORE: 0.12 };
 
-// A leg used moments ago weighs REUSE_FLOOR of itself; the penalty halves every
-// REUSE_HALF_LIFE_MS, so a leg used a day ago is nearly back to full weight.
-export const REUSE_FLOOR = 0.35;
-export const REUSE_HALF_LIFE_MS = 12 * 60 * 60 * 1000;
+// The exposure penalty (Regenerate only): every earlier showing on THIS result card of
+// the same bet (betKey) costs LEG_EXPOSURE_PENALTY in log-weight, and of a leg on the
+// same game (gameExposureKey) GAME_EXPOSURE_PENALTY, each counted up to
+// MAX_EXPOSURE_COUNTED showings. In points that is penalty / beta, so the same counts
+// nudge Best a little and Explore a lot: one showing of a bet is ~1 point under Best,
+// ~2.9 under Diversified and ~8 under Explore; of a game ~0.8 / ~2.3 / ~6.7. The game term
+// is what rotates which games a parlay leaves out when there are more games than legs.
+// The cap keeps a card's long run of Regenerates from pushing Best far from the top
+// (a cap of 5-6 had Best changing as much as Diversified). Slip picks and their games
+// are never penalized.
+export const LEG_EXPOSURE_PENALTY = 1.0;
+export const GAME_EXPOSURE_PENALTY = 0.8;
+export const MAX_EXPOSURE_COUNTED = 3;
 
 // Random draws a Regenerate makes before it settles (Standard) or enumerates (Your picks only).
 export const STANDARD_DRAW_TRIES = 12;
@@ -127,18 +149,45 @@ export function betKeyOf(p: BetKeyPick): string {
 }
 
 // ---------------------------------------------------------------------------
-// Reuse penalty
+// Exposure: what this result card has already shown
 // ---------------------------------------------------------------------------
-// A leg shown recently: its betKey and when (epoch ms). PR 6 keeps these across
-// page loads; until then the session passes its last few parlays' legs.
-export type RecentLeg = { betKey: string; at: number };
+// How many parlays shown on this result card (Generate's and every Regenerate's) held
+// each bet (betKey) and each game (gameExposureKey). The session keeps it in memory and
+// resets it on Generate / Refresh; nothing is stored between page loads.
+export type Exposure = { legs: Readonly<Record<string, number>>; games: Readonly<Record<string, number>> };
+export const NO_EXPOSURE: Exposure = { legs: {}, games: {} };
 
-export function reuseMultiplier(betKey: string, recentLegs: readonly RecentLeg[], now: number): number {
-  let latest = -Infinity;
-  for (const r of recentLegs) if (r.betKey === betKey && r.at > latest) latest = r.at;
-  if (latest === -Infinity) return 1;
-  const age = Math.max(0, now - latest);
-  return 1 - (1 - REUSE_FLOOR) * Math.pow(2, -age / REUSE_HALF_LIFE_MS);
+// One game, as the server names it: sport + the two teams (either order) + the Eastern
+// date + the doubleheader game number (0 when none is known). Stable across snapshot
+// reloads, unlike a board's game id. Read off each pick (the engine's candidates and the
+// session's shown legs alike, so the two always agree); a doubleheader pick that doesn't
+// say which game it is on keys as 0, so such picks on the two games count as one game -
+// a penalty shared, never a constraint broken.
+export type GameKeyInput = { leagueName: string; homeTeam: string; awayTeam: string; gameTime: string; gameNumber?: number | null };
+export function gameExposureKey(g: GameKeyInput): string {
+  const teams = [g.homeTeam.trim().toLowerCase(), g.awayTeam.trim().toLowerCase()].sort();
+  const t = new Date(g.gameTime);
+  const day = Number.isNaN(t.getTime()) ? g.gameTime : easternDateKey(t);
+  return [g.leagueName, teams[0], teams[1], day, g.gameNumber ?? 0].join("|");
+}
+
+// The exposure penalty for one candidate, as multipliers on its weight: the bet's, the
+// game's (1 when the candidate has no gameKey - a slip pick's game), and both together.
+export function exposureMultiplier(betKey: string, gameKey: string | undefined, exposure: Exposure): { leg: number; game: number; total: number } {
+  const nLeg = Math.min(MAX_EXPOSURE_COUNTED, exposure.legs[betKey] ?? 0);
+  const nGame = gameKey === undefined ? 0 : Math.min(MAX_EXPOSURE_COUNTED, exposure.games[gameKey] ?? 0);
+  const leg = Math.exp(-LEG_EXPOSURE_PENALTY * nLeg);
+  const game = Math.exp(-GAME_EXPOSURE_PENALTY * nGame);
+  return { leg, game, total: leg * game };
+}
+
+// Counts one shown parlay's legs into an exposure (a new object; the old one is untouched).
+export function addExposure(exposure: Exposure, betKeys: readonly string[], gameKeys: readonly string[]): Exposure {
+  const legs = { ...exposure.legs };
+  const games = { ...exposure.games };
+  for (const k of new Set(betKeys)) legs[k] = (legs[k] ?? 0) + 1;
+  for (const k of new Set(gameKeys)) games[k] = (games[k] ?? 0) + 1;
+  return { legs, games };
 }
 
 // ---------------------------------------------------------------------------
@@ -153,31 +202,36 @@ export type SelectionCandidate<T> = {
   score: number;
   // Pick Mix category, when a quota applies.
   category?: string;
+  // The game's exposure identity (gameExposureKey). Absent: no game penalty (a slip pick's game).
+  gameKey?: string;
 };
 
 export type Ranked<T> = SelectionCandidate<T> & {
-  // 1-based position in the deterministic (Generate) order.
+  // 1-based position in the rank order (no draw).
   rank: number;
-  // The draw weight relative to the top candidate: exp(beta * (score - top)) x reuse. 1 on Generate.
+  // The draw weight relative to the top candidate: exp(beta * (score - top)) x reuse. 1 with no draw.
   weight: number;
+  // The exposure penalty, as a multiplier: the bet's and the game's together, then each alone. 1 with none.
   reuse: number;
+  legReuse: number;
+  gameReuse: number;
 };
 
-export type DrawOptions = { rng: Rng; beta: number; recentLegs?: readonly RecentLeg[]; now?: number };
+// exposure: Regenerate's penalty for what this result card has shown; absent (Generate) is none.
+export type DrawOptions = { rng: Rng; beta: number; exposure?: Exposure };
 
 export const byScoreThenKey = <T>(a: SelectionCandidate<T>, b: SelectionCandidate<T>): number =>
   b.score !== a.score ? b.score - a.score : a.betKey < b.betKey ? -1 : a.betKey > b.betKey ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 
-// Generate's order (no draw), or one Regenerate draw: Gumbel top-k over
-// log-weights, which is weighted sampling without replacement.
+// The rank order (no draw), or one draw: Gumbel top-k over log-weights, which is
+// weighted sampling without replacement.
 export function orderCandidates<T>(candidates: readonly SelectionCandidate<T>[], draw: DrawOptions | null): Ranked<T>[] {
   const base = [...candidates].sort(byScoreThenKey);
   const top = base.length > 0 ? base[0].score : 0;
-  const recent = draw?.recentLegs ?? [];
-  const now = draw?.now ?? Date.now();
+  const exposure = draw?.exposure ?? NO_EXPOSURE;
   const ranked: Ranked<T>[] = base.map((c, i) => {
-    const reuse = draw ? reuseMultiplier(c.betKey, recent, now) : 1;
-    return { ...c, rank: i + 1, reuse, weight: draw ? Math.exp(draw.beta * (c.score - top)) * reuse : 1 };
+    const m = draw ? exposureMultiplier(c.betKey, c.gameKey, exposure) : { leg: 1, game: 1, total: 1 };
+    return { ...c, rank: i + 1, reuse: m.total, legReuse: m.leg, gameReuse: m.game, weight: draw ? Math.exp(draw.beta * (c.score - top)) * m.total : 1 };
   });
   if (!draw) return ranked;
   const keyed = ranked.map((r) => {
@@ -375,18 +429,35 @@ export function enumerateCombos<T, L>(
 // ---------------------------------------------------------------------------
 // The run log's view of a selection
 // ---------------------------------------------------------------------------
-export type SelectionLegTrace = { id: string; rank: number; weight: number; reused?: boolean };
+// reused: the bet was already shown on this card; gameReused: its game was.
+export type SelectionLegTrace = { id: string; rank: number; weight: number; reused?: boolean; gameReused?: boolean };
+
+// How a build varied, for the run log: the outcome, how many of the varied legs (historyIds) are new
+// against the parlay on screen before it (null with none), and the shape of the pool - games with a
+// qualifying pick against the legs to generate (eligibleGames / legsNeeded is the rotation headroom).
+export type VarietyTrace = {
+  variety: "BEST" | "VARIED" | "NO_ALTERNATIVE";
+  noAlternativeReason: "ALL_PICKS_USED" | "NO_COMPARABLE" | null;
+  changed: number | null;
+  previous: number | null;
+  eligibleGames: number;
+  legsNeeded: number;
+};
+
 export type SelectionTrace = {
   trigger: "GENERATE" | "REGENERATE";
   mode: SelectionMode | null;
   beta: number | null;
+  // The draw's seed - Generate's too - so any build can be rebuilt; null for a build with no draw.
   seed: number | null;
   legs: SelectionLegTrace[];
   hedge?: SelectionLegTrace[];
   // Contrarian's picks under SCORING (Swap = All), as hedge.
   contrarian?: SelectionLegTrace[];
-  // Chosen legs that carried a reuse penalty.
+  // Chosen legs whose bet was already shown on this card, and whose game was.
   reuseHits: number;
+  gameReuseHits?: number;
+  outcome?: VarietyTrace;
   // Your picks only: draws rejected as already shown, valid combinations the
   // enumeration visited, and whether its budget ran out.
   rejectedCombos?: number;
@@ -399,5 +470,5 @@ export type SelectionTrace = {
 const round4 = (x: number) => Math.round(x * 10_000) / 10_000;
 
 export function legTrace<T>(r: Ranked<T>): SelectionLegTrace {
-  return { id: r.id, rank: r.rank, weight: round4(r.weight), ...(r.reuse < 1 ? { reused: true } : {}) };
+  return { id: r.id, rank: r.rank, weight: round4(r.weight), ...(r.legReuse < 1 ? { reused: true } : {}), ...(r.gameReuse < 1 ? { gameReused: true } : {}) };
 }

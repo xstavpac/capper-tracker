@@ -1,11 +1,12 @@
-// PR 6 (modes UI, reuse history, LIMITED): the browser-kept reuse history and mode survive broken storage,
-// history trims to 10 parlays / 24h and merges once per leg, LIMITED fires exactly when Best available
-// builds fewer legs than Total legs and never touches the gate, and the chosen mode reaches selection's beta.
+// PR 6 (modes UI, LIMITED): the browser-kept mode survives broken storage, the old browser-kept reuse
+// history is removed and never read (the exposure penalty is the result card's, in memory - generator-session.ts),
+// LIMITED fires exactly when Best available builds fewer legs than Total legs and never touches the gate,
+// and the chosen mode reaches selection's beta.
 // Pure - no DB. Run with:  npx tsx src/lib/parlay/modes-ui-acceptance-test.ts
 import { createGeneratorSession, type GenerateCall } from "@/lib/parlay/generator-session";
 import { buildGeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
-import { mergeRecentLegs, readReuseHistory, readStoredMode, recordReuseHistory, trimHistory, writeStoredMode, type KeyValueStore } from "@/lib/parlay/reuse-history";
+import { LEGACY_REUSE_HISTORY_KEY, readStoredMode, writeStoredMode, type KeyValueStore } from "@/lib/parlay/selection-mode-store";
 import { SELECTION_BETA } from "@/lib/parlay/selection";
 import { sanitizeClientTrace } from "@/lib/parlay/run-trace-validate";
 import type { RunTrace } from "@/lib/parlay/run-trace";
@@ -33,20 +34,12 @@ const throwing: KeyValueStore = {
   },
 };
 const NOW = Date.parse("2099-06-01T12:00:00.000Z");
-const H = 60 * 60 * 1000;
 
 // ---- storage wrapper ----
-check("throwing storage: history reads empty", readReuseHistory("u", NOW, throwing), []);
-check("throwing storage: write does not throw and returns what it would store", recordReuseHistory("u", ["a", "b"], NOW, throwing), [{ at: NOW, legs: ["a", "b"] }]);
-check("no storage: history reads empty", readReuseHistory("u", NOW, null), []);
-check("empty storage: history reads empty", readReuseHistory("u", NOW, memStore()), []);
 check("throwing storage: mode is Diversified", readStoredMode("u", throwing), "DIVERSIFIED");
 writeStoredMode("u", "EXPLORE", throwing);
+check("no storage: mode is Diversified", readStoredMode("u", null), "DIVERSIFIED");
 const ms = memStore();
-for (const junk of ["not json", "null", "[]", '{"v":2,"parlays":[]}', '{"v":1,"parlays":"x"}', '{"v":1,"parlays":[{"at":"x","legs":["a"]},{"at":1,"legs":5},null]}']) {
-  ms.data.set("parlay-reuse:v1:u", junk);
-  check("junk in storage reads empty: " + junk.slice(0, 24), readReuseHistory("u", NOW, ms), []);
-}
 writeStoredMode("u", "BEST", ms);
 check("mode round-trips", readStoredMode("u", ms), "BEST");
 ms.data.set("parlay-mode:v1:u", "WILD");
@@ -54,28 +47,14 @@ check("an unknown stored mode falls back to Diversified", readStoredMode("u", ms
 writeStoredMode("u", "DIVERSIFIED", ms);
 check("Diversified clears the key", ms.data.has("parlay-mode:v1:u"), false);
 
-// ---- trimming ----
-const st = memStore();
-for (let i = 0; i < 14; i++) recordReuseHistory("u", ["leg" + i], NOW - (14 - i) * 1000, st);
-const kept = readReuseHistory("u", NOW, st);
-check("history keeps the newest 10", [kept.length, kept[0].legs[0], kept[9].legs[0]], [10, "leg13", "leg4"]);
-check(
-  "history drops entries 24h old and older",
-  trimHistory([{ at: NOW - 24 * H, legs: ["old"] }, { at: NOW - 24 * H + 1000, legs: ["fresh"] }], NOW).map((e) => e.legs[0]),
-  ["fresh"]
-);
-const dup = memStore();
-recordReuseHistory("u", ["x", "y"], NOW - 5000, dup);
-recordReuseHistory("u", ["x", "y"], NOW, dup);
-check("the same parlay rebuilt is one entry", readReuseHistory("u", NOW, dup), [{ at: NOW, legs: ["x", "y"] }]);
-check("users are separate", readReuseHistory("v", NOW, dup), []);
-
-// ---- merge ----
-check(
-  "a leg in both sources appears once, latest time kept",
-  mergeRecentLegs([{ betKey: "a", at: 5 }], [{ at: 9, legs: ["a", "b"] }, { at: 2, legs: ["b"] }]).sort((p, q) => (p.betKey < q.betKey ? -1 : 1)),
-  [{ betKey: "a", at: 9 }, { betKey: "b", at: 9 }]
-);
+// ---- the old reuse history: removed on the next read, the mode untouched, other users' left alone ----
+const legacy = memStore();
+legacy.data.set("parlay-reuse:v1:u", JSON.stringify({ v: 1, parlays: [{ at: NOW, legs: ["a"] }] }));
+legacy.data.set("parlay-reuse:v1:v", "{}");
+writeStoredMode("u", "EXPLORE", legacy);
+check("legacy key name", LEGACY_REUSE_HISTORY_KEY("u"), "parlay-reuse:v1:u");
+check("reading the mode removes the old reuse history", [readStoredMode("u", legacy), legacy.data.has("parlay-reuse:v1:u")], ["EXPLORE", false]);
+check("...only this user's", legacy.data.has("parlay-reuse:v1:v"), true);
 
 // ---- the session: LIMITED, the gate, the mode ----
 const START = "2099-06-01T23:00:00.000Z";
@@ -148,22 +127,23 @@ const base: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL"
   await d.regenerate(pool, base);
   check("no mode passed: Diversified", t3[0]?.extras.selection?.mode, "DIVERSIFIED");
 
-  // Reuse history through the session: stored legs join recentLegs after a "reload" (new session, same storage).
-  const store = memStore();
-  const s1 = createGeneratorSession({ generate, now: () => new Date(NOW), reuse: { userId: () => "u", store } });
-  const first = await s1.generate(pool, base);
-  const firstKeys = "error" in first ? [] : first.parlay.historyBetKeys ?? [];
-  check("a parlay shown is written to the browser history", readReuseHistory("u", NOW, store).map((e) => e.legs), [firstKeys]);
+  // Nothing about the parlays shown is kept between page loads: a new session's first Regenerate weighs down
+  // only what its own card has shown (its Generate), however many parlays an earlier session showed.
+  const old = createGeneratorSession({ generate, now: () => new Date(NOW), firstSeed: 3 });
+  await old.generate(pool, base);
+  for (let i = 0; i < 4; i++) await old.regenerate(pool, base);
   const traces2: RunTrace[] = [];
-  const s2 = createGeneratorSession({ generate, now: () => new Date(NOW), reuse: { userId: () => "u", store }, onTrace: (x) => void traces2.push(x) });
-  await s2.generate(pool, base);
+  const s2 = createGeneratorSession({ generate, now: () => new Date(NOW), firstSeed: 3, onTrace: (x) => void traces2.push(x) });
+  const gen2 = await s2.generate(pool, base);
   traces2.length = 0;
   await s2.regenerate(pool, base);
-  check("a new page load's Regenerate weighs the stored legs down", (traces2[0]?.extras.selection?.reuseHits ?? 0) > 0, true);
-  const broken = createGeneratorSession({ generate, now: () => new Date(NOW), reuse: { userId: () => "u", store: throwing } });
-  await broken.generate(pool, base);
-  const r = await broken.regenerate(pool, base);
-  check("throwing storage: Generate and Regenerate still work", "error" in r ? null : r.parlay.legs.length, 3);
+  const sel2 = traces2[0]?.extras.selection;
+  const shownByGen = new Set("error" in gen2 ? [] : gen2.parlay.historyIds);
+  check(
+    "a new page load: only its own Generate's legs are weighed down",
+    (sel2?.legs ?? []).every((l) => (l.reused === true) === shownByGen.has(l.id)),
+    true
+  );
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`);
   process.exit(failures === 0 ? 0 : 1);

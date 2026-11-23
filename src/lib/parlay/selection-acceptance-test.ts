@@ -13,11 +13,11 @@
 //      has been shown, with the count logged; 25 picks, Total legs 12 - within the time cap and never a
 //      false exhaustion; a budget that runs out - BUDGET_EXHAUSTED and a parlay that differs, never
 //      "No other parlays".
-//   5. Reuse penalty: a leg in recentLegs is drawn less often than without.
+//   5. Exposure penalty: a bet (or game) already shown on the card is drawn less often than without.
 //   6. Hedge: Generate takes the top alternate; Regenerate draws among the gated ones.
 //   7. Fresh seed: two "page loads" give different first Regenerates.
 //   8. The run log: extras.selection survives sanitizeClientTrace.
-import { buildGeneratedParlay, type EngineLeg, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, generateVariation, type EngineLeg, type GeneratedParlay, type GeneratorSettings, type GeneratorSnapshot, type Variation } from "@/lib/parlay/generator";
 import { createGeneratorSession } from "@/lib/parlay/generator-session";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
@@ -30,8 +30,11 @@ import {
   ENUMERATION_TIME_BUDGET_MS,
   enumerateCombos,
   orderCandidates,
-  reuseMultiplier,
-  REUSE_FLOOR,
+  exposureMultiplier,
+  gameExposureKey,
+  GAME_EXPOSURE_PENALTY,
+  LEG_EXPOSURE_PENALTY,
+  MAX_EXPOSURE_COUNTED,
   SELECTION_BETA,
   SELECTION_MODES,
   signatureOf,
@@ -347,7 +350,7 @@ async function yourPicks() {
 }
 
 // ============================================================================
-// 5. Reuse penalty
+// 5. Exposure penalty
 // ============================================================================
 function reuse() {
   const s = settingsOf(8, 2);
@@ -357,18 +360,47 @@ function reuse() {
   for (let seed = 1; seed <= 200; seed++) for (const id of ids(run(SLATE, s, { seed, history: [gen.p.historyIds] }).p)) counts.set(id, (counts.get(id) ?? 0) + 1);
   const [target] = [...counts.entries()].sort((a, b) => Math.abs(a[1] - 100) - Math.abs(b[1] - 100))[0];
   const pick = SLATE.games.flatMap((g) => g.picks).find((p) => p.pickId === target)!;
-  const recentLegs = [{ betKey: betKeyOf(pick), at: NOW.getTime() }];
+  const exposure = { legs: { [betKeyOf(pick)]: 1 }, games: {} };
   let withPenalty = 0;
   let hits = 0;
   for (let seed = 1; seed <= 200; seed++) {
-    const r = run(SLATE, s, { seed, history: [gen.p.historyIds], recentLegs });
+    const r = run(SLATE, s, { seed, history: [gen.p.historyIds], exposure });
     if (ids(r.p).includes(target)) withPenalty++;
     hits += r.sel.reuseHits;
   }
-  console.log(`  reuse penalty: ${target} drawn ${counts.get(target)}/200 without, ${withPenalty}/200 with it in recentLegs`);
-  check("reuse penalty: a leg in recentLegs is drawn less often than without", withPenalty < counts.get(target)!, true);
-  check("reuse penalty: the run log counts the hits", hits, withPenalty);
-  check("reuse multiplier: just shown = floor, 12 h later halfway back, none = 1", [reuseMultiplier("k", [{ betKey: "k", at: 0 }], 0), reuseMultiplier("k", [{ betKey: "k", at: 0 }], 12 * 3600_000), reuseMultiplier("x", [{ betKey: "k", at: 0 }], 0)], [REUSE_FLOOR, 1 - (1 - REUSE_FLOOR) / 2, 1]);
+  console.log(`  exposure penalty: ${target} drawn ${counts.get(target)}/200 without, ${withPenalty}/200 with its bet shown once on the card`);
+  check("exposure penalty: a bet already shown on the card is drawn less often than without", withPenalty < counts.get(target)!, true);
+  check("exposure penalty: the run log counts the hits", hits, withPenalty);
+  // The game term: every pick on the target's game weighs less, so the game is in fewer draws.
+  const gameOfTarget = pick.gameId;
+  const gameKey = gameExposureKey(pick);
+  let gameWith = 0;
+  let gameWithout = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const free = run(SLATE, s, { seed, history: [gen.p.historyIds] }).p;
+    const held = run(SLATE, s, { seed, history: [gen.p.historyIds], exposure: { legs: {}, games: { [gameKey]: 2 } } }).p;
+    if (free.legs.some((l) => l.gameId === gameOfTarget)) gameWithout++;
+    if (held.legs.some((l) => l.gameId === gameOfTarget)) gameWith++;
+  }
+  console.log(`  game exposure: ${gameOfTarget} in ${gameWithout}/200 draws without, ${gameWith}/200 shown twice on the card`);
+  check("game exposure: a game already shown on the card is in fewer draws", gameWith < gameWithout, true);
+  check(
+    "exposure multiplier: none = 1; one bet showing = exp(-leg); game counted with it; capped",
+    [
+      exposureMultiplier("k", "g", { legs: {}, games: {} }).total,
+      exposureMultiplier("k", "g", { legs: { k: 1 }, games: {} }).total,
+      exposureMultiplier("k", "g", { legs: { k: 1 }, games: { g: 2 } }).total,
+      exposureMultiplier("k", undefined, { legs: {}, games: { g: 2 } }).total,
+      exposureMultiplier("k", "g", { legs: { k: 99 }, games: {} }).total,
+    ].map((x) => +x.toFixed(9)),
+    [
+      1,
+      Math.exp(-LEG_EXPOSURE_PENALTY),
+      Math.exp(-LEG_EXPOSURE_PENALTY - 2 * GAME_EXPOSURE_PENALTY),
+      1,
+      Math.exp(-LEG_EXPOSURE_PENALTY * MAX_EXPOSURE_COUNTED),
+    ].map((x) => +x.toFixed(9))
+  );
 }
 
 // ============================================================================
@@ -460,7 +492,10 @@ async function freshSeedAndLog() {
   const hostile = sanitizeClientTrace({ ...JSON.parse(JSON.stringify(regen)), extras: { selection: { trigger: "REGENERATE", mode: "LOUD", beta: 1e9, seed: -1, reuseHits: 1, legs: [{ id: "x", rank: 1, weight: 7 }, { id: "y", rank: 2, weight: 0.5 }] } } });
   check("run log: the intake drops what doesn't fit (unknown mode, out-of-range beta / seed / weight)", canon(hostile?.extras.selection), canon( { trigger: "REGENERATE", mode: null, beta: null, seed: null, legs: [{ id: "y", rank: 2, weight: 0.5 }], reuseHits: 1 }));
   const gen = run(SLATE, s, null).sel;
-  check("run log: Generate records ranks with no mode, beta or seed", [gen.trigger, gen.mode, gen.beta, gen.seed, gen.legs.every((l) => l.weight === 1)], ["GENERATE", null, null, null, true]);
+  check("run log: a build with no draw records ranks with no mode, beta or seed", [gen.trigger, gen.mode, gen.beta, gen.seed, gen.legs.every((l) => l.weight === 1)], ["GENERATE", null, null, null, true]);
+  const drawn = run(SLATE, s, generateVariation({ seed: 77, mode: "EXPLORE" })).sel;
+  check("run log: a Generate draw records its seed, mode and beta (reproducible)", [drawn.trigger, drawn.mode, drawn.beta, drawn.seed], ["GENERATE", "EXPLORE", SELECTION_BETA.EXPLORE, 77]);
+  check("run log: ...and replays exactly from them", ids(run(SLATE, s, generateVariation({ seed: drawn.seed!, mode: drawn.mode! })).p).join(), ids(run(SLATE, s, generateVariation({ seed: 77, mode: "EXPLORE" })).p).join());
 }
 
 (async () => {

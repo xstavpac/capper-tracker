@@ -41,7 +41,7 @@ import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, RECORD_WIN_RATE_HELP as WI
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { effectiveFillFrom, floorHint, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
-import { readStoredMode, writeStoredMode } from "@/lib/parlay/reuse-history";
+import { readStoredMode, writeStoredMode } from "@/lib/parlay/selection-mode-store";
 import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selection";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
@@ -195,11 +195,8 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   const [noAlternative, setNoAlternative] = useState<NoAlternativeReason | null>(null);
   // The run log (run-trace.ts): the trace of a build made here is sent to the server, fire and forget. It is
   // diagnostics - a failure is ignored and never touches the parlay.
-  const userIdRef = useRef(userId);
-  userIdRef.current = userId;
   const session = useRef(
     createGeneratorSession({
-      reuse: { userId: () => userIdRef.current },
       generate: (req) => generateParlayAction(req),
       onTrace: (trace) => void recordGeneratorRunAction(trace).catch(() => undefined),
     })
@@ -249,7 +246,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   // superseded (a newer build, Clear result, a pool change) is dropped, never shown.
   const build = useBuildReveal();
   const runs = useRef(0);
-  async function run(kind: "generate" | "regenerate" | "refresh", animate = false) {
+  // `reseed`: the Generate button - a new draw, so each click gives another first parlay. A settings
+  // rebuild keeps the draw's seed (generator-session.ts), so the card doesn't reshuffle on every step.
+  async function run(kind: "generate" | "regenerate" | "refresh", animate = false, reseed = false) {
     const run = ++runs.current;
     // A new build ends any sequence still running.
     build.cancel();
@@ -266,9 +265,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
       }
       const res =
         kind === "refresh"
-          ? await session.current.refresh(inputs, settings)
+          ? await session.current.refresh(inputs, settings, { mode: selectionMode })
           : kind === "generate"
-            ? await session.current.generate(inputs, settings)
+            ? await session.current.generate(inputs, settings, { mode: selectionMode, reseed })
             : await session.current.regenerate(inputs, settings, selectionMode);
       if (run !== runs.current) return;
       if ("error" in res) {
@@ -656,7 +655,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 Refresh
               </button>
             )}
-            <button type="button" onClick={() => void run("generate", true)} disabled={busy || inputs.leagues.length === 0} className={PILL_PRIMARY}>
+            <button type="button" onClick={() => void run("generate", true, true)} disabled={busy || inputs.leagues.length === 0} className={PILL_PRIMARY}>
               <BoltIcon className="h-4 w-4" />
               {busy ? "Generating…" : "Generate parlay"}
             </button>

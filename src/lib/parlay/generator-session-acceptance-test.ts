@@ -6,7 +6,7 @@
 // Pure - no DB. Run with:
 //   npx tsx src/lib/parlay/generator-session-acceptance-test.ts
 import { createGeneratorSession, poolKey, type GenerateCall } from "@/lib/parlay/generator-session";
-import { buildGeneratedParlay, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
+import { buildGeneratedParlay, generateVariation, type GeneratorSettings, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 
 let failures = 0;
@@ -47,8 +47,11 @@ const games: GeneratorGame[] = TEAMS.map(([home, away, nick], g) => {
 
 let clock = T0;
 let calls: string[] = [];
+// As the server action: the parlay is the request's Generate draw (generateVariation).
+const draws: unknown[] = [];
 const generate: GenerateCall = async (req) => {
   calls.push(poolKey(req));
+  draws.push(req.draw ?? null);
   const snapshot: GeneratorSnapshot = {
     builtAt: new Date(clock).toISOString(),
     games,
@@ -57,7 +60,7 @@ const generate: GenerateCall = async (req) => {
     leagueRecords: { records: {}, streaks: {}, last20: {} },
     categoryRecords,
   };
-  return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, null, new Date(clock)) };
+  return { snapshot, parlay: buildGeneratedParlay(snapshot, req.settings, req.draw ? generateVariation(req.draw) : null, new Date(clock)) };
 };
 const S: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
 const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId: string; leagueName: string }[] };
@@ -66,6 +69,7 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   const session = createGeneratorSession({ generate, now: () => new Date(clock), firstSeed: 1 });
   const g1 = await session.generate(pool, S);
   check("first Generate: one request", [calls.length, "error" in g1 ? null : g1.fetched], [1, true]);
+  check("...carrying the Generate draw (seed and mode) to the server", [typeof (draws[0] as { seed?: unknown })?.seed, (draws[0] as { mode?: unknown })?.mode], ["number", "DIVERSIFIED"]);
   const keys: string[] = [];
   for (let i = 0; i < 5; i++) {
     const r = await session.regenerate(pool, S);
@@ -88,7 +92,16 @@ const pool = { leagues: ["MLB"], slipPickIds: ["g4ml"], targets: [] as { gameId:
   calls.length = before; // the later checks count from the main session's requests
   check("poolKey ignores order", poolKey({ leagues: ["NFL", "MLB"], slipPickIds: ["b", "a"], targets: [] }) === poolKey({ leagues: ["MLB", "NFL"], slipPickIds: ["a", "b"], targets: [] }), true);
   const again = await session.generate(pool, S);
-  check("Generate on a held snapshot: the same Primary as the first", "error" in g1 || "error" in again ? null : again.parlay.generatedKey === g1.parlay.generatedKey, true);
+  check("Generate on a held snapshot, same seed (a settings rebuild): the same parlay as the first", "error" in g1 || "error" in again ? null : again.parlay.generatedKey === g1.parlay.generatedKey, true);
+  // The Generate button reseeds: another draw, still no request. Over a few clicks the first parlay changes.
+  const reseeded = new Set<string>();
+  for (let i = 0; i < 6; i++) {
+    const r = await session.generate(pool, S, { reseed: true });
+    if (!("error" in r)) reseeded.add(r.parlay.generatedKey);
+  }
+  check("Generate with reseed: no request, and the first parlay varies across clicks", [calls.length, reseeded.size > 1], [before, true]);
+  const rebuilt = await session.generate(pool, S);
+  check("...and a rebuild after it keeps the last click's seed", "error" in rebuilt ? null : reseeded.has(rebuilt.parlay.generatedKey), true);
 
   await session.generate({ ...pool, slipPickIds: [] }, S);
   check("slip changed: one request", calls.length, 2);
