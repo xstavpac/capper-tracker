@@ -4,20 +4,20 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { LAST20_COLLAPSED_COUNT } from "@/lib/cappers-panels";
 import { AlertTriangleIcon, ChevronDownIcon, TargetIcon } from "@/components/dashboard/cappers-icons";
-import { CONTROL, FOOTER_LINK, Message, Name, PanelShell, ROW, Rank, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
+import { CONTROL, FOOTER_LINK, Message, Name, PanelShell, ROW, Rank, TINTS, withTrim, type PanelTheme } from "@/components/dashboard/panel-shell";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 
 const LAST20: Record<"best" | "worst", PanelTheme & { empty: string }> = {
   best: {
-    ...TINTS.green,
+    ...withTrim(TINTS.green, "pk-g"),
     title: "Best last 20",
     subtitle: "Strongest recent records",
     icon: <TargetIcon className={ICON} />,
     empty: "No active capper is at 50% or better over their last 20.",
   },
   worst: {
-    ...TINTS.red,
+    ...withTrim(TINTS.red, "pk-rd"),
     title: "Worst last 20",
     subtitle: "Weakest recent records",
     icon: <AlertTriangleIcon className={ICON} />,

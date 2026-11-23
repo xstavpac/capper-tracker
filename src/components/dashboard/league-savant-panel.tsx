@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { SAVANT_COLLAPSED_COUNT, SAVANT_TREND_DAYS, defaultSavantLeague, savantChoiceKey, type LeagueSavant, type SavantRow } from "@/lib/league-savant";
 import { AwardIcon, ChevronDownIcon, CrownIcon } from "@/components/dashboard/cappers-icons";
-import { CONTROL, FOOTER_LINK, GREEN, Message, PanelShell, RED, type PanelTint } from "@/components/dashboard/panel-shell";
+import { CONTROL, FOOTER_LINK, GREEN, Message, PanelShell, RED, withTrim, type PanelTint } from "@/components/dashboard/panel-shell";
 
 // The card's own blue: a shade cooler than TINTS.blue, with a square icon tile.
 const TINT: PanelTint = {
@@ -97,7 +97,7 @@ export function LeagueSavantPanel({ savant, dateKey, filterable, leaderboardHref
 
   return (
     <PanelShell
-      theme={{ ...TINT, title: "League Savant", subtitle: league === null ? "Best cappers this season" : "Best " + league + " cappers this season", icon: <AwardIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
+      theme={{ ...withTrim(TINT, "pk-bl"), title: "League Savant", subtitle: league === null ? "Best cappers this season" : "Best " + league + " cappers this season", icon: <AwardIcon className="h-[17px] w-[17px] stroke-[2.2]" /> }}
       control={
         league !== null && (
           <div className="relative shrink-0">

@@ -1,7 +1,8 @@
 import { DEFAULT_CHIP_SET, PICK_CATEGORY_LABELS, type CategoryBreakdownItem } from "@/server/data/stats";
 import { CategoryCard } from "@/components/dashboard/category-card";
 
-// All-time record by market, one neutral card each (see CategoryCard). Always the same six markets in
+// All-time record by market, one card each in the /picks stat-tile trim, green or red by its win %
+// (see CategoryCard `trim`). Always the same six markets in
 // the same order (DEFAULT_CHIP_SET), so the grid never changes shape: `items` only holds the markets
 // with a decided pick, and the rest are drawn at 0-0.
 // Two across on a phone, three from ~1100px, all six from ~1700px.
@@ -13,7 +14,7 @@ export function DashboardCategoryCards({ items }: { items: CategoryBreakdownItem
         const { wins, losses, pushes, winPct } = byKey.get(key) ?? { wins: 0, losses: 0, pushes: 0, winPct: 0 };
         return (
           <li key={key}>
-            <CategoryCard label={PICK_CATEGORY_LABELS[key]} wins={wins} losses={losses} pushes={pushes} winPct={winPct} />
+            <CategoryCard label={PICK_CATEGORY_LABELS[key]} wins={wins} losses={losses} pushes={pushes} winPct={winPct} trim />
           </li>
         );
       })}
