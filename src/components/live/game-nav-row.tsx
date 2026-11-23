@@ -67,7 +67,7 @@ export function GameNavRow({
           type="button"
           onClick={onPrev}
           disabled={first}
-          className={BTN + (first ? " border border-[#E3E6EE] bg-white text-muted-foreground opacity-50 dark:border-border dark:bg-card" : " border border-[#DADDE5] bg-white text-foreground hover:bg-[#F5F6FA] dark:border-border dark:bg-card dark:hover:bg-white/[0.06]")}
+          className={BTN + " lv-prev" + (first ? " border border-[#E3E6EE] bg-white text-muted-foreground opacity-50 dark:border-border dark:bg-card" : " border border-[#DADDE5] bg-white text-foreground hover:bg-[#F5F6FA] dark:border-border dark:bg-card dark:hover:bg-white/[0.06]")}
         >
           <Chevron dir="left" />
           Prev game
@@ -80,7 +80,7 @@ export function GameNavRow({
           type="button"
           onClick={onNext}
           disabled={last}
-          className={BTN + (last ? " bg-brand-600 text-white opacity-40" : " bg-brand-600 text-white hover:bg-brand-700")}
+          className={BTN + " lv-next" + (last ? " bg-brand-600 text-white opacity-40" : " bg-brand-600 text-white hover:bg-brand-700")}
         >
           Next game
           <Chevron dir="right" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type Ref } from "react";
+import { useEffect, useState, type CSSProperties, type Ref } from "react";
 import { getLeagueRecordsAction } from "@/server/actions/picks";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PickCard } from "@/components/live/pick-card";
@@ -90,10 +90,11 @@ function TeamPickSection({
     <div
       className={
         orderClass +
-        " mb-3 rounded-[14px] border p-2.5 " +
+        " lv-team mb-3 rounded-[14px] border p-2.5 " +
         (violet ? "border-[#E7DDFA] bg-[#FAF7FF]/60 dark:border-violet-500/30 dark:bg-violet-500/[0.06]" : teamColor ? "dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]" : "border-[#E3E6EE]/70 bg-[#F5F6FA]/50 dark:border-border dark:bg-white/[0.04]")
       }
-      style={!violet && teamColor ? { backgroundColor: teamColor + "0D", borderColor: teamColor + "38" } : undefined}
+      // --bar: the accent bar and glow of live-skin.css, in the group's own colour.
+      style={{ ...(!violet && teamColor ? { backgroundColor: teamColor + "0D", borderColor: teamColor + "38" } : {}), "--bar": violet ? "#8b5cf6" : (teamColor ?? "#94a3b8") } as CSSProperties}
     >
       {heavy?.team && <HeavyConsensusBadge badge={heavy.team} className="mb-1 ml-1" />}
       <div
@@ -206,7 +207,7 @@ export function GameDetailPanel({
     </div>
   );
   return (
-    <section className="live-panel rounded-[18px] border p-3.5">
+    <section className="live-panel lv-gpanel lv-late rounded-[18px] border p-3.5">
       {nav && <GameNavRow {...nav} />}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h2 className="min-w-0 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">

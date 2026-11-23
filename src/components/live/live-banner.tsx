@@ -1,7 +1,7 @@
 import { LIVE_SPORTS } from "@/server/data/odds";
 import { SHELL_CONTAINER } from "@/components/layout/shell";
 import { LiveBannerRow } from "@/components/live/live-banner-row";
-import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
+import { PageBanner } from "@/components/dashboard/page-banner";
 import { ParlaySlipButton, ParlaySlipActionBar } from "@/components/parlay/parlay-slip-button";
 
 // The /live banner: the shared page banner (with its motto), and under it the league pills with the Parlay slip and the Feed/Grid toggle at their right end. The league and the view are links (query params the page
@@ -16,7 +16,7 @@ export function LiveBanner({ activeSport, isGrid }: { activeSport: string; isGri
 
   return (
     <>
-      <PageBanner variant="live" title="Live" icon={PAGE_BANNER_ICONS.live} motto="EVERY GAME · EVERY PICK · LIVE" />
+      <PageBanner variant="live" title="Live" motto="EVERY GAME · EVERY PICK · LIVE" />
       {/* The league pills: under the banner, in the same container (the banner's strip cancels main's padding the same way), so the first pill lines up with the banner's left edge. No background of their own. */}
       <div className="live-bg -mx-4 md:-mx-8">
         <div className={SHELL_CONTAINER + " mb-4 mt-3.5 lg:mb-[18px] lg:mt-1.5"}>

@@ -1,0 +1,24 @@
+/* Live banner art (banners/bettingview-live-banner.html). Shared flow/node/glow rules: banner-shared.css. */
+
+/* Transmitter: shockwave rings radiate outward, red core pulses in sync (1.6 s beat) */
+.bnr-lv-shock{fill:none;stroke:#3b82f6;stroke-width:1.5;vector-effect:non-scaling-stroke;transform-box:fill-box;transform-origin:center;opacity:0;animation:bnr-lv-shock 4.8s cubic-bezier(.2,.6,.3,1) infinite;animation-delay:var(--s)}
+@keyframes bnr-lv-shock{0%{transform:scale(1);opacity:.75}100%{transform:scale(2.05);opacity:0}}
+.bnr-lv-dot,.bnr-lv-dotglow{transform-box:fill-box;transform-origin:center;animation:bnr-lv-dot 1.6s ease-in-out infinite}
+@keyframes bnr-lv-dot{0%,100%{transform:scale(1.14)}50%{transform:scale(.96)}}
+.bnr-lv-dotglow{animation-name:bnr-lv-dotglow}
+@keyframes bnr-lv-dotglow{0%,100%{opacity:.95;transform:scale(1.5)}50%{opacity:.25;transform:scale(.9)}}
+.bnr-lv-disc{animation:bnr-lv-disc 1.6s ease-in-out infinite}
+@keyframes bnr-lv-disc{0%,100%{stroke:#7fb2f5}50%{stroke:#bcd7f8}}
+
+/* Waveform highlight travels once across the trace */
+.bnr-lv-wavehl{fill:none;stroke:#fff;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:10 110;animation:bnr-lv-wavehl 8s linear infinite}
+@keyframes bnr-lv-wavehl{0%{stroke-dashoffset:10;opacity:0}6%{opacity:.9}92%{opacity:.9}100%{stroke-dashoffset:-90;opacity:0}}
+.bnr-lv-wball{offset-path:path('M718 64H786L799 36L814 91L831 52L840 64H873L887 55L896 64H1000');offset-rotate:0deg;offset-distance:0%;animation:bnr-lv-wball 8s linear infinite;opacity:0}
+@keyframes bnr-lv-wball{0%{offset-distance:0%;opacity:0}6%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
+
+@media (prefers-reduced-motion:reduce){
+  .bnr-lv-wavehl{display:none}
+  .bnr-lv-shock{animation:none;opacity:.25}
+  .bnr-lv-dot,.bnr-lv-dotglow,.bnr-lv-disc,.bnr-lv-wball{animation:none}
+  .bnr-lv-wball{display:none}
+}

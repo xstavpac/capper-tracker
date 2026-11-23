@@ -104,6 +104,7 @@ export function MomentumCard({
     <section
       aria-label="Today's Momentum"
       className={
+        "pk-mom " + (down ? "pk-down " : "pk-up ") +
         "flex flex-wrap gap-x-7 gap-y-2 rounded-[18px] border px-5 pb-3 pt-5 sm:px-6 " +
         (down
           ? "border-[#f8cfd2] bg-[#fff5f5] dark:border-red-500/30 dark:bg-red-500/10"
@@ -123,7 +124,7 @@ export function MomentumCard({
         <div>
           <p
             className={
-              "text-[44px] font-bold leading-[1.05] tracking-[-0.02em] tabular-nums sm:text-[50px] " +
+              "pk-big text-[44px] font-bold leading-[1.05] tracking-[-0.02em] tabular-nums sm:text-[50px] " +
               (down ? "text-[#a01523] dark:text-red-400" : "text-[#137a3a] dark:text-emerald-400")
             }
           >
@@ -137,7 +138,7 @@ export function MomentumCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {canRange && (
-              <div role="group" aria-label="Momentum range" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
+              <div role="group" aria-label="Momentum range" className="pk-seg flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
                 {(["today", ...MOMENTUM_RANGES] as const).map((k) => (
                   <button
                     key={k}
@@ -151,7 +152,7 @@ export function MomentumCard({
                 ))}
               </div>
             )}
-            <div role="group" aria-label="Momentum picks" className="flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
+            <div role="group" aria-label="Momentum picks" className="pk-seg flex rounded-full border border-border bg-card/60 p-0.5 text-sm font-semibold">
               {(["all", "unique"] as const).map((k) => (
                 <button
                   key={k}
@@ -165,7 +166,7 @@ export function MomentumCard({
               ))}
             </div>
           </div>
-          <span className={"flex items-center gap-2 rounded-full px-3.5 py-[7px] text-sm font-semibold " + pill.cls}>
+          <span className={"pk-trend flex items-center gap-2 rounded-full px-3.5 py-[7px] text-sm font-semibold " + pill.cls}>
             <span className="h-[9px] w-[9px] rounded-full" style={{ background: pill.dot }} />
             {pill.label}
           </span>

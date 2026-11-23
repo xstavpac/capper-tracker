@@ -5,7 +5,7 @@ import { UpgradeGate } from "@/components/billing/upgrade-gate";
 import { getCappersForUser } from "@/server/data/cappers";
 import { getSportsWithLeagues } from "@/server/data/picks";
 import { ThemedPage } from "@/components/dashboard/themed-page";
-import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
+import { PageBanner } from "@/components/dashboard/page-banner";
 
 export default async function ChartsPage() {
   const user = await requireUser();
@@ -28,7 +28,7 @@ export default async function ChartsPage() {
   // sport, so only those are sent to the browser.
   return (
     <>
-    <PageBanner variant="charts" title="Charts" icon={PAGE_BANNER_ICONS.charts} motto="PLOT · SPOT · TREND" />
+    <PageBanner variant="charts" title="Charts" motto="PLOT · SPOT · TREND" />
     <ThemedPage>
       <CapperComparisonWorkspace cappers={cappers.map((c) => ({ id: c.id, name: c.name }))} sports={sports.map((s) => ({ id: s.id, name: s.name }))} />
     </ThemedPage>

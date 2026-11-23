@@ -1,0 +1,94 @@
+/* /picks skin from banners/bettingview-tiles-same-size.html, bettingview-momentum-glance-compact.html and
+   bettingview-picks-list-same-size.html. SKIN ONLY: no width, height, padding, margin, gap, grid, icon size or
+   font size here. Gradients, borders, shadows, accent bars painted inside the rounded box, icon rings, value
+   weight, badge gradients, a one-time staggered fade-in and (stat tiles) a hover lift with one light sweep.
+   Doubled class selectors (.pk-x.pk-x) outrank the Tailwind utilities they restyle, whatever the CSS order.
+   Dark theme keeps today's surfaces and takes the bars, glows and badges. */
+
+@keyframes pk-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---- Stat tiles (StatCard, Picks strip only) ---- */
+.pk-tile{--c:#16a34a;--tint:#e1f6ea}
+.pk-tile.pk-bl{--c:#2563eb;--tint:#e3ecfd}
+.pk-tile.pk-pu{--c:#8b5cf6;--tint:#efe8fd}
+.pk-tile.pk-am{--c:#f59e0b;--tint:#fdf1d9}
+.pk-tile.pk-rd{--c:#ef4444;--tint:#fde5e7}
+.pk-tile.pk-tile{position:relative;overflow:hidden;background:linear-gradient(225deg,rgba(255,255,255,.75),rgba(255,255,255,0) 30%,rgba(255,255,255,.3) 36%,rgba(255,255,255,0) 45%),linear-gradient(180deg,#fff,var(--tint));box-shadow:inset 0 1px 0 #fff,0 10px 22px -12px var(--c);animation:pk-rise .7s cubic-bezier(.2,.7,.2,1) both;transition:transform .25s}
+/* The coloured edge is an inset ring, not a border: StatCard has no border in light today, so a real one
+   would shrink its content by 2px. */
+.pk-tile.pk-tile{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 30%,#fff),inset 0 1px 0 #fff,0 10px 22px -12px var(--c)}
+.pk-tiles>:nth-child(2){animation-delay:70ms}.pk-tiles>:nth-child(3){animation-delay:140ms}.pk-tiles>:nth-child(4){animation-delay:210ms}.pk-tiles>:nth-child(5){animation-delay:280ms}
+.pk-tile:hover{transform:translateY(-2px)}
+.pk-tile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 65%,#fff),var(--c));box-shadow:0 0 12px var(--c);pointer-events:none}
+.pk-tile::after{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.7) 50%,transparent 65%);transform:translateX(-130%);pointer-events:none}
+.pk-tile:hover::after{transform:translateX(130%);transition:transform .9s}
+.pk-tile .pk-ic.pk-ic{background:radial-gradient(circle,#fff 0,color-mix(in srgb,var(--c) 18%,#fff) 78%);color:var(--c);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 35%,#fff),0 6px 14px -4px var(--c)}
+.pk-tile .pk-v{font-weight:800;letter-spacing:-.02em}
+
+/* ---- Momentum panel ---- */
+.pk-mom{position:relative;animation:pk-rise .7s both}
+.pk-mom.pk-up.pk-up{background:linear-gradient(225deg,rgba(255,255,255,.7),rgba(255,255,255,0) 24%),linear-gradient(180deg,#f6fdf9,#e1f5e9);border-color:rgba(34,197,94,.3);box-shadow:inset 0 1px 0 #fff,0 16px 36px -22px rgba(22,163,74,.5)}
+.pk-mom.pk-down.pk-down{background:linear-gradient(225deg,rgba(255,255,255,.7),rgba(255,255,255,0) 24%),linear-gradient(180deg,#fff7f7,#fde5e7);border-color:rgba(239,68,68,.3);box-shadow:inset 0 1px 0 #fff,0 16px 36px -22px rgba(220,38,38,.5)}
+.pk-mom::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(90deg,var(--bar) 4px,transparent 4px);pointer-events:none}
+.pk-mom.pk-up{--bar:#22c55e}.pk-mom.pk-down{--bar:#ef4444}
+.pk-mom .pk-big{font-weight:800;letter-spacing:-.03em}
+.pk-mom.pk-up .pk-big{text-shadow:0 6px 18px rgba(22,163,74,.25)}
+.pk-mom.pk-down .pk-big{text-shadow:0 6px 18px rgba(220,38,38,.22)}
+.pk-seg.pk-seg{background:rgba(255,255,255,.75);border-color:rgba(255,255,255,.9);box-shadow:0 4px 10px -6px rgba(37,99,235,.4)}
+.pk-seg [aria-pressed="true"]{background:linear-gradient(180deg,#1c2a4d,#0d1730);color:#fff;box-shadow:0 4px 10px -4px rgba(13,23,48,.7)}
+.pk-trend{background-image:linear-gradient(180deg,rgba(255,255,255,.65),rgba(255,255,255,0));box-shadow:inset 0 1px 0 #fff,0 6px 14px -10px #64748b}
+
+/* ---- At a glance cards (Winners, Losers, Most Backed) ---- */
+/* Equal heights come from the grid row (h-full); no fixed height, max-height or clipping. */
+.pk-glance{--c:#16a34a;--tint:#e3f6ec;position:relative}
+.pk-glance.pk-rd{--c:#ef4444;--tint:#fde5e7}
+.pk-glance.pk-bl{--c:#2563eb;--tint:#e4edfd}
+.pk-glance.pk-glance{border-color:color-mix(in srgb,var(--c) 28%,#fff);background:linear-gradient(225deg,rgba(255,255,255,.7),rgba(255,255,255,0) 26%),linear-gradient(180deg,#fff,var(--tint));box-shadow:inset 0 1px 0 #fff,0 12px 26px -16px var(--c)}
+.pk-glance::before{content:"";position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(90deg,var(--c) 4px,transparent 4px);pointer-events:none}
+.pk-glance .pk-ic.pk-ic{background:radial-gradient(circle,#fff 0,color-mix(in srgb,var(--c) 18%,#fff) 78%);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 35%,#fff),0 5px 12px -4px var(--c)}
+#picks-glance>*{animation:pk-rise .7s both;animation-delay:.3s}
+#picks-glance>:nth-child(2){animation-delay:.38s}#picks-glance>:nth-child(3){animation-delay:.46s}
+.pk-rk.pk-rk{background:linear-gradient(180deg,#4b83f5,#1f55d6);color:#fff;box-shadow:0 3px 8px -2px #2563eb}
+/* Most Backed row: rank | name (ellipsis) | time | N cappers; the last two never wrap. */
+.pk-backed.pk-backed{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto}
+
+/* ---- Date row, filter chips ---- */
+.pk-glass.pk-glass{background:rgba(255,255,255,.78);border-color:rgba(255,255,255,.9);box-shadow:0 4px 10px -6px rgba(37,99,235,.4)}
+.pk-chip.pk-chip{background:rgba(255,255,255,.78);border-color:rgba(255,255,255,.9);box-shadow:0 4px 12px -6px rgba(37,99,235,.35)}
+.pk-chip.pk-chip.pk-chip-on{background:linear-gradient(180deg,#4b83f5,#1f55d6);border-color:#2563eb;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 18px -6px rgba(37,99,235,.7)}
+.pk-chip.pk-chip.pk-chip-menu{border-color:#1d4ed8}
+
+/* ---- Picks list (Upcoming, Live, Settled sections) ---- */
+.pk-list.pk-list{background:rgba(255,255,255,.78);border-color:rgba(255,255,255,.85);box-shadow:0 20px 44px -22px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.9)}
+.pk-list .pk-head.pk-head{background:linear-gradient(180deg,rgba(37,99,235,.09),rgba(37,99,235,.03))}
+.pk-row{animation:pk-rise .6s both;animation-delay:calc(min(var(--n,0),12) * 60ms);transition:background .2s}
+.pk-row:hover{background:rgba(37,99,235,.05)}
+.pk-lg{background-image:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,0));box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 3px 8px -3px rgba(15,23,42,.35)}
+.pk-av.pk-av{background:linear-gradient(180deg,#4b83f5,#1f55d6);color:#fff}
+.pk-st.pk-st{background:linear-gradient(180deg,#f1f4f9,#dde5ef);color:#475569;box-shadow:inset 0 1px 0 #fff}
+
+/* ---- Dark theme: today's surfaces stay ---- */
+.dark .pk-tile.pk-tile{background:rgb(var(--card));box-shadow:0 10px 22px -14px var(--c)}
+.dark .pk-tile .pk-ic.pk-ic{background:color-mix(in srgb,var(--c) 15%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 40%,transparent),0 0 12px color-mix(in srgb,var(--c) 35%,transparent)}
+.dark .pk-tile::after{background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.1) 50%,transparent 65%)}
+.dark .pk-mom.pk-up.pk-up{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3);box-shadow:none}
+.dark .pk-mom.pk-down.pk-down{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);box-shadow:none}
+.dark .pk-mom .pk-big{text-shadow:none}
+.dark .pk-seg.pk-seg{background:rgb(var(--card) / .6);border-color:rgb(var(--border));box-shadow:none}
+.dark .pk-seg [aria-pressed="true"]{background:rgb(var(--foreground));color:rgb(var(--background));box-shadow:none}
+.dark .pk-trend{background-image:none;box-shadow:none}
+.dark .pk-glance.pk-glance{background:color-mix(in srgb,var(--c) 6%,transparent);border-color:color-mix(in srgb,var(--c) 30%,transparent);box-shadow:none}
+.dark .pk-glance .pk-ic.pk-ic{background:color-mix(in srgb,var(--c) 15%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 40%,transparent)}
+.dark .pk-glass.pk-glass,.dark .pk-chip.pk-chip{background:rgb(var(--card));border-color:rgb(var(--border));box-shadow:none}
+.dark .pk-chip.pk-chip.pk-chip-on{border-color:#2563eb;box-shadow:0 8px 18px -8px rgba(37,99,235,.6)}
+.dark .pk-chip.pk-chip.pk-chip-menu{border-color:#1d4ed8}
+.dark .pk-list.pk-list{background:rgb(var(--card));border-color:rgb(var(--border));box-shadow:none}
+.dark .pk-list .pk-head.pk-head{background:rgba(59,130,246,.06)}
+.dark .pk-row:hover{background:rgba(255,255,255,.04)}
+.dark .pk-st.pk-st{background:rgb(var(--muted));color:rgb(var(--muted-foreground));box-shadow:none}
+
+@media (prefers-reduced-motion:reduce){
+  .pk-tile.pk-tile,.pk-mom,.pk-row,#picks-glance>*{animation:none}
+  .pk-tile:hover{transform:none}
+  .pk-tile:hover::after{transition:none;transform:translateX(-130%)}
+}

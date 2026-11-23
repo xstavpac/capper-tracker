@@ -19,7 +19,7 @@ function Arrow({ dir }: { dir: "back" | "forward" }) {
 }
 
 const control =
-  "border border-[#DADDE5] bg-white text-foreground transition hover:bg-[#F5F6FA] disabled:opacity-60 dark:border-border dark:bg-card dark:hover:bg-muted";
+  "pk-glass border border-[#DADDE5] bg-white text-foreground transition hover:bg-[#F5F6FA] disabled:opacity-60 dark:border-border dark:bg-card dark:hover:bg-muted";
 const arrowClass = "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] " + control;
 
 // The day row under the banner: ‹ Tuesday, Sep 29 › 89 picks, and "Jump to today" on the right

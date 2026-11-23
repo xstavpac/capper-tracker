@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { getRecordColor } from "@/server/data/stats";
 import { PicksCountPill } from "@/components/live/picks-count-pill";
 import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
@@ -51,6 +52,7 @@ export function CategoryCard({
   active,
   onToggle,
   pickCount,
+  skinIndex,
 }: {
   label: string;
   wins: number;
@@ -64,11 +66,20 @@ export function CategoryCard({
   active?: boolean;
   onToggle?: () => void;
   pickCount?: number;
+  // /live (frost): the tile's place in the grid, for the staggered fade-in of live-skin.css.
+  skinIndex?: number;
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
   // frost (/live): a slightly deeper green so the text on the green glass tile clears 5:1 (#15803D is 4.5:1 there).
   const tone = good ? (frost ? "text-[#14773A] dark:text-emerald-400" : GREEN) : RED;
+  // /live skin (components/live/live-skin.css): green / red / neutral surface, a stronger edge at 58%+ and at
+  // 45% and below, and the open tile's ring.
+  const skin = frost
+    ? " lv-tile " +
+      (tinted && decided ? (good ? "lv-g" + (winPct >= 58 ? " lv-hi" : "") : "lv-r" + (winPct <= 45 ? " lv-lo" : "")) : "lv-n") +
+      (active ? " lv-on" : "")
+    : "";
   return (
     <div
       role={onToggle ? "button" : undefined}
@@ -85,6 +96,7 @@ export function CategoryCard({
             }
           : undefined
       }
+      style={frost ? ({ "--n": skinIndex ?? 0 } as CSSProperties) : undefined}
       className={
         "flex h-full flex-col rounded-2xl px-4 py-[13px] " +
         (frost
@@ -93,15 +105,16 @@ export function CategoryCard({
             ? TINT[good ? "green" : "red"]
             : NEUTRAL + (tinted ? " border border-[#E6E8EF] dark:border-border" : "")) +
         (active ? " ring-2 ring-brand-500 dark:ring-brand-400" : "") +
-        (onToggle ? " cursor-pointer select-none outline-none transition hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400 dark:hover:brightness-110" : "")
+        (onToggle ? " cursor-pointer select-none outline-none transition hover:brightness-[0.98] focus-visible:ring-2 focus-visible:ring-brand-400 dark:hover:brightness-110" : "") +
+        skin
       }
     >
-      <p className={"truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + (tinted && decided ? tone : MUTED)}>{label}</p>
+      <p className={(frost ? "lv-lab " : "") + "truncate text-[10.5px] font-semibold uppercase tracking-[0.07em] " + (tinted && decided ? tone : MUTED)}>{label}</p>
       {/* The win % drops under a long record rather than crowding it. */}
       <div className={"mt-0.5 flex flex-wrap items-baseline justify-between gap-x-2 " + (graded === undefined ? "mb-2" : "")}>
-        <p className="whitespace-nowrap text-lg font-semibold leading-[1.3] tracking-[-0.02em] tabular-nums text-foreground">{wins + "–" + losses + (pushes > 0 ? "–" + pushes : "")}</p>
+        <p className={(frost ? "lv-rec " : "") + "whitespace-nowrap text-lg font-semibold leading-[1.3] tracking-[-0.02em] tabular-nums text-foreground"}>{wins + "–" + losses + (pushes > 0 ? "–" + pushes : "")}</p>
         {decided ? (
-          <p className={"text-sm font-semibold tabular-nums " + tone}>{Math.round(winPct) + "%"}</p>
+          <p className={(frost ? "lv-pct " : "") + "text-sm font-semibold tabular-nums " + tone}>{Math.round(winPct) + "%"}</p>
         ) : (
           <p className={"text-sm font-semibold " + MUTED}>
             <span aria-hidden>—</span>
@@ -116,7 +129,7 @@ export function CategoryCard({
         </div>
       )}
       {/* Pinned to the bottom, so the bars in a row line up when one card wraps and its neighbour does not. */}
-      <WinPctBar winPct={winPct} decided={decided} className={"mt-auto " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : WIN_PCT_TRACK)} />
+      <WinPctBar winPct={winPct} decided={decided} className={(frost ? "lv-bar " : "") + "mt-auto " + (tinted && decided ? "bg-[#0F1420]/[0.08] dark:bg-white/10" : WIN_PCT_TRACK)} />
     </div>
   );
 }

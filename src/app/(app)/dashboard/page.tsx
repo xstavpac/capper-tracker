@@ -3,7 +3,7 @@ import { requireUser } from "@/server/auth";
 import { getDashboardSummary, STALE_PENDING_HOURS } from "@/server/data/dashboard-summary";
 import { getCapperPanels } from "@/server/data/capper-panels";
 import { ThemedPage } from "@/components/dashboard/themed-page";
-import { PageBanner, PAGE_BANNER_ICONS } from "@/components/dashboard/page-banner";
+import { PageBanner } from "@/components/dashboard/page-banner";
 import { DashboardStatCards } from "@/components/dashboard/dashboard-stat-cards";
 import { DashboardCategoryCards } from "@/components/dashboard/dashboard-category-cards";
 import { DashboardPanels } from "@/components/dashboard/dashboard-panels";
@@ -22,7 +22,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageBanner variant="dashboard" title="Dashboard" icon={PAGE_BANNER_ICONS.dashboard} motto="TRACK · COMPARE · DECIDE" />
+      <PageBanner variant="dashboard" title="Dashboard" motto="TRACK · COMPARE · DECIDE" />
       <ThemedPage>
       <DashboardStatCards summary={summary} />
 

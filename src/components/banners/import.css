@@ -1,0 +1,25 @@
+/* Catalog Import banner art (banners/bettingview-catalog-import-banner.html). Shared rules (incl. the
+   download icon's soft glow, .bnr-lit): banner-shared.css. */
+
+/* import sequence, one 10 s loop: scan the pasted page, ball crosses the arrow, rows appear one by one */
+.bnr-im-march{animation:bnr-im-march 3s linear infinite}
+@keyframes bnr-im-march{to{stroke-dashoffset:-5}}
+.bnr-im-scan{opacity:0;animation:bnr-im-scan 10s linear infinite}
+@keyframes bnr-im-scan{0%{transform:translateY(0);opacity:0}3%{opacity:.95}20%{transform:translateY(84px);opacity:.95}22%{transform:translateY(84px);opacity:0}22.1%,100%{transform:translateY(0);opacity:0}}
+.bnr-im-ab{offset-path:path('M838 53H868');offset-rotate:0deg;offset-distance:0%;opacity:0;animation:bnr-im-ab 10s linear infinite}
+@keyframes bnr-im-ab{0%,22%{offset-distance:0%;opacity:0}24%{opacity:1}32%{offset-distance:100%;opacity:1}35%{offset-distance:100%;opacity:0}35.1%,100%{offset-distance:0%;opacity:0}}
+.bnr-im-rw{opacity:0;animation-duration:10s;animation-timing-function:ease-out;animation-iteration-count:infinite}
+.bnr-im-rw.bnr-im-a{animation-name:bnr-im-ra}.bnr-im-rw.bnr-im-b{animation-name:bnr-im-rb}.bnr-im-rw.bnr-im-c{animation-name:bnr-im-rc}
+@keyframes bnr-im-ra{0%,34%{opacity:0;transform:translateX(-6px)}39%,90%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+@keyframes bnr-im-rb{0%,46%{opacity:0;transform:translateX(-6px)}51%,90%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+@keyframes bnr-im-rc{0%,58%{opacity:0;transform:translateX(-6px)}63%,90%{opacity:1;transform:none}96%,100%{opacity:0;transform:none}}
+.bnr-im-tick{fill:none;stroke:#22c55e;stroke-width:1.2;vector-effect:non-scaling-stroke;transform-box:fill-box;transform-origin:center;opacity:0}
+.bnr-im-tick.bnr-im-a{animation:bnr-im-ta 10s ease-out infinite}.bnr-im-tick.bnr-im-b{animation:bnr-im-tb 10s ease-out infinite}
+@keyframes bnr-im-ta{0%,38%{transform:scale(1);opacity:0}39%{opacity:.65}50%,100%{transform:scale(1.7);opacity:0}}
+@keyframes bnr-im-tb{0%,50%{transform:scale(1);opacity:0}51%{opacity:.65}62%,100%{transform:scale(1.7);opacity:0}}
+
+@media (prefers-reduced-motion:reduce){
+  .bnr-im-scan,.bnr-im-tick,.bnr-im-ab{display:none}
+  .bnr-im-march{animation:none}
+  .bnr-im-rw{animation:none;opacity:1;transform:none}
+}

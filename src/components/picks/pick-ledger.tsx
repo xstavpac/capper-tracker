@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LocalGameTime } from "@/components/local-game-time";
@@ -70,7 +70,7 @@ const LEAGUE_BADGE_NEUTRAL = "bg-[#E6E8EF] text-[#3A4152] dark:bg-white/10 dark:
 
 function LeagueBadge({ name }: { name: string }) {
   return (
-    <span className={"inline-flex max-w-full rounded-full px-2 py-[3px] text-[10px] font-bold uppercase leading-none tracking-[0.06em] " + (LEAGUE_BADGE[name] ?? LEAGUE_BADGE_NEUTRAL)}>
+    <span className={"pk-lg inline-flex max-w-full rounded-full px-2 py-[3px] text-[10px] font-bold uppercase leading-none tracking-[0.06em] " + (LEAGUE_BADGE[name] ?? LEAGUE_BADGE_NEUTRAL)}>
       <span className="truncate">{name}</span>
     </span>
   );
@@ -78,7 +78,7 @@ function LeagueBadge({ name }: { name: string }) {
 
 function StatusPill({ row }: { row: LedgerRow }) {
   const base = "inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold";
-  const neutral = base + " bg-[#EEF0F4] text-[#5B6275] dark:bg-muted dark:text-muted-foreground";
+  const neutral = base + " pk-st bg-[#EEF0F4] text-[#5B6275] dark:bg-muted dark:text-muted-foreground";
   switch (row.phase) {
     case "won":
       return (
@@ -238,10 +238,11 @@ const CONSENSUS_PILL = "mt-1.5 inline-flex rounded-full bg-[#E6ECFF] px-2 py-0.5
 
 // One grid: league + time | pick | odds + status | menu. On a phone the league badge and time become
 // a line of their own above the pick, and the odds / status column stays on the right.
-function Row({ row, showDate, onChanged }: { row: LedgerRow; showDate: boolean; onChanged?: (change: "status" | "deleted") => void }) {
+// `n`: the row's place in its list, for the staggered fade-in (picks-skin.css).
+function Row({ row, showDate, onChanged, n }: { row: LedgerRow; showDate: boolean; onChanged?: (change: "status" | "deleted") => void; n?: number }) {
   const timeOptions: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto_32px] items-start gap-x-3 gap-y-1.5 px-4 py-3 sm:grid-cols-[76px_minmax(0,1fr)_auto_32px] sm:items-center sm:gap-x-4 sm:px-5">
+    <div style={{ "--n": n ?? 0 } as CSSProperties} className="pk-row grid grid-cols-[minmax(0,1fr)_auto_32px] items-start gap-x-3 gap-y-1.5 px-4 py-3 sm:grid-cols-[76px_minmax(0,1fr)_auto_32px] sm:items-center sm:gap-x-4 sm:px-5">
       <div className="col-span-3 flex min-w-0 items-center gap-2 sm:col-span-1 sm:block">
         <LeagueBadge name={row.sportName} />
         <div className={"whitespace-nowrap text-[11.5px] font-medium leading-tight tabular-nums sm:mt-1 " + MUTED}>
@@ -264,7 +265,7 @@ function Row({ row, showDate, onChanged }: { row: LedgerRow; showDate: boolean; 
           </span>
         </div>
         <div className={"mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-medium " + MUTED}>
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#E6ECFF] text-[9px] font-bold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
+          <span className="pk-av flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#E6ECFF] text-[9px] font-bold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
             {row.capperInitials}
           </span>
           <Link href={"/cappers/" + row.capperId} className="font-semibold text-foreground hover:underline">
@@ -324,7 +325,7 @@ function Section({
   const remaining = rows.length - shown;
   const label = SECTION_LABEL[kind];
   const bodyId = "ledger-" + kind;
-  const bar = "flex w-full items-center gap-2 border-b px-4 py-2.5 text-left sm:px-5 " + (collapsed ? "rounded-[17px] border-b-transparent " : "rounded-t-[17px] ") + SECTION_TINT[kind];
+  const bar = (kind === "upcoming" ? "pk-head " : "") + "flex w-full items-center gap-2 border-b px-4 py-2.5 text-left sm:px-5 " + (collapsed ? "rounded-[17px] border-b-transparent " : "rounded-t-[17px] ") + SECTION_TINT[kind];
   const header: ReactNode = (
     <>
       {kind === "live" && <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden="true" />}
@@ -340,7 +341,7 @@ function Section({
     </>
   );
   return (
-    <section aria-label={label + " picks"} className={"rounded-[18px] border " + TINTS.neutral.card}>
+    <section aria-label={label + " picks"} className={"pk-list rounded-[18px] border " + TINTS.neutral.card}>
       {collapsible ? (
         <h2>
           <button type="button" aria-expanded={!collapsed} aria-controls={bodyId} onClick={() => setCollapsed(!collapsed)} className={bar}>
@@ -352,8 +353,8 @@ function Section({
       )}
       {!collapsed && (
         <div id={bodyId} className="divide-y divide-[#0F1420]/[0.06] dark:divide-white/10">
-          {rows.slice(0, shown).map((row) => (
-            <Row key={row.id} row={row} showDate={showDate} />
+          {rows.slice(0, shown).map((row, i) => (
+            <Row key={row.id} row={row} showDate={showDate} n={i} />
           ))}
           {remaining > 0 && (
             <button
@@ -454,7 +455,7 @@ function OlderPicks({
   );
   if (!bare) return <div className="overflow-hidden rounded-b-[17px]">{body}</div>;
   return (
-    <section aria-label="Older picks" className={"rounded-[18px] border " + TINTS.neutral.card}>
+    <section aria-label="Older picks" className={"pk-list rounded-[18px] border " + TINTS.neutral.card}>
       <h2 className={"flex w-full items-center gap-2 rounded-t-[17px] border-b px-4 py-2.5 sm:px-5 " + SECTION_TINT.settled}>
         <span className="text-[11px] font-bold uppercase tracking-[0.08em]">Earlier</span>
       </h2>
