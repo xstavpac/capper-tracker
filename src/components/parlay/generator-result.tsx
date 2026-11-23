@@ -145,7 +145,7 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
   const frame = arrive ? (lit ? LIT : UNLIT) + " " + ARRIVE_MOTION : "";
   const pct = leg.record?.winPct ?? null;
   return (
-    <li data-leg className={LEG_CARD + " " + frame} aria-busy={overlay ? true : undefined}>
+    <li data-leg data-arrive={arrive ? true : undefined} className={LEG_CARD + " " + frame} aria-busy={overlay ? true : undefined}>
       {overlay}
       <span className="flex h-7 w-7 shrink-0 items-center justify-center self-start rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
@@ -684,11 +684,11 @@ const REGENERATE =
   "relative inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full border border-white/35 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white transition hover:bg-white/20 disabled:opacity-50 after:absolute after:inset-x-0 after:-inset-y-2.5 after:content-['']";
 
 export const MODE_LABELS: Record<SelectionMode, string> = { BEST: "Best", DIVERSIFIED: "Diversified", EXPLORE: "Explore" };
-// One line under the banner per mode; Regenerate only (Generate stays the same parlay).
+// One line under the banner per mode (the mode shapes Generate and Regenerate alike).
 export const MODE_HELP: Record<SelectionMode, string> = {
-  BEST: "Strongest legs first. Regenerates stay close to your top parlay. Applies on your next Regenerate.",
-  DIVERSIFIED: "Mostly strong legs, with variety. Recently used legs are less likely to repeat. Applies on your next Regenerate.",
-  EXPLORE: "Wider mix. Gives more legs a chance, including lower-ranked ones. Applies on your next Regenerate.",
+  BEST: "Sticks closest to the top-rated picks.",
+  DIVERSIFIED: "Mixes in strong alternatives each time.",
+  EXPLORE: "Widest variety from the eligible pool.",
 };
 export const LIMITED_TITLE = (have: number, need: number) => `Only ${have} of ${need} legs clear your bar right now.`;
 export const LIMITED_BODY = "Lower Minimum Capper Win Rate, widen Bet Types, or switch on more leagues to add legs. Your bar stays where you set it.";
@@ -785,6 +785,7 @@ export function GeneratorResult({
   noAlternative,
   unavailableTargetLabels,
   onRegenerate,
+  changedPickIds = null,
   selectionMode,
   onSelectionMode,
   onSent,
@@ -805,7 +806,10 @@ export function GeneratorResult({
   // Targeted games that are over or have left the board, by name.
   unavailableTargetLabels: string[];
   onRegenerate: () => void;
-  // Best / Diversified / Explore: how the next Regenerate draws (the card remembers it).
+  // A Regenerate's parlay: the pickIds of the legs that differ from the parlay the card showed before
+  // (changed-legs.ts) - only these land with the highlight. Null: a Generate, every leg lands as built.
+  changedPickIds?: ReadonlySet<string> | null;
+  // Best / Diversified / Explore: how Generate and Regenerate draw (the card remembers it).
   selectionMode: SelectionMode;
   onSelectionMode: (m: SelectionMode) => void;
   // The user opened FanDuel's betslip with this parlay.
@@ -1027,7 +1031,7 @@ export function GeneratorResult({
               key={l.pick.pickId}
               n={pos + 1}
               leg={l}
-              arrive={arrive || landed === engineIndex}
+              arrive={(changedPickIds ? changedPickIds.has(l.pick.pickId) : arrive) || landed === engineIndex}
               action={canSwap ? <SwapButton n={pos + 1} onClick={() => setModal(engineIndex)} /> : undefined}
               overlay={swapping === engineIndex ? <SwapOverlay /> : undefined}
             />
