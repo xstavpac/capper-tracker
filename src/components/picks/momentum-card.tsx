@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Area, AreaChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { buildMomentum, clockLabel, momentumMatchesTile, type MomentumEvent, type MomentumPoint } from "@/lib/momentum";
 import { TrendingUpIcon } from "@/components/dashboard/cappers-icons";
+import { TINTS } from "@/components/dashboard/panel-shell";
 import { buildDailyMomentum, MOMENTUM_RANGES, type DailyNet, type MomentumRange } from "@/lib/momentum-daily";
 import { loadMomentumDailyAction } from "@/server/actions/momentum-daily";
 
@@ -104,11 +105,8 @@ export function MomentumCard({
     <section
       aria-label="Today's Momentum"
       className={
-        "pk-mom " + (down ? "pk-down " : "pk-up ") +
-        "flex flex-wrap gap-x-7 gap-y-2 rounded-[18px] border px-5 pb-3 pt-5 sm:px-6 " +
-        (down
-          ? "border-[#f8cfd2] bg-[#fff5f5] dark:border-red-500/30 dark:bg-red-500/10"
-          : "border-[#cbe9d4] bg-[#f3fbf5] dark:border-emerald-500/30 dark:bg-emerald-500/10")
+        // The /cappers panel container (panel-shell.tsx TINTS): green while up, red while down.
+        "flex flex-wrap gap-x-7 gap-y-2 rounded-[18px] border px-5 pb-3 pt-5 sm:px-6 " + (down ? TINTS.red.card : TINTS.green.card)
       }
     >
       <div
@@ -124,7 +122,7 @@ export function MomentumCard({
         <div>
           <p
             className={
-              "pk-big text-[44px] font-bold leading-[1.05] tracking-[-0.02em] tabular-nums sm:text-[50px] " +
+              "text-[44px] font-bold leading-[1.05] tracking-[-0.02em] tabular-nums sm:text-[50px] " +
               (down ? "text-[#a01523] dark:text-red-400" : "text-[#137a3a] dark:text-emerald-400")
             }
           >

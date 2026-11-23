@@ -64,14 +64,6 @@ export const TINTS = {
   },
 } satisfies Record<string, PanelTint>;
 
-// The /picks glance-card trim (picks-skin.css .pk-glance): tinted gradient, 4px colored left edge, tinted
-// border, colored soft shadow, ringed icon. One source for /picks' At a glance cards and /dashboard's panels.
-// Skin only: it never changes a card's size.
-export type TrimTone = "pk-g" | "pk-rd" | "pk-bl" | "pk-am" | "pk-pu";
-export function withTrim<T extends PanelTint>(theme: T, tone: TrimTone): T {
-  return { ...theme, card: theme.card + " pk-glance " + tone, iconWrap: theme.iconWrap + " pk-ic" };
-}
-
 // Every panel's rank column is this wide (the Biggest Winners medal too), so names start on the same
 // line across a row of panels.
 export function Rank({ n }: { n: number }) {

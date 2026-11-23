@@ -9,6 +9,8 @@ const jakarta = localFont({
   display: "swap",
   fallback: ["system-ui", "sans-serif"],
 });
+// The site's typeface, for page content that sits outside ThemedPage (the /live league row under the banner).
+export const SITE_FONT = jakarta.className;
 // The backdrop is painted over the shared layout's content padding (<main>'s p-4 / md:p-8, cancelled by
 // the negative margins) rather than changing that layout, so it sits flush with the full-width main.
 // It is at least as tall as the content area - the viewport less the ticker (32px) and the header

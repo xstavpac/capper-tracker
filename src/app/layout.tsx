@@ -13,6 +13,8 @@ import "@/components/banners/charts.css";
 // The /live and /picks skins (tiles, panels, chips, lists).
 import "@/components/live/live-skin.css";
 import "@/components/picks/picks-skin.css";
+// The Record by category tiles' shared green and red (/dashboard and /live).
+import "@/components/dashboard/category-tile.css";
 
 export const metadata: Metadata = {
   title: "Bettingview",
