@@ -269,9 +269,9 @@ expect(
   ])
 );
 expect(
-  'a saved capper followed by a bare team ("SHARP Tampa Bay Rays") has no bet content: a header',
+  "a saved capper followed by a bare team (SHARP Tampa Bay Rays) is that capper's moneyline on the team (team-only = ML)",
   run("Porter Picks\nSHARP Tampa Bay Rays\nDodgers ML", ["SHARP", "Porter Picks"]),
-  only([["SHARP Tampa Bay Rays", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]]])
+  only([["SHARP", "MLB", "MONEYLINE", "Tampa Bay Rays", ["rays"]], ["Porter Picks", "MLB", "MONEYLINE", "Dodgers ML", ["dodgers"]]])
 );
 expect(
   'with ML it is that capper\'s moneyline ("SHARP Tampa Bay Rays ML")',

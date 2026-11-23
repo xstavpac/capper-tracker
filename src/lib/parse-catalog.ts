@@ -3796,6 +3796,35 @@ export function parseCatalog(
     return sportName !== undefined && leadingTeamIsInBet(line, name.length, sportName, feedTeams ?? []);
   };
 
+  // A saved capper's own name written into the pick: "Picks Office Orlando
+  // Magic", "Picks Office: Arizona", "Orlando Magic - Picks Office". Such a line
+  // is a pick when what is left, with the capper's name taken out, is exactly one
+  // team. A team alone has no market word, so the no-bet-content rule below would
+  // otherwise read the whole line as a header and register "Picks Office Orlando
+  // Magic" as a capper. Returns the line rewritten as "<capper> <team>", which the
+  // saved-capper path reads as a pick by that capper: a team and no other market
+  // is a moneyline, and a city shared by several leagues stays a question.
+  // Left to the existing handling: a capper name that is itself a team or a roster
+  // player, a remainder that is not purely one team, and a bare name with nothing
+  // after it. Case, spacing and ":" "-" "." separators between words do not matter.
+  const teamOnlyAfterCapper = (line: string): string | null => {
+    const stripped = line.replace(/^[^\w]+/, "").trim();
+    for (const name of sortedNames) {
+      const words = name.trim().split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      if (words.length === 0) continue;
+      const body = words.join("[\\s._-]+");
+      const lead = new RegExp(`^${body}(?=[\\s:.,-]|$)[\\s:.,-]*(.*)$`, "i").exec(stripped);
+      const trail = lead ? null : new RegExp(`^(.*?)[\\s:.,-]+${body}$`, "i").exec(stripped);
+      if (!lead && !trail) continue;
+      const rest = (lead?.[1] ?? trail?.[1] ?? "").trim();
+      if (!rest || hasBetContent(rest) || isBoilerplateLabel(rest)) return null;
+      if (isTeamPhrase(name, feedTeams) || isRosterPlayer(name)) return null;
+      if (classifyTeamSide(rest) !== "team") return null;
+      return `${name} ${rest}`;
+    }
+    return null;
+  };
+
   // The generic "unrecognized line -> capper name" read.
   const readAsCapperHeader = (line: string) => {
     const name = line.replace(/^[^\w]+/, "").trim();
@@ -3811,7 +3840,7 @@ export function parseCatalog(
   };
 
   for (let i = 0; i < rawLines.length; i++) {
-    const line = rawLines[i];
+    let line = rawLines[i];
     if (currentCapper !== droppedHeaderValue) trustedCapper = currentCapper;
     // Any line that changed the active capper (a "Name - pick" line, a tagline) ended its section.
     if (section && section.capper !== currentCapper) section = null;
@@ -3854,7 +3883,9 @@ export function parseCatalog(
     // keep their own handling below: a boilerplate label ("Full Card") and a
     // league code ("NBA" as a sub-header, "BAMBINO - NFL").
     // (A CBB / CFB alias doesn't count as a league code here: "Five Star CBB" is still that capper's header.)
-    if (!hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false, false).sportName) {
+    const cappedTeam = hasBetContent(line) ? null : teamOnlyAfterCapper(line);
+    if (cappedTeam) line = cappedTeam;
+    if (!cappedTeam && !hasBetContent(line) && !isBoilerplateLabel(line.replace(/^-\s*/, "").trim()) && !detectSport(line, false, false).sportName) {
       // The one exception: a bare name directly above a line that is only a
       // market ("James Cook" / "Touchdown", "Anytime TD") is that prop's
       // subject, and the two are read as one line. A next line with a number
