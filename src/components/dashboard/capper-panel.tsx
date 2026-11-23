@@ -43,7 +43,7 @@ import {
   TrophyFilledIcon,
   UsersIcon,
 } from "@/components/dashboard/cappers-icons";
-import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, RankChip, TINTS, type PanelTheme } from "@/components/dashboard/panel-shell";
+import { CONTROL, FOOTER_LINK, FOOTER_TEXT, FooterLine, GREEN, Message, Name, PanelShell, RED, ROW, Rank, RankChip, TINTS, withTrim, type PanelTheme } from "@/components/dashboard/panel-shell";
 
 type AnyPanel = PanelKey | FormPanelKey;
 
@@ -66,15 +66,16 @@ const FORM_EMPTY: Record<FormPanelKey, string> = {
 // Windowless panels say what they read where the others have their window dropdown.
 const FORM_SUBLABEL: Record<FormPanelKey, string> = { falling: FALLING_SUBLABEL, consistent: "Last 50 picks" };
 
-// Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon.
+// Each panel's hue (TINTS, panel-shell.tsx) with its own title, subtitle and header icon. The /dashboard-only
+// panels (Hot Hand, Coldest, Falling off) also wear the /picks glance trim (withTrim).
 const ICON = "h-[17px] w-[17px]";
 const THEME: Record<AnyPanel, PanelTheme> = {
   active: { ...TINTS.blue, title: "Most Active", subtitle: "Who's putting in the work", icon: <UsersIcon className={ICON + " stroke-[1.8]"} /> },
-  falling: { ...TINTS.rose, title: "Falling off", subtitle: "Fading form · " + FALLING_REQUIREMENT.toLowerCase(), icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" },
-  hottest: { ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> },
+  falling: withTrim({ ...TINTS.rose, title: "Falling off", subtitle: "Fading form · " + FALLING_REQUIREMENT.toLowerCase(), icon: <TrendingDownIcon className={ICON + " stroke-[2.4]"} />, iconWrap: "rounded-lg bg-[#FFDDE7] text-[#BE123C] dark:bg-rose-500/15 dark:text-rose-400" }, "pk-pu"),
+  hottest: withTrim({ ...TINTS.orange, title: "Hot Hand", subtitle: "Current win streaks lighting up", icon: <FlameFilledIcon className={ICON} /> }, "pk-am"),
   consistent: { ...TINTS.violet, title: "Most Consistent", subtitle: "Confidence score · last 50 picks", icon: <TargetIcon className={ICON + " stroke-[2.2]"} /> },
   winners: { ...TINTS.green, title: "Biggest Winners", subtitle: "Top profit (units won)", icon: <TrophyFilledIcon className={ICON} /> },
-  coldest: { ...TINTS.red, title: "Coldest", subtitle: "Who's on a cold streak", icon: <SnowflakeIcon className={ICON} /> },
+  coldest: withTrim({ ...TINTS.red, title: "Coldest", subtitle: "Who's on a cold streak", icon: <SnowflakeIcon className={ICON} /> }, "pk-rd"),
 };
 
 const units = (n: number) => (n < 0 ? "−" : "+") + Math.abs(n).toFixed(1) + "u";

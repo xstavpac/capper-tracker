@@ -8,7 +8,7 @@ import { GREEN, MUTED, RED } from "@/components/dashboard/stat-card";
 // or pushes only) has no win % to show: a neutral dash and an empty bar, never a red "0%".
 // `tinted` (/live) also washes the whole card in that color - soft green with a green border at 50%
 // and up, soft red with a red border below - and colors the market name to match; without it
-// (/dashboard) the card is the neutral white stat-card surface.
+// the card is the neutral white stat-card surface, which /dashboard dresses in the /picks tile trim (`trim`).
 // `onToggle` makes the card a button; `active` rings the one that is open.
 // `pickCount` (/live) is today's picks in the market: the solid blue capsule under the record, or nothing
 // at 0. Its row is reserved either way, so the cards in a row keep one height and their bars line up.
@@ -53,6 +53,7 @@ export function CategoryCard({
   onToggle,
   pickCount,
   skinIndex,
+  trim,
 }: {
   label: string;
   wins: number;
@@ -68,6 +69,9 @@ export function CategoryCard({
   pickCount?: number;
   // /live (frost): the tile's place in the grid, for the staggered fade-in of live-skin.css.
   skinIndex?: number;
+  // /dashboard: the /picks stat-tile trim (picks-skin.css .pk-tile), green at 50% and up, red below.
+  // Skin only: its edge is an inset ring, so the tile keeps its size.
+  trim?: boolean;
 }) {
   const decided = wins + losses > 0;
   const good = getRecordColor(winPct) === "green";
@@ -79,7 +83,9 @@ export function CategoryCard({
     ? " lv-tile " +
       (tinted && decided ? (good ? "lv-g" + (winPct >= 58 ? " lv-hi" : "") : "lv-r" + (winPct <= 45 ? " lv-lo" : "")) : "lv-n") +
       (active ? " lv-on" : "")
-    : "";
+    : trim
+      ? " pk-tile " + (good ? "pk-g" : "pk-rd")
+      : "";
   return (
     <div
       role={onToggle ? "button" : undefined}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import type { GlanceCapper } from "@/server/data/picks-glance";
 import { LocalGameTime } from "@/components/local-game-time";
 import { TrendingDownIcon, TrophyFilledIcon, UsersIcon } from "@/components/dashboard/cappers-icons";
-import { FOOTER_TEXT, GREEN, Message, Name, PanelShell, RED, RankChip, TINTS } from "@/components/dashboard/panel-shell";
+import { FOOTER_TEXT, GREEN, Message, Name, PanelShell, RED, RankChip, TINTS, withTrim } from "@/components/dashboard/panel-shell";
 
 // The /picks "at a glance" row: the day's cards side by side under a label and a Hide / Show toggle.
 // The choice is kept in this browser; a blocked or cleared store just means the row starts open.
@@ -68,7 +68,7 @@ export function GlanceCapperCard({ kind, rows, today }: { kind: "winners" | "los
   const total = rows.reduce((sum, e) => sum + e.netUnits, 0);
   return (
     <PanelShell
-      theme={{ ...c.tint, card: c.tint.card + " pk-glance " + (kind === "losers" ? "pk-rd" : "pk-g"), iconWrap: c.tint.iconWrap + " pk-ic", title: (today ? "Today's " : "") + c.name, subtitle: c.subtitle, icon: c.icon }}
+      theme={{ ...withTrim(c.tint, kind === "losers" ? "pk-rd" : "pk-g"), title: (today ? "Today's " : "") + c.name, subtitle: c.subtitle, icon: c.icon }}
       footer={
         <>
           <span className={"text-[15px] font-semibold leading-none tabular-nums " + c.tone}>{units(total)}</span>
@@ -100,7 +100,7 @@ export function GlanceCapperCard({ kind, rows, today }: { kind: "winners" | "los
 // A Most Backed row, built on the server (page.tsx) from a picks-glance MostBackedRow.
 export type MostBackedItem = { key: string; label: string; tag: string; matchup: string; gameTimeIso: string; cappers: number; href: string | null };
 
-const BACKED_THEME = { ...TINTS.blue, card: TINTS.blue.card + " pk-glance pk-bl", iconWrap: TINTS.blue.iconWrap + " pk-ic", title: "Most Backed", subtitle: "Upcoming picks with the most cappers", icon: <UsersIcon className="h-[17px] w-[17px] stroke-[2.2]" /> };
+const BACKED_THEME = { ...withTrim(TINTS.blue, "pk-bl"), title: "Most Backed", subtitle: "Upcoming picks with the most cappers", icon: <UsersIcon className="h-[17px] w-[17px] stroke-[2.2]" /> };
 const BLUE = "text-brand-700 dark:text-brand-300";
 
 // Most Backed: the rows arrive ranked and cut to five. A row is a link to its game's Live page when
