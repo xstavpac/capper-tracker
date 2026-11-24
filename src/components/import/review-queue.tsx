@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { dismissReviewItemAction, resolveReviewItemAction } from "@/server/actions/ingest-review";
 import type { ReviewCard } from "@/server/data/ingest-review-queue";
 import { playerLineIsNearMiss } from "@/lib/ingest-review-options";
+import { candidateLabel, reviewSourceLine } from "@/lib/review-card-labels";
 import {
   CapperFuzzyPrompt,
   ChoiceButton,
@@ -15,18 +16,12 @@ import {
   promptButtonClass,
 } from "@/components/import/review-question-ui";
 
-// "Needs review" on the Catalog Import page: the questions the unattended Telegram ingest parked instead of asking.
+// "Needs review" on the Catalog Import page: the questions the unattended Telegram ingest and bot API tokens parked
+// instead of asking. Each card's line under the pick text says who, from where, and when ("Five Star · Telegram bot
+// token · 2:14 AM"); times are the viewer's own, so they appear after mount (like the header's LocalDate).
 // Renders nothing at all when there is nothing pending and nothing just answered, so a user without a queue sees no
 // section and no layout shift. The list is the server's snapshot at page load; answering removes a card locally and
 // refreshes the layout so the sidebar badge follows.
-
-const QUESTION_NAMES: Record<ReviewCard["questionType"], string> = {
-  AMBIGUOUS_TEAM: "Ambiguous team",
-  PLAYER_AMBIGUITY: "Ambiguous player",
-  MISSING_TOTAL_LINE: "Missing total number",
-  CAPPER_FUZZY: "Capper name",
-  FAR_FUTURE_GAME: "Game days away",
-};
 
 // The distinct answers behind a team / player question: a near-miss capper name multiplies each answer into
 // "... - as <capper>" variants, which are one answer to the person reading the question.
@@ -56,6 +51,9 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  // false on the server and the first client render, so both print the same text; then the viewer's timezone.
+  const [local, setLocal] = useState(false);
+  useEffect(() => setLocal(true), []);
 
   if (cards.length === 0 && confirmations.length === 0) return null;
 
@@ -96,7 +94,7 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
       <h2 id="needs-review-title" className="text-base font-semibold">
         {cards.length > 0 ? "Needs review (" + cards.length + ")" : "All caught up"}
       </h2>
-      {cards.length > 0 && <p className="mt-0.5 text-sm">Picks from your Telegram feed that need an answer before they can be logged.</p>}
+      {cards.length > 0 && <p className="mt-0.5 text-sm">Picks from your Telegram feed or bots that need an answer before they can be logged.</p>}
 
       <div aria-live="polite">
         {confirmations.map((c) => (
@@ -109,6 +107,7 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
       <ul className="mt-3 space-y-2 text-xs">
         {cards.map((card) => {
           const isPlayer = card.questionType === "PLAYER_AMBIGUITY";
+          const isTeam = card.questionType === "AMBIGUOUS_TEAM";
           const first = card.choices[0];
           const choiceButtons = card.choices.map((c) => (
             <ChoiceButton
@@ -122,7 +121,7 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
                 )
               }
             >
-              {c.label}
+              {isTeam ? candidateLabel(c.label, c.game, local) : c.label}
             </ChoiceButton>
           ));
           const dismiss = (
@@ -141,9 +140,9 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
               key={card.id}
               id={"review-item-" + card.id}
               text={card.lineText}
-              meta={card.capperName + " · " + card.day + " · " + QUESTION_NAMES[card.questionType]}
+              meta={reviewSourceLine(card, local)}
             >
-              {(card.questionType === "AMBIGUOUS_TEAM" || isPlayer) && (
+              {(isTeam || isPlayer) && (
                 <>
                   <div className="mt-1.5 text-xs">{ambiguousReasonText(isPlayer, baseOptions(card))}</div>
                   <ChoiceRow>
