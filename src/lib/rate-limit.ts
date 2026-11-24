@@ -89,6 +89,20 @@ export class RateLimiter {
     return { ok: true, remaining: this.rule.limit - existing.count };
   }
 
+  /**
+   * Whether `key` is currently denied, WITHOUT recording a request. For a limiter that counts only some events
+   * (e.g. failed bearer-token attempts, recorded with check() after the failure): consult it up front, record later.
+   */
+  peek(key: string): RateLimitResult {
+    const t = this.now();
+    const existing = this.buckets.get(key);
+    if (!existing || existing.resetAt <= t) return { ok: true, remaining: this.rule.limit };
+    if (existing.count >= this.rule.limit) {
+      return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((existing.resetAt - t) / 1000)) };
+    }
+    return { ok: true, remaining: this.rule.limit - existing.count };
+  }
+
   /** Test/debug visibility only. */
   get trackedKeys(): number {
     return this.buckets.size;
