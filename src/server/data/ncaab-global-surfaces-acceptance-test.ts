@@ -7,7 +7,7 @@
 // NCAAB's slate (~180 games on a busy day) would drown the cross-league
 // surfaces, so:
 //   1. the ticker and its public score feeds leave it out;
-//   2. /live never opens on it by itself (it stays in the tab row, after NCAAF).
+//   2. /live opens on it by itself only as a last resort (nothing else live or left today).
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,35 +66,48 @@ async function main() {
   const live = (sportKey: string, iso: string) => ({ sportKey, games: [{ status: "live" as const, commenceTime: iso }] });
   const preview = (sportKey: string, iso: string) => ({ sportKey, games: [{ status: "preview" as const, commenceTime: iso }] });
 
+  const NBA = "basketball_nba";
+  const NHL = "icehockey_nhl";
   check(
-    "NCAAB live earliest of all: another league still wins",
-    pickDefaultLeague([live(NCAAB, "2026-11-02T17:00:00Z"), live("basketball_nba", "2026-11-02T18:30:00Z")], NOW),
-    "basketball_nba"
+    "only NCAAB live + NBA later today -> NCAAB",
+    pickDefaultLeague([live(NCAAB, "2026-11-02T17:00:00Z"), preview(NBA, "2026-11-02T23:00:00Z")], NOW),
+    NCAAB
   );
   check(
-    "NCAAB live while another league only has a game later today: that league wins",
-    pickDefaultLeague([live(NCAAB, "2026-11-02T17:00:00Z"), preview("icehockey_nhl", "2026-11-02T23:00:00Z")], NOW),
-    "icehockey_nhl"
+    "NCAAB live + NBA live (NCAAB started first) -> NBA",
+    pickDefaultLeague([live(NCAAB, "2026-11-02T17:00:00Z"), live(NBA, "2026-11-02T18:30:00Z")], NOW),
+    NBA
   );
   check(
-    "NCAAB is the only league with games: falls back to the usual default, not NCAAB",
-    pickDefaultLeague([live(NCAAB, "2026-11-02T17:00:00Z"), preview(NCAAB, "2026-11-02T23:00:00Z")], NOW),
-    LIVE_DEFAULT_FALLBACK
+    "nothing live, NCAAB noon + NBA 6pm -> NBA",
+    pickDefaultLeague([preview(NCAAB, "2026-11-02T20:00:00Z"), preview(NBA, "2026-11-02T23:00:00Z")], NOW),
+    NBA
   );
   check(
-    "NCAAB upcoming tomorrow, nothing else: fallback",
-    pickDefaultLeague([preview(NCAAB, "2026-11-03T23:00:00Z")], NOW),
-    LIVE_DEFAULT_FALLBACK
+    "nothing live, only NCAAB has games left today -> NCAAB",
+    pickDefaultLeague([preview(NCAAB, "2026-11-02T23:00:00Z"), preview(NBA, "2026-11-03T23:00:00Z")], NOW),
+    NCAAB
   );
+  check(
+    "later-day tier: NCAAB tomorrow + NHL tomorrow evening -> NHL (NCAAB last)",
+    pickDefaultLeague([preview(NCAAB, "2026-11-03T17:00:00Z"), preview(NHL, "2026-11-03T23:00:00Z")], NOW),
+    NHL
+  );
+  check("NCAAB upcoming tomorrow, nothing else -> NCAAB", pickDefaultLeague([preview(NCAAB, "2026-11-03T23:00:00Z")], NOW), NCAAB);
+  check("no games anywhere -> MLB fallback", pickDefaultLeague([{ sportKey: NCAAB, games: [] }], NOW), LIVE_DEFAULT_FALLBACK);
   check(
     "behavior without NCAAB is unchanged: earliest live wins",
-    pickDefaultLeague([live("baseball_mlb", "2026-11-02T18:30:00Z"), live("icehockey_nhl", "2026-11-02T18:00:00Z")], NOW),
-    "icehockey_nhl"
+    pickDefaultLeague([live("baseball_mlb", "2026-11-02T18:30:00Z"), live(NHL, "2026-11-02T18:00:00Z")], NOW),
+    NHL
   );
 
-  // The reader does not even fetch NCAAB's scores (pickDefaultLeague would drop them).
+  // ?sport= is never overridden: the page only calls the picker when the param is absent.
+  const page = readFileSync(join(__dirname, "../../app/(app)/live/page.tsx"), "utf8");
+  check("?sport=NHL with NCAAB live -> NHL (param short-circuits the picker)", /searchParams\.sport \|\| \(await getDefaultLiveSport\(\)\)/.test(page), true);
+
+  // The reader now reads NCAAB's (shared, cached) feed like every other in-season league.
   const reader = readFileSync(join(__dirname, "live-default-sport.ts"), "utf8");
-  check("live-default-sport.ts filters the excluded leagues before reading their feed", /DEFAULT_TAB_EXCLUDED_SPORT_KEYS\.has\(s\.key\)/.test(reader), true);
+  check("live-default-sport.ts no longer skips deprioritized leagues", /DEPRIORITIZED|EXCLUDED/.test(reader), false);
 
   console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
   if (failures > 0) process.exit(1);

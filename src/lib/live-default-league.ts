@@ -1,7 +1,7 @@
 // Which league the /live tab opens on when the URL names none (no ?sport=). Pure: the page hands
 // it each league's game list from the score feed it already reads (start time and status only).
 import { easternDateKey } from "./dates";
-import { DEFAULT_TAB_EXCLUDED_SPORT_KEYS } from "./global-surface-sports";
+import { DEFAULT_TAB_DEPRIORITIZED_SPORT_KEYS } from "./global-surface-sports";
 
 export const LIVE_DEFAULT_FALLBACK = "baseball_mlb";
 
@@ -24,6 +24,8 @@ function earliest(slates: LeagueSlate[], pick: (g: LeagueGameStub) => boolean): 
   return best?.sportKey ?? null;
 }
 
+// Each tier looks at the ordinary leagues first and the deprioritized ones (NCAAB, whose slate
+// would drown the rest) only when no ordinary league qualifies:
 // 1. A league with a game in progress: the one whose live game started earliest.
 // 2. Else the league with the earliest game still to start on today's Eastern date.
 // 3. Else (every league is done for today) the league whose next game, on a later Eastern date,
@@ -31,14 +33,18 @@ function earliest(slates: LeagueSlate[], pick: (g: LeagueGameStub) => boolean): 
 // 4. Else MLB.
 // Postponed and cancelled games never count.
 export function pickDefaultLeague(allSlates: LeagueSlate[], now: Date = new Date()): string {
-  // A league kept off the auto-opened tab (NCAAB) is never chosen, whatever its games are doing.
-  const slates = allSlates.filter((s) => !DEFAULT_TAB_EXCLUDED_SPORT_KEYS.has(s.sportKey));
+  const ordinary = allSlates.filter((s) => !DEFAULT_TAB_DEPRIORITIZED_SPORT_KEYS.has(s.sportKey));
+  const lastResort = allSlates.filter((s) => DEFAULT_TAB_DEPRIORITIZED_SPORT_KEYS.has(s.sportKey));
   const today = easternDateKey(now);
   const dayOf = (g: LeagueGameStub) => easternDateKey(new Date(g.commenceTime));
-  return (
-    earliest(slates, (g) => g.status === "live") ??
-    earliest(slates, (g) => g.status === "preview" && dayOf(g) === today) ??
-    earliest(slates, (g) => g.status === "preview" && dayOf(g) > today) ??
-    LIVE_DEFAULT_FALLBACK
-  );
+  const tiers: Array<(g: LeagueGameStub) => boolean> = [
+    (g) => g.status === "live",
+    (g) => g.status === "preview" && dayOf(g) === today,
+    (g) => g.status === "preview" && dayOf(g) > today,
+  ];
+  for (const tier of tiers) {
+    const hit = earliest(ordinary, tier) ?? earliest(lastResort, tier);
+    if (hit) return hit;
+  }
+  return LIVE_DEFAULT_FALLBACK;
 }
