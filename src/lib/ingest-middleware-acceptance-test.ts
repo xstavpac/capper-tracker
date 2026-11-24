@@ -22,6 +22,11 @@ async function main() {
   check("unauthenticated POST /api/ingest/telegram is not redirected", ingest.status < 300 || ingest.status >= 400, `status ${ingest.status}`);
   check("no sign-in redirect location on the ingest route", !ingest.headers.get("location"), String(ingest.headers.get("location")));
 
+  const botApi = await middleware(new NextRequest("https://example.test/api/v1/picks", { method: "POST", headers: { authorization: "Bearer t" } }));
+  check("unauthenticated POST /api/v1/picks is not redirected (the bearer token is its auth)", botApi.status < 300 || botApi.status >= 400, `status ${botApi.status}`);
+  check("no sign-in redirect location on the bot API route", !botApi.headers.get("location"), String(botApi.headers.get("location")));
+  check("the bot API route is not made cacheable", !botApi.headers.get("cache-control")?.includes("public"), String(botApi.headers.get("cache-control")));
+
   const other = await middleware(new NextRequest("https://example.test/api/something-private", { method: "POST" }));
   check("a non-public API route with no session still redirects", other.status >= 300 && other.status < 400, `status ${other.status}`);
 

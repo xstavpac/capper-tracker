@@ -161,7 +161,8 @@ function reviewOutcome(q: CatalogQuestion, questionIndex: number): LineOutcome {
 }
 
 function itemOutcome(p: ParsedPick, o: ImportItemOutcome): LineOutcome {
-  if (o.status === "refused") return { status: "rejected", capperName: p.capperName, reason: o.reason, ...(o.detail ? { detail: o.detail } : {}) };
+  if (o.status === "refused")
+    return { status: "rejected", capperName: p.capperName, reason: o.reason, ...(o.detail ? { detail: o.detail } : {}), ...(p.sportName ? { league: p.sportName } : {}) };
   const row = o.row;
   return {
     status: "accepted",

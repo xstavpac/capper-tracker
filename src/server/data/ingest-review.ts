@@ -21,6 +21,7 @@ import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 import { recordCapperNameDecision } from "@/server/data/capper-name-decisions";
 import { farFutureWarning } from "@/lib/far-future-game";
 import type { TokenDayRule } from "@/lib/ingest-line-outcome";
+import { acceptedPickFromRow, acceptedResult, type ApiAcceptedPick } from "@/lib/api-pick-result";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
 
 export type ReviewItemDraft = {
@@ -143,7 +144,7 @@ export type ReviewResult =
 export async function resolveReviewItem(userId: string, itemId: string, choiceId: string): Promise<ReviewResult> {
   const item = await prisma.ingestReviewItem.findFirst({
     where: { id: itemId, userId },
-    select: { id: true, status: true, options: true, questionType: true, ingestBatch: { select: { sourceType: true } } },
+    select: { id: true, status: true, options: true, questionType: true, ingestBatchId: true, ingestBatch: { select: { sourceType: true } } },
   });
   if (!item) return { ok: false, error: "not_found", message: "No such review item." };
   if (item.status !== "PENDING") return { ok: false, error: "not_pending", message: "This item was already answered." };
@@ -190,6 +191,10 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
     await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
   }
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
+  // A bot API pick waiting on this item is now accepted: a resend of its client_id returns this pick.
+  if (item.ingestBatch.sourceType === "API_TOKEN") {
+    await acceptApiSubmissionForItem(item.ingestBatchId, itemId, acceptedPickFromRow(storedToPickRow(choice.pick, choice.capperName), pickId));
+  }
   revalidateTag(cacheKeys.dashboard(userId));
   if (result.cappersAdded > 0) revalidateCapperRoster(userId);
   revalidateReviewQueue(userId);
@@ -202,11 +207,36 @@ export async function dismissReviewItem(userId: string, itemId: string): Promise
     data: { status: "DISMISSED", resolvedAt: new Date() },
   });
   if (done.count === 1) {
+    await dismissApiSubmissionForItem(itemId);
     revalidateReviewQueue(userId);
     return { ok: true };
   }
   const exists = await prisma.ingestReviewItem.findFirst({ where: { id: itemId, userId }, select: { id: true } });
   return { ok: false, error: exists ? "not_pending" : "not_found" };
+}
+
+// ---- bot API submissions waiting on a review item (API_TOKEN batches) ----
+// Found through the item's batch (the (batchId) index) and the item id. Only a NEEDS_REVIEW submission still pointing
+// at this item changes: one resent since then points at its new item and is left alone.
+
+async function acceptApiSubmissionForItem(batchId: string, itemId: string, pick: ApiAcceptedPick): Promise<void> {
+  const sub = await prisma.apiPickSubmission.findFirst({
+    where: { batchId, reviewItemId: itemId, status: "NEEDS_REVIEW" },
+    select: { id: true, clientId: true },
+  });
+  if (!sub) return;
+  await prisma.apiPickSubmission.updateMany({
+    where: { id: sub.id, status: "NEEDS_REVIEW" },
+    data: { status: "ACCEPTED", pickId: pick.pickId, reason: null, result: acceptedResult(sub.clientId, pick) as unknown as Prisma.InputJsonValue },
+  });
+}
+
+// One statement, run for every dismissal: for a Telegram item's batch it is an index probe that matches nothing.
+async function dismissApiSubmissionForItem(itemId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE api_pick_submissions SET status = 'DISMISSED', "updatedAt" = (NOW() AT TIME ZONE 'UTC')
+    WHERE "batchId" = (SELECT "ingestBatchId" FROM ingest_review_items WHERE id = ${itemId})
+      AND "reviewItemId" = ${itemId} AND status = 'NEEDS_REVIEW'`;
 }
 
 export function reviewDraftsToRows(batchId: string, userId: string, day: string, drafts: ReviewItemDraft[]): Prisma.IngestReviewItemCreateManyInput[] {
