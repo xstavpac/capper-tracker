@@ -130,6 +130,7 @@ import { legSetKey } from "@/lib/parlay/parlay-set";
 import { isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import { poolEligible } from "@/lib/parlay/game-progress";
 import { keepsLiveGame, normalizeIncludeLive } from "@/lib/parlay/include-live";
+import type { LivePricing } from "@/lib/parlay/live-price";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 import { categoryFavDog, classifySwapCandidate, teamFavDog } from "@/lib/parlay/swap-classify";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
@@ -169,6 +170,9 @@ export type GeneratorSnapshot = {
   // defaults). Absent from a snapshot built without scoring.
   platformRates?: PlatformRates;
   platformRateRows?: number;
+  // Live prices (live-price.ts): whether the loader was asked for them ("Include live games" on) and how each
+  // league with a started game fared. Absent from a snapshot built before it existed: read as not asked.
+  livePricing?: LivePricing;
 };
 
 // ---------------------------------------------------------------------------
@@ -531,7 +535,7 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
   if (!keepsFavorite(favoritesOnly, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)) };
   if (!keepsLiveGame(ctx.includeLive, game, ctx.now)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_LIVE", pickRef(pick)) };
   // Shorter than the price floor: out entirely - INCLUDED, so never a below-gate row either.
-  if (ctx.priceFloor && belowPriceFloor(pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "PRICE_FLOOR", pickRef(pick), String(pick.odds)) };
+  if (ctx.priceFloor && belowPriceFloor(pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "PRICE_FLOOR", pickRef(pick), pick.liveOdds != null ? pick.liveOdds + " live" : String(pick.odds)) };
   const gated = gateRecord(pick, snapshot);
   if (!gated) return { ok: false, at: "HAS_RECORD", drop: (t) => t.drop("HAS_RECORD", noRecordReason(pick), pickRef(pick), pick.propMarket ?? pick.category ?? undefined) };
   const pickScore = scoreOf(pick);
@@ -571,6 +575,9 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
   }
   return { ok: true, candidate: candidateOf(pickScore) };
 }
+
+// Picks in the snapshot carrying a live price (slip picks included), for the run trace.
+const countLivePriced = (s: GeneratorSnapshot) => [...s.slipPicks, ...s.games.flatMap((g) => g.picks)].filter((p) => p.liveOdds != null).length;
 
 // ---------------------------------------------------------------------------
 // The engine
@@ -885,6 +892,9 @@ export function buildGeneratedParlay(
       ...(unavailableTargets.length > 0 ? { unavailableTargets: unavailableTargets.length } : {}),
       notes: [
         ...(liveTargets.length > 0 ? [`liveTargets:${liveTargets.length}`] : []),
+        // Live prices (live-price.ts): per league with a started game, FETCHED or FAILED (posted-price fallback).
+        ...Object.entries(snapshot.livePricing?.leagues ?? {}).map(([league, s]) => `livePrices:${league}=${s}`),
+        ...(snapshot.livePricing?.asked === true ? [`livePriced:${countLivePriced(snapshot)}`] : []),
         `variety:${variety}`,
         ...(noAlternativeReason ? [`noAlternative:${noAlternativeReason}`] : []),
         `need:${need}`,

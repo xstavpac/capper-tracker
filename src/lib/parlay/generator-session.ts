@@ -53,6 +53,8 @@ import {
 } from "@/lib/parlay/generator";
 import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
+import { normalizeIncludeLive } from "@/lib/parlay/include-live";
+import { isStarted } from "@/lib/parlay/game-progress";
 import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
 import { addExposure, DEFAULT_SELECTION_MODE, deriveSeed, freshSeed, NO_EXPOSURE, type Exposure, type SelectionMode } from "@/lib/parlay/selection";
 
@@ -163,14 +165,17 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     }
   }
 
-  const usable = (inputs: PoolInputs) => snapshot !== null && key === poolKey(inputs) && !snapshotIsStale(snapshot, now());
+  // "Include live games" turned on after a snapshot loaded with it off: that snapshot has no live prices, so reload.
+  const livePricesMissing = (settings: GeneratorSettings) => normalizeIncludeLive(settings.includeLive) && snapshot !== null && snapshot.livePricing?.asked === false && snapshot.games.some((g) => isStarted(g, now()));
+  const usable = (inputs: PoolInputs, settings: GeneratorSettings) =>
+    snapshot !== null && key === poolKey(inputs) && !snapshotIsStale(snapshot, now()) && !livePricesMissing(settings);
 
   return {
     // A first parlay for these inputs and settings: one draw on the Generate seed (`reseed`: a new one first).
     async generate(inputs: PoolInputs, settings: GeneratorSettings, opts: GenerateOptions = {}): Promise<SessionResult> {
       resetCard();
       const draw = generateDraw(opts);
-      if (usable(inputs)) {
+      if (usable(inputs, settings)) {
         const parlay = build(inputs, settings, generateVariation(draw));
         remember(parlay);
         return { parlay, fetched: false };
@@ -194,7 +199,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     // `mode` (Best / Diversified / Explore) applies to this Regenerate only; absent, the session's default.
     async regenerate(inputs: PoolInputs, settings: GeneratorSettings, mode: SelectionMode = defaultMode): Promise<SessionResult> {
       let fetched = false;
-      if (!usable(inputs)) {
+      if (!usable(inputs, settings)) {
         const res = await load(inputs, settings);
         if ("error" in res) return res;
         fetched = true;

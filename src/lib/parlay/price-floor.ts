@@ -4,6 +4,9 @@
 // Hedge, Contrarian, Other games, "Below your gate"). No note. Exactly -250 is allowed.
 //
 //   - Your own slip picks are never capped, as they are never gated.
+//   - The price judged is the pick's CURRENT one: its live price (live-price.ts, FanDuel in-play) when its
+//     game has started and the listing prices it, else its posted price. A pick with a live price is capped
+//     on it even when its posted price is no real price.
 //   - A pick with no real price (scoring.ts priceOf: DEFAULTED, odds that aren't a price, an
 //     unsourced -110 placeholder) is not capped: there is no price to judge.
 //   - Record model only (generator.ts scoreModel RECORD, the default). The edge model prices
@@ -17,7 +20,8 @@ import type { ExpanderPick } from "@/components/live/game-picks-expander";
 export const GENERATED_LEG_PRICE_FLOOR = -250;
 
 // True: the pick has a real price shorter than the floor, so the generator never offers it.
-export function belowPriceFloor(pick: Pick<ExpanderPick, "betType" | "odds" | "oddsSource">, floor: number = GENERATED_LEG_PRICE_FLOOR): boolean {
+export function belowPriceFloor(pick: Pick<ExpanderPick, "betType" | "odds" | "oddsSource" | "liveOdds">, floor: number = GENERATED_LEG_PRICE_FLOOR): boolean {
+  if (pick.liveOdds != null) return pick.liveOdds < floor;
   if (priceOf(pick).status === "UNKNOWN") return false;
   return pick.odds < floor;
 }

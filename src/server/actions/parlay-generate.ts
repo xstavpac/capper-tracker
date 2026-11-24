@@ -122,7 +122,7 @@ export async function generateParlayAction(request: GenerateRequest): Promise<Ge
   );
   let loaded: Awaited<ReturnType<typeof loadGeneratorSnapshot>>;
   try {
-    loaded = await loadGeneratorSnapshot(user.id, req, now, trace);
+    loaded = await loadGeneratorSnapshot(user.id, { ...req, includeLive: normalizeIncludeLive(req.settings.includeLive) }, now, trace);
   } catch (err) {
     trace.error("SNAPSHOT_ERROR", err);
     await recordGeneratorRun(user.id, trace.finish());

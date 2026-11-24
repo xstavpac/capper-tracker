@@ -87,6 +87,9 @@ export type ExpanderPick = {
   // the Parlay code from the score feed (generator snapshot, slip check) - the Live
   // board never sends it. Absent before kickoff and on picks stored without it.
   liveState?: GameLiveState | null;
+  // A started game's live FanDuel price for this bet (lib/parlay/live-price.ts), set only by the Parlay
+  // Generator's snapshot. The leg price floor caps generated legs on it; the card shows it and combines it.
+  liveOdds?: number | null;
 };
 
 // Fixed AWAY -> HOME -> TOTALS -> OTHER ordering (matches how the game card
