@@ -2586,6 +2586,18 @@ async function resolveScheduleGame(
   return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames, { excludeFinal, sportKey });
 }
 
+// Whether the stored game feeds hold ANY game of this league on an Eastern calendar day (YYYY-MM-DD): the score feed,
+// then the odds listing, then (NCAAF) the FCS schedule - the same cached feeds the matcher reads, no new source. The
+// bot API asks only for a line that named a future day and matched no game: no game of the league stored on that day
+// means that day's slate isn't stored yet (game_not_scheduled_yet), not that the team has no game (no_game_found).
+export async function leagueHasGamesOnDay(sportKey: string, dayKey: string): Promise<boolean> {
+  const onDay = (g: { commenceTime: string }) => easternDateKey(new Date(g.commenceTime)) === dayKey;
+  if ((await fetchFeedOrEmpty("score", () => getLiveScoresForSport(sportKey))).some(onDay)) return true;
+  if ((await fetchFeedOrEmpty("odds", () => getOddsForSport(sportKey))).some(onDay)) return true;
+  if (sportKey === "americanfootball_ncaaf") return (await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames())).some(onDay);
+  return false;
+}
+
 // Resolves a bare team nickname (e.g. "white sox", parsed from a capper's raw
 // pick text) to the real game it refers to. The ~yesterday..tomorrow score
 // feed is checked first; if nothing there matches, the full-schedule odds

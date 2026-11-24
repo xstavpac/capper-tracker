@@ -18,6 +18,8 @@ const PUBLIC_ROUTES = [
   /^\/api\/cron/,
   // The Telegram reader has no session either: the route authenticates it by the x-picks-token header.
   /^\/api\/ingest\//,
+  // The bot API (POST /api/v1/picks): no session either; the route authenticates it by its bearer token.
+  /^\/api\/v1\//,
   // The marketing page's live-score ticker (see
   // components/marketing/live-ticker.tsx) polls this from a logged-out
   // visitor's browser - it has no session to be public alongside.

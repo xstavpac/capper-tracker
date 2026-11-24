@@ -48,7 +48,9 @@ export type LineOutcome =
       candidates: ReviewCandidate[];
       reviewItemId?: string;
     }
-  | { status: "rejected"; capperName: string; reason: LineRejectReason; detail?: string };
+  // league: the line's league once it was read (the bot API uses it to tell "that day's games aren't stored yet" from
+  // "no such game"); absent for a line rejected before its league was known.
+  | { status: "rejected"; capperName: string; reason: LineRejectReason; detail?: string; league?: string };
 
 export type LineOutcomeListener = (raw: string, outcome: LineOutcome) => void;
 
