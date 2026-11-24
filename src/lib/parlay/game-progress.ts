@@ -48,7 +48,10 @@ export type GameLiveState = {
   scoreMissing: boolean;
 };
 
-export type LiveClock = GameClock & { leagueName: string; liveState?: GameLiveState | null };
+// stateUnavailable: the score feed could not be read fresh enough for this build
+// (server/data/fresh-live-scores.ts). The game is then judged by time since its
+// scheduled start alone (the backstop), never by an old status or state.
+export type LiveClock = GameClock & { leagueName: string; liveState?: GameLiveState | null; stateUnavailable?: boolean };
 
 // backstopMin: minutes after the SCHEDULED start past which a started game is
 // out whatever the feed says. Each is a little later than the cutoff is
@@ -99,12 +102,14 @@ export function withinProgressCutoff(leagueName: string, state: GameLiveState | 
 }
 
 // May the generator build from this game right now? Not started: yes. Over: no.
-// Started: past the league's backstop no, whatever the feed says; otherwise a
-// delayed start ("preview") yes; live within the cutoff yes; anything else no.
+// Started: past the league's backstop no, whatever the feed says; with no fresh
+// feed read (stateUnavailable) yes, up to the backstop; otherwise a delayed start
+// ("preview") yes; live within the cutoff yes; anything else no.
 export function poolEligible(game: LiveClock, now: Date): boolean {
   if (isGameOver(game, now)) return false;
   if (!hasKickedOff(game.gameTime, now)) return true;
   if (pastBackstop(game.leagueName, game.gameTime, now)) return false;
+  if (game.stateUnavailable) return true;
   if (game.gameStatus === "preview") return true;
   if (game.gameStatus !== "live") return false;
   return withinProgressCutoff(game.leagueName, game.liveState);
