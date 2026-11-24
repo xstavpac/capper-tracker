@@ -64,7 +64,7 @@ export function CombinedMixBox({ manual, total, max, slipSize, onChange }: { man
       />
       <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">All auto</span>
-        <span data-mix-pill className="rounded-full border border-[#c9d9f8] bg-white px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-foreground dark:border-[#2a3a63] dark:bg-card">
+        <span data-mix-pill className="whitespace-nowrap rounded-full border border-[#c9d9f8] bg-white px-2.5 py-0.5 text-[11.5px] font-semibold tabular-nums text-foreground dark:border-[#2a3a63] dark:bg-card">
           {pct.text}
         </span>
         <span className="text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">All manual</span>

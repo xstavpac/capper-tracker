@@ -177,7 +177,7 @@ export function TextSegments<T extends string>({
   disabledTitle?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 glass-card-soft rounded-full p-0.5">
+    <div role="radiogroup" aria-label={label} className="flex max-w-full flex-wrap items-center gap-0.5 glass-card-soft rounded-[22px] p-0.5">
       {options.map((o) => (
         <button
           key={o.key}
@@ -188,7 +188,7 @@ export function TextSegments<T extends string>({
           title={disabled.includes(o.key) ? disabledTitle : undefined}
           onClick={() => onChange(o.key)}
           className={
-            "flex h-10 items-center justify-center whitespace-nowrap rounded-full border border-transparent px-3.5 text-[13.5px] font-semibold transition " +
+            "flex h-10 items-center justify-center whitespace-nowrap rounded-full border border-transparent px-3 text-[13.5px] font-semibold transition sm:px-3.5 " +
             (disabled.includes(o.key) ? SEGMENT_DISABLED : o.key === value ? SEGMENT_ON : SEGMENT_OFF)
           }
         >
