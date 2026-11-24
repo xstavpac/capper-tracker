@@ -147,6 +147,8 @@ export function startedStateLine(leagueName: string, state: GameLiveState | null
 
 export const PRICE_EST_UNCHANGED = "est. · score unchanged";
 export const PRICE_PREGAME_LINE = "pregame line";
+// A started game's leg that has FanDuel's in-play price (live-price.ts): the price shown is that one.
+export const PRICE_LIVE = "live price";
 
 // What the pregame price on a started game is. "unchanged" only on a present 0-0
 // (or a delayed start the feed still calls preview); a missing score is "changed".

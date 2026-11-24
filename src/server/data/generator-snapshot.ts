@@ -31,10 +31,14 @@ import type { ParlayRejection } from "@/lib/parlay/leg-cap";
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { GeneratorSnapshot } from "@/lib/parlay/generator";
 import type { SnapshotLeagueStats, SnapshotStats, TraceCollector } from "@/lib/parlay/run-trace";
+import { priceStartedGames } from "@/server/data/live-prices";
 
 export const SLIP_CHANGED = "Your slip has changed - a pick was graded or removed. Refresh the page and try again.";
 
 export type SnapshotScope = {
+  // "Include live games" (include-live.ts): on, a started game's picks get FanDuel's live price
+  // (live-prices.ts). Absent (Consensus Hybrid) is off: no live-price call.
+  includeLive?: boolean;
   // League scope: the full slate (no targets) is these leagues' games in
   // Auto-Generate's window (auto-generate-window.ts).
   leagues: string[];
@@ -152,6 +156,12 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   // player prop with a market key (prop-market-key.ts) also gets its per-market
   // record - only the slate's own (capper, league, market) entries - which is
   // what recordForGate gates and ranks it on; counted from games before `now`.
+  // Live prices for started games (live-prices.ts): one shared-cached Odds API call per league, only with
+  // "Include live games" on and a started game in the pool. A failure keeps posted prices. No DB read.
+  const sportKeyOf = new Map(boards.map((b) => [b.label, b.key]));
+  const live = await priceStartedGames({ games: games.splice(0), slipPicks: slipPicks.splice(0), includeLive: scope.includeLive === true, sportKeyOf: (l) => sportKeyOf.get(l) }, now);
+  games.push(...live.games);
+  slipPicks.push(...live.slipPicks);
   const candidates = games.flatMap((g) => g.picks);
   if (trace) {
     for (const s of leagueStats) s.pickRowsUnmatched = Math.max(0, s.pickRowsFetched - s.pickRowsMatched);
@@ -177,6 +187,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       propMarketRecords,
       platformRates: trimPlatformRates(buildPlatformRates(rateRows), [...slipPicks, ...candidates]),
       platformRateRows: rateRows.length,
+      livePricing: live.livePricing,
     },
     eventSportKeys,
     skippedGames,

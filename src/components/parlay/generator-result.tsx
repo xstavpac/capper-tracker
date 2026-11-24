@@ -23,6 +23,7 @@ import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { ClipboardIcon, ClockIcon, FlameIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL } from "@/components/parlay/parlay-controls";
+import { currentOdds } from "@/lib/parlay/live-price";
 import { LIVE_TARGET_NOTE } from "@/lib/parlay/include-live";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, decimalToAmerican, formatAmericanOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
@@ -124,6 +125,20 @@ function GameLine({ pick, gameLabel, gameTime, children }: { pick: Pick<Expander
 const capperLine = (pick: ExpanderPick) => (pick.category ? " · " + PICK_CATEGORY_LABELS[pick.category] : "");
 const ODDS_PILL = "shrink-0 rounded-full bg-[#F1F3F7] px-2.5 py-1 text-[13px] font-semibold tabular-nums text-foreground dark:bg-white/10";
 
+// A leg's price pill: its current price (live-price.ts) - FanDuel's live price, marked "live", when its started
+// game has one, else the posted price.
+function OddsPill({ pick }: { pick: { odds: number; liveOdds?: number | null } }) {
+  return (
+    <span data-odds-pill className={ODDS_PILL}>
+      {pick.liveOdds != null && <span data-live-price className="mr-1 text-[10px] font-bold uppercase tracking-wide text-red-700 dark:text-red-300">live</span>}
+      {formatOdds(currentOdds(pick))}
+    </span>
+  );
+}
+// For the combined price and the swap comparison: each leg at its current price.
+const atCurrentPrice = <P extends { odds: number; liveOdds?: number | null; oddsSource?: ExpanderPick["oddsSource"] }>(p: P) =>
+  p.liveOdds != null ? { ...p, odds: p.liveOdds, oddsSource: "MARKET" as const } : p;
+
 // ---- A leg's card -------------------------------------------------------------------
 // A leg just swapped in, and a leg the build just added: a brand ring that fades.
 const LIT = "ring-[1.5px] ring-brand-600 bg-brand-600/[0.04] dark:ring-brand-400 dark:bg-brand-400/[0.06]";
@@ -185,10 +200,10 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
           {capperLine(pick)}
         </p>
         <WinRate leg={leg} className="mt-1.5" />
-        {live && <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p>}
+        {live && pick.liveOdds == null && <p className="mt-1.5 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 self-center sm:flex-row sm:items-center">
-        <span className={ODDS_PILL}>{formatOdds(pick.odds)}</span>
+        <OddsPill pick={pick} />
         {action}
       </div>
     </li>
@@ -342,14 +357,14 @@ export function SwapModal({
               </p>
             )}
           </div>
-          <span className={ODDS_PILL}>{formatOdds(o.pick.odds)}</span>
+          <OddsPill pick={o.pick} />
         </label>
       </li>
     );
   };
   const chosen: SwapOption | null = options && selected !== leg.pick.pickId ? (SWAP_TAB_KEYS.flatMap((t) => options[t]).find((o) => o.pick.pickId === selected) ?? null) : null;
-  const priceLegs = legs.map((l) => ({ odds: l.pick.odds, oddsSource: l.pick.oddsSource ?? null, gameId: l.gameId }));
-  const cmp = swapComparison(priceLegs, index, chosen ? { odds: chosen.pick.odds, oddsSource: chosen.pick.oddsSource ?? null, gameId: chosen.gameId } : null);
+  const priceLegs = legs.map((l) => ({ ...atCurrentPrice({ odds: l.pick.odds, liveOdds: l.pick.liveOdds, oddsSource: l.pick.oddsSource ?? null }), gameId: l.gameId }));
+  const cmp = swapComparison(priceLegs, index, chosen ? { ...atCurrentPrice({ odds: chosen.pick.odds, liveOdds: chosen.pick.liveOdds, oddsSource: chosen.pick.oddsSource ?? null }), gameId: chosen.gameId } : null);
   const shown = cmp.next ?? cmp.now;
   const nextTone = cmp.direction === "UP" ? "text-[#15803D] dark:text-[#4ADE80]" : cmp.direction === "DOWN" ? "text-orange-600 dark:text-orange-400" : undefined;
   const titleId = "swap-leg-title-" + index;
@@ -396,7 +411,7 @@ export function SwapModal({
               {capperLine(leg.pick)}
             </p>
           </div>
-          <span className={ODDS_PILL}>{formatOdds(leg.pick.odds)}</span>
+          <OddsPill pick={leg.pick} />
         </div>
 
         {/* Tabs */}
@@ -588,13 +603,16 @@ function useTweenedDecimal(target: number | null, on: boolean): number | null {
 const PRICE_LABEL = "text-[10.5px] font-semibold uppercase tracking-[0.07em] text-muted-foreground";
 
 // The bottom bar's price: "Combined odds +595 · $10 pays $69.50", or why there's no number.
-export function CombinedPrice({ legs, sameGame, tween = false }: { legs: (CombineLeg & Partial<GameClock>)[]; sameGame: boolean; tween?: boolean }) {
+export function CombinedPrice({ legs: given, sameGame, tween = false }: { legs: (CombineLeg & Partial<GameClock> & { liveOdds?: number | null })[]; sameGame: boolean; tween?: boolean }) {
+  // Each leg at its current price: a live leg with a live price combines at it (live-price.ts).
+  const legs = given.map(atCurrentPrice);
   const combined = combineOdds(legs);
   const shownDecimal = useTweenedDecimal(!sameGame && combined.status === "AVAILABLE" ? combined.decimal : null, tween);
   // A leg on a game under way is priced as posted; its odds may have moved.
   const now = new Date();
   const isLive = (l: CombineLeg & Partial<GameClock>) => l.gameTime !== undefined && isGameLive({ gameTime: l.gameTime, gameStatus: l.gameStatus, gameId: l.gameId }, now);
-  const liveNote = legs.some(isLive) ? <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p> : null;
+  // Only a live leg still at its posted price may have moved.
+  const liveNote = given.some((l) => isLive(l) && l.liveOdds == null) ? <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">{LIVE_NOTE}</p> : null;
   if (sameGame) {
     return (
       <div className="min-w-0">
