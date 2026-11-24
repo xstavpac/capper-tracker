@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -89,12 +88,14 @@ export async function pullLeagueSchedule(
 // zone (America/Chicago locally) can't shift it.
 const utcWall = (d: Date) => d.toISOString().replace("Z", "");
 
-// One statement per league: every date that came back, upserted.
+// One statement per league: every date that came back, upserted. The id is made
+// by Postgres (gen_random_uuid): no node: import here - odds.ts imports this file
+// and odds.ts sits in a client component's import graph (capper comparison).
 export function scheduleUpsertSql(sportKey: string, days: Map<string, StoredScheduleGame[]>, fetchedAt: Date): Prisma.Sql | null {
   if (days.size === 0) return null;
   const at = utcWall(fetchedAt);
   const rows = [...days].map(
-    ([gameDate, games]) => Prisma.sql`(${randomUUID()}, ${sportKey}, ${gameDate}, ${JSON.stringify(games)}::jsonb, ${at}::timestamp)`
+    ([gameDate, games]) => Prisma.sql`(gen_random_uuid()::text, ${sportKey}, ${gameDate}, ${JSON.stringify(games)}::jsonb, ${at}::timestamp)`
   );
   return Prisma.sql`
     INSERT INTO schedule_days (id, "sportKey", "gameDate", games, "fetchedAt")
