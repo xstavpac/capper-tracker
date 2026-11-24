@@ -209,6 +209,8 @@ model User {
   ingestReviewItems       IngestReviewItem[]
   pickRecipientsAsSource    PickRecipient[] @relation("PickRecipientSource")
   pickRecipientsAsRecipient PickRecipient[] @relation("PickRecipientTarget")
+  apiTokens                 ApiToken[]
+  screenshotReadUsage       ScreenshotReadUsage[]
 
   @@map("users")
 }
@@ -1750,10 +1752,21 @@ enum IngestBatchStatus {
   FAILED // the import threw; error holds a clipped message
 }
 
+// Where a batch came from. TELEGRAM rows carry channelId + messageId; API_TOKEN rows carry sourceKey (and tokenId
+// while their token exists). Enforced by the ingest_batches_source_check CHECK constraint in the migration.
+enum IngestSourceType {
+  TELEGRAM
+  API_TOKEN
+}
+
 model IngestBatch {
   id                 String            @id @default(cuid())
-  channelId          String
-  messageId          Int
+  sourceType         IngestSourceType  @default(TELEGRAM)
+  channelId          String? // TELEGRAM only
+  messageId          Int? // TELEGRAM only
+  tokenId            String? // API_TOKEN only; null once the token row is gone
+  token              ApiToken?         @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  sourceKey          String?           @unique // API_TOKEN only: "tok:<tokenId>:<request id>"
   day                String // YYYY-MM-DD the batch is about, as sent by the reader
   text               String
   status             IngestBatchStatus @default(RECEIVED)
@@ -1764,10 +1777,73 @@ model IngestBatch {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   reviewItems        IngestReviewItem[]
+  apiSubmissions     ApiPickSubmission[]
 
   @@unique([channelId, messageId])
   @@index([createdAt])
   @@map("ingest_batches")
+}
+
+// A user's API token for POST /api/v1/picks ("bring your own bot"). Only the SHA-256 hex of the raw token is stored;
+// prefix is "bv_live_" + the first 4 characters of the random part, for display. windowStart / windowCount are the
+// fixed one-minute rate-limit window, advanced by the same UPDATE that authenticates a request.
+model ApiToken {
+  id          String              @id @default(cuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String              @db.VarChar(40)
+  prefix      String
+  tokenHash   String              @unique
+  windowStart DateTime            @default(now())
+  windowCount Int                 @default(0)
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime            @default(now())
+  batches     IngestBatch[]
+  submissions ApiPickSubmission[]
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
+enum ApiPickSubmissionStatus {
+  ACCEPTED
+  NEEDS_REVIEW
+  REJECTED
+  DISMISSED
+}
+
+// One pick sent through an API token, keyed by the bot's own client_id: a resend of the same client_id finds this row.
+model ApiPickSubmission {
+  id           String                  @id @default(cuid())
+  tokenId      String
+  token        ApiToken                @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  clientId     String
+  status       ApiPickSubmissionStatus
+  pickId       String?
+  reviewItemId String?
+  reason       String?
+  batchId      String
+  batch        IngestBatch             @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  result       Json // the per-pick response returned for this client_id
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@unique([tokenId, clientId])
+  @@index([tokenId, createdAt])
+  @@index([batchId])
+  @@map("api_pick_submissions")
+}
+
+// Screenshot reads on Catalog Import, counted per user per Eastern-time day (YYYY-MM-DD) for the daily cap.
+model ScreenshotReadUsage {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    String
+  count  Int    @default(0)
+
+  @@id([userId, day])
+  @@map("screenshot_read_usage")
 }
 
 // What the interactive importer would have asked, saved for later. Mirrors the questions in
