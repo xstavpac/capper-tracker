@@ -82,3 +82,12 @@ export function nextRotationUsed(eligible: readonly string[], usedBefore: Readon
   const overflow = new Set(taken.filter((id) => usedBefore.has(id)));
   return overflow.size >= eligible.length ? new Set() : overflow;
 }
+
+// The slider's setting as the user left it: `manual` legs of `total`. Total legs changing later keeps
+// that proportion, always scaled from this anchor (so stepping down and back never drifts).
+export type ManualSplit = { manual: number; total: number };
+
+// The split a build uses: the slider's, scaled to Total legs; half the legs until it is moved.
+export function effectiveManualSlots(split: ManualSplit | null, total: number, slipSize: number): number {
+  return split ? rescaleManualSlots(split.total, total, split.manual, slipSize) : defaultManualSlots(total, slipSize);
+}

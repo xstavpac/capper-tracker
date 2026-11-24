@@ -174,7 +174,7 @@ async function main() {
     await click(button("Generate parlay"));
     await waitUntil(() => !text().includes("Generating…"), "Generating… to clear");
   };
-  const fillFrom = (label: "Best available" | "Your picks only") =>
+  const fillFrom = (label: "Best available" | "Combined" | "Your picks only") =>
     Array.from(el.querySelectorAll('[role="radiogroup"][aria-label="Fill from"] [role="radio"]')).find((b) => (b.textContent ?? "").trim() === label) as HTMLButtonElement | undefined;
   const betType = (label: string) => Array.from(el.querySelectorAll('[role="group"][aria-label="Bet types"] button')).find((b) => (b.textContent ?? "").trim() === label) as HTMLButtonElement | undefined;
   const legsShown = () => button("More legs")?.previousElementSibling?.textContent;
@@ -195,7 +195,10 @@ async function main() {
   store("u1", PICKS);
   await mount("u1");
   check("#2 · the pool holds 60 picks", ctx.pool.length === 60, `pool=${ctx.pool.length}`);
-  check("#2 · Fill from is Your picks only (forced), Best available is disabled", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true" && fillFrom("Best available")?.disabled === true);
+  // Over the cap: Combined (the default with picks) or Your picks only - never Best available (every pick in).
+  check("#2 · Fill from is Combined (the default), Best available is disabled", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && fillFrom("Best available")?.disabled === true);
+  await click(fillFrom("Your picks only"));
+  check("#2 · Your picks only can be chosen", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true");
   check("#2 · the note says the generator picks the best 25", text().includes(POOL_OVER_CAP_NOTE), POOL_OVER_CAP_NOTE);
   await click(fillFrom("Best available"));
   check("#2 · tapping Best available changes nothing", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true" && ctx.generatorFilters.fillFrom !== "BEST_AVAILABLE" || ctx.generatorFilters.fillFrom === "BEST_AVAILABLE" && fillFrom("Your picks only")?.getAttribute("aria-checked") === "true");
@@ -215,6 +218,9 @@ async function main() {
   for (const p of PICKS.slice(0, 5)) await act(() => ctx.togglePick(p as unknown as ExpanderPick));
   await act(() => ctx.sendToGenerator());
   await settle();
+  // The first picks make Combined the default (combined-fill.ts); this check is Best available's floor.
+  check("#7 · the first picks make Combined the default", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && ctx.legCount === 3, `legs=${ctx.legCount}`);
+  await click(fillFrom("Best available"));
   const floor = ctx.legCount;
   check("#7 · Best available: the 5 sent picks set the floor", floor === 5 && legsShown() === "5", `legs=${ctx.legCount} shown=${legsShown()}`);
   check("#7 · Best available: More legs is usable right away", button("More legs")?.disabled === false);

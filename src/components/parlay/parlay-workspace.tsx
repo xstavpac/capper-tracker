@@ -10,14 +10,21 @@ import { ClipboardIcon, ListChecksIcon, TargetIcon } from "@/components/dashboar
 import { useParlayPool } from "@/components/parlay/parlay-pool-context";
 import { GeneratorCard, type GeneratorSummary } from "@/components/parlay/generator-card";
 import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
+import { effectiveFillFrom, effectiveManualSlots } from "@/lib/parlay/combined-fill";
+import { legsSplitSub, yourPicksSub } from "@/lib/parlay/combined-ui";
 
 const ICON = "h-[17px] w-[17px] stroke-[2.2]";
 
 function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
-  const { pool, targets, targetedGames, legCount } = useParlayPool();
+  const { pool, targets, targetedGames, legCount, generatorFilters } = useParlayPool();
+  // The same Fill from and split the card builds with (combined-fill.ts).
+  const fillFrom = effectiveFillFrom(pool.length, generatorFilters.fillFrom);
+  const manualSlots = fillFrom === "COMBINED" ? effectiveManualSlots(generatorFilters.manualSplit, legCount, pool.length) : 0;
   const legs = summary?.legs ?? legCount;
-  const fromSlip = summary?.fromSlip ?? Math.min(pool.length, legCount);
-  const generated = summary?.generated ?? Math.max(0, legCount - pool.length);
+  // Before a build: what these settings ask for.
+  const plannedSlip = fillFrom === "COMBINED" ? manualSlots : Math.min(pool.length, legCount);
+  const fromSlip = summary?.fromSlip ?? plannedSlip;
+  const generated = summary?.generated ?? (fillFrom === "YOUR_PICKS_ONLY" ? 0 : Math.max(0, legCount - plannedSlip));
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
       <StatCard
@@ -27,7 +34,7 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
         iconClass={TINTS.blue.iconWrap}
         color="#2563EB"
         value={String(pool.length)}
-        sub="always in the parlay"
+        sub={yourPicksSub(fillFrom, pool.length, manualSlots)}
       />
       <StatCard
         glass
@@ -45,7 +52,7 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
         iconClass={TINTS.green.iconWrap}
         color="#16A34A"
         value={`${legs} of ${MAX_PARLAY_LEGS} max`}
-        sub={`${fromSlip} from your picks · ${generated} generated`}
+        sub={legsSplitSub(fromSlip, generated)}
       />
     </div>
   );

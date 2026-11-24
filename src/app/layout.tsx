@@ -15,6 +15,7 @@ import "@/components/live/live-skin.css";
 import "@/components/picks/picks-skin.css";
 // The Record by category tiles' shared green and red (/dashboard and /live).
 import "@/components/dashboard/category-tile.css";
+import "@/components/parlay/combined-mix-box.css";
 
 export const metadata: Metadata = {
   title: "Bettingview",

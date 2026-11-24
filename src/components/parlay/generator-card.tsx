@@ -38,7 +38,10 @@ import { StartedLine } from "@/components/parlay/started-line";
 import { reconcileMix, selectedCategories, toggleInclude, type PickMix } from "@/lib/parlay/include-picks";
 import type { BetCategory } from "@/lib/parlay/bet-category";
 import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
-import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, RECORD_WIN_RATE_HELP as WIN_RATE_HELP, RECORD_WIN_RATE_HELP_MORE as WIN_RATE_HELP_MORE, gateRiskNote, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
+import { GATE_DEFAULT, GATE_MAX, GATE_MIN, GATE_STEP, normalizeMinWinPct, readStoredGate, writeStoredGate } from "@/lib/parlay/gate";
+import { clampManualSlots, disabledFillFrom, effectiveManualSlots, maxManualSlots } from "@/lib/parlay/combined-fill";
+import { combinedLegsNote, FILL_FROM_LABELS, FILL_FROM_ORDER, fillFromHelp, NEEDS_PICKS_TITLE, slipSubtitle } from "@/lib/parlay/combined-ui";
+import { CombinedMixBox } from "@/components/parlay/combined-mix-box";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
 import { slipLegFloor } from "@/lib/parlay/leg-cap";
 import { effectiveFillFrom, floorHint, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
@@ -51,10 +54,7 @@ import { INCLUDE_LIVE_LABEL, readStoredIncludeLive, writeStoredIncludeLive } fro
 import { StarIcon } from "@/components/dashboard/star-icon";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
 
-const FILL_FROM_OPTIONS: { key: FillFrom; label: string }[] = [
-  { key: "BEST_AVAILABLE", label: "Best available" },
-  { key: "YOUR_PICKS_ONLY", label: "Your picks only" },
-];
+const FILL_FROM_OPTIONS: { key: FillFrom; label: string }[] = FILL_FROM_ORDER.map((key) => ({ key, label: FILL_FROM_LABELS[key] }));
 const LINK = "text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400";
 const CHIP = "inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold";
 // The "+ Add ... from Live" links: a filled brand pill, so the way into Live stands out from the quiet text links.
@@ -151,7 +151,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
 
   // Bet types, Pick Mix, Max legs per game and Fill from live in the slip context, not here: this card is
   // unmounted by the trip to Live and back, and the filters must survive it (and the Fill from toggle).
-  const { include, mix, maxPerGame, fillFrom: fillFromChoice } = generatorFilters;
+  const { include, mix, maxPerGame, fillFrom: fillFromChoice, manualSplit } = generatorFilters;
   // Rows for the selected categories only; follows the selection (reconcileMix).
   const setMix = (m: PickMix | null) => patchGeneratorFilters({ mix: m });
   const categories = selectedCategories(include);
@@ -163,6 +163,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   const setFillFrom = (v: FillFrom) => patchGeneratorFilters({ fillFrom: v });
   // More than MAX_PARLAY_LEGS picks can only be built as Your picks only (the engine draws the best 25).
   const fillFrom: FillFrom = effectiveFillFrom(pool.length, fillFromChoice);
+  const combined = fillFrom === "COMBINED";
+  // Combined's split: the slider's, scaled to Total legs (half the legs until moved), 0..min(Total legs, your picks).
+  const manualSlots = combined ? effectiveManualSlots(manualSplit, legCount, pool.length) : 0;
 
   // Remembered per user, apart from the slip. Read after mount so the server and
   // first client render agree.
@@ -224,8 +227,19 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   const settings: GeneratorSettings = useMemo(
     // favoritesOnly only when on, so a build with the star off is the same request as before it existed.
     // includeLive only when off, the same way: a build with the switch on is the request it always was.
-    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct, ...(favoritesOnly ? { favoritesOnly: true } : {}), ...(includeLive ? {} : { includeLive: false }) }),
-    [legCount, maxPerGame, include, mix, fillFrom, minWinPct, favoritesOnly, includeLive]
+    // manualSlots only under Combined: every other build is the request it always was.
+    () => ({
+      legCount,
+      maxLegsPerGame: maxPerGame,
+      include,
+      mix,
+      fillFrom,
+      minWinPct,
+      ...(favoritesOnly ? { favoritesOnly: true } : {}),
+      ...(includeLive ? {} : { includeLive: false }),
+      ...(combined ? { manualSlots } : {}),
+    }),
+    [legCount, maxPerGame, include, mix, fillFrom, minWinPct, favoritesOnly, includeLive, combined, manualSlots]
   );
   const key = poolKey(inputs);
 
@@ -365,17 +379,19 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   // from 1 - the parlay is that many of them. Either way, once a build has said what the pool holds,
   // never more than it can supply.
   const yourPicksOnly = fillFrom === "YOUR_PICKS_ONLY";
+  // Combined and Your picks only both build from part of the slip: Total legs goes down to 1.
+  const pickSubset = fillFrom !== "BEST_AVAILABLE";
   const built = parlay && builtFor === key ? parlay : null;
   const slipFloor = slipLegFloor(pool, maxPerGame);
   // Recomputed from the current settings: a parlay built under other settings (Fill from, Bet types, ...) says nothing
   // about what these can supply, so until the rebuild lands the ceiling is the cap, never a stale capacity.
   const capacity = built && builtCapKey === capKey ? built.capacity : MAX_PARLAY_LEGS;
-  const { min: minLegs, max: maxLegs } = legRange({ yourPicksOnly, slipFloor, capacity });
+  const { min: minLegs, max: maxLegs } = legRange({ yourPicksOnly: pickSubset, slipFloor, capacity });
   useEffect(() => {
-    if (!yourPicksOnly && legCount < minLegs) setLegCount(minLegs);
-  }, [yourPicksOnly, legCount, minLegs, setLegCount]);
+    if (!pickSubset && legCount < minLegs) setLegCount(minLegs);
+  }, [pickSubset, legCount, minLegs, setLegCount]);
   const generatedLegs = Math.max(0, legCount - slipFloor);
-  const legsFloorHint = floorHint({ yourPicksOnly, slipFloor, legCount, minLegs });
+  const legsFloorHint = floorHint({ yourPicksOnly: pickSubset, slipFloor, legCount, minLegs });
 
   // Your picks, by game, in the order they were added.
   const byGame = useMemo(() => {
@@ -431,7 +447,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           n={1}
           tone="green"
           title="Your Picks and Target Games"
-          description="Picks you've locked in for this parlay."
+          description={slipSubtitle(pool.length)}
           actions={
             <>
               <ClearPicksButton count={pool.length} onClear={slip.clearSlip} />
@@ -498,7 +514,13 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs font-medium text-muted-foreground">Every pick here goes in the parlay. Remove one with ×.</p>
+                  <p className="mt-2 text-xs font-medium text-muted-foreground">
+                    {fillFrom === "BEST_AVAILABLE"
+                      ? "Every pick here goes in the parlay. Remove one with ×."
+                      : combined
+                        ? "Regenerate rotates through these. Remove one with ×."
+                        : "The parlay is drawn from these. Remove one with ×."}
+                  </p>
                 </div>
               )}
               {removed && (
@@ -619,7 +641,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 label="Total legs"
                 note={
                   <>
-                    {legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
+                    {combined
+                      ? combinedLegsNote(manualSlots, legCount - manualSlots, favoritesOnly)
+                      : legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
                     {legsFloorHint && <span className="mt-0.5 block font-semibold text-amber-700 dark:text-amber-400">{legsFloorHint}</span>}
                   </>
                 }
@@ -636,30 +660,38 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               <SettingRow
                 icon={<TrophyIcon className="h-5 w-5" />}
                 label="Minimum capper win rate"
-                note={
-                  <>
-                    {WIN_RATE_HELP}{" "}
-                    <span
-                      role="img"
-                      aria-label={WIN_RATE_HELP_MORE}
-                      title={WIN_RATE_HELP_MORE}
-                      className="inline-flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full border border-current align-[-2px] text-[9px] font-bold"
-                    >
-                      i
-                    </span>
-                    {gateRiskNote(minWinPct)}
-                  </>
-                }
               >
                 <StepperControl label="Minimum capper win rate" value={minWinPct} min={GATE_MIN} max={GATE_MAX} step={GATE_STEP} unit="%" onChange={setMinWinPct} />
               </SettingRow>
-              <SettingRow
-                icon={<DatabaseIcon className="h-5 w-5" />}
-                label="Fill from"
-                note={pool.length === 0 ? "Add picks to build from your picks only" : pool.length > MAX_PARLAY_LEGS ? POOL_OVER_CAP_NOTE : undefined}
-              >
-                <TextSegments label="Fill from" options={FILL_FROM_OPTIONS} value={fillFrom} disabled={pool.length > MAX_PARLAY_LEGS ? ["BEST_AVAILABLE"] : []} onChange={(v) => setFillFrom(effectiveFillFrom(pool.length, v))} />
-              </SettingRow>
+              {/* One row with its mix box: no rule between them. */}
+              <div>
+                <SettingRow
+                  icon={<DatabaseIcon className="h-5 w-5" />}
+                  label="Fill from"
+                  note={pool.length > MAX_PARLAY_LEGS ? POOL_OVER_CAP_NOTE : (fillFromHelp(fillFrom, pool.length) ?? undefined)}
+                >
+                  <TextSegments
+                    label="Fill from"
+                    options={FILL_FROM_OPTIONS}
+                    value={fillFrom}
+                    disabled={disabledFillFrom(pool.length)}
+                    disabledTitle={pool.length === 0 ? NEEDS_PICKS_TITLE : undefined}
+                    onChange={(v) => setFillFrom(effectiveFillFrom(pool.length, v))}
+                  />
+                </SettingRow>
+                {combined && (
+                  // Left-aligned with the Fill from buttons (the row's 200px label column + its 16px gap).
+                  <div className="pb-3.5 sm:pl-[216px]">
+                    <CombinedMixBox
+                      manual={manualSlots}
+                      total={legCount}
+                      max={maxManualSlots(legCount, pool.length)}
+                      slipSize={pool.length}
+                      onChange={(n) => patchGeneratorFilters({ manualSplit: { manual: clampManualSlots(n, legCount, pool.length), total: legCount } })}
+                    />
+                  </div>
+                )}
+              </div>
             </SettingsBlock>
           </div>
         </Section>
@@ -725,6 +757,8 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
             if (!asBuilt) return;
             setChangedPickIds(null);
             setParlay(asBuilt);
+            // Combined's rotation follows the parlay put back (generator-session.ts).
+            session.current.adopt(asBuilt);
           }}
         />
       )}

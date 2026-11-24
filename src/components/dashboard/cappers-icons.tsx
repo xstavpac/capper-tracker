@@ -164,6 +164,15 @@ export const BoltIcon = ({ className }: P) => (
   </svg>
 );
 
+// A push pin: one of your own picks (the Parlay Generator's Combined fill).
+export const PinIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4" />
+    <path d="M9 15l-4.5 4.5" />
+    <path d="M14.5 4l5.5 5.5" />
+  </svg>
+);
+
 // A circular arrow: rebuild / regenerate.
 export const RefreshIcon = ({ className }: P) => (
   <svg {...svgProps(className)}>

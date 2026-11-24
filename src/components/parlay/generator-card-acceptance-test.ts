@@ -179,11 +179,14 @@ async function main() {
   await settle();
 
   // ---- Tiles and sections ----
-  check("tile: Your picks 2, always in the parlay", /Your picks2always in the parlay/.test(text()), text().slice(0, 160));
+  // Picks in the slip: Fill from defaults to Combined (combined-fill.ts), half of 3 legs = 2 of your picks.
+  check("tile: Your picks 2, Combined: 2 used per parlay · rotates", /Your picks22 used per parlay · rotates/.test(text()), text().slice(0, 160));
+  check("Fill from: Combined is the default with picks, its mix box shown", button("Combined")?.getAttribute("aria-checked") === "true" && el.querySelector("[data-mix-box]") !== null);
+  check("section 1 subtitle: N picks in your slip", text().includes("2 picks in your slip"));
   check("tile: Targeting 3 games (the target + the two picks' games)", text().includes("3 games"));
   check("tile: Legs N of 25 max", /3 of 25 max/.test(text()));
   check("Your picks: both picks, grouped by game, each with ×", ["Remove Capper g0ml pick from your slip", "Remove Capper g1ml pick from your slip"].every((l) => button(l)));
-  check("Your picks: the note and the Live link", text().includes("Every pick here goes in the parlay. Remove one with ×.") && text().includes("+ Add picks from Live"));
+  check("Your picks: the note and the Live link", text().includes("Regenerate rotates through these. Remove one with ×.") && text().includes("+ Add picks from Live"));
   check("Targets: the explicit target has ×, the picks' games say · your picks", Boolean(button("Stop targeting " + games[3].gameLabel)) && (text().match(/· your picks/g) ?? []).length === 2);
   check("Targets: Use full slate shown", Boolean(button("Use full slate")));
   check("no 'Why this leg?' anywhere", !text().includes("Why this leg"));
@@ -220,6 +223,10 @@ async function main() {
   const shown = () => more().parentElement?.querySelector('[aria-live="polite"]')?.textContent;
   check("Max legs per game: a −/+ stepper that stops at 10", more().disabled && shown() === "10", `shown=${shown()} disabled=${more().disabled}`);
   for (let i = 0; i < 4; i++) await click(button("Fewer: Max legs per game"));
+
+  // The rest of this suite is Best available's (every pick in the parlay).
+  await click(button("Best available"));
+  check("Best available: chosen, the mix box gone, its helper shown", button("Best available")?.getAttribute("aria-checked") === "true" && el.querySelector("[data-mix-box]") === null && text().includes("Generator picks every leg from your cappers."));
 
   // ---- Generate: one request ----
   await generate();
@@ -283,7 +290,17 @@ async function main() {
   await click(button("Yes, clear"));
   check("Clear Your Picks is hidden with no picks", !clearBtn());
   await act(() => ctx.clearTargets());
-  check("Fill from: with no picks, Best available is the only choice", text().includes("Add picks to build from your picks only"));
+  {
+    const combinedBtn = button("Combined") as HTMLButtonElement | undefined;
+    const yoursBtn = button("Your picks only") as HTMLButtonElement | undefined;
+    check(
+      "Fill from: with no picks, Combined and Your picks only are disabled with 'Add picks from Live first'",
+      Boolean(combinedBtn?.disabled && yoursBtn?.disabled) && combinedBtn?.title === "Add picks from Live first" && yoursBtn?.title === "Add picks from Live first"
+    );
+    check("Fill from: with no picks, Best available is selected and no helper text", button("Best available")?.getAttribute("aria-checked") === "true" && !text().includes("Generator picks every leg from your cappers."));
+    check("section 1 subtitle: no picks", text().includes("No picks in your slip yet"));
+    check("tile: Your picks: add picks from Live", text().includes("add picks from Live"));
+  }
 
   // ---- The 25-leg cap ----
   for (let i = 0; i < 30; i++) {
