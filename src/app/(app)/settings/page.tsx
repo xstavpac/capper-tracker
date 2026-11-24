@@ -3,13 +3,16 @@ import { getEntitlementsForUser, getSubscriptionForUser } from "@/server/data/su
 import { BillingSummary } from "@/components/billing/billing-summary";
 import { ThemeToggle } from "@/components/settings/theme-toggle";
 import { BugReportCard } from "@/components/settings/bug-report-card";
+import { ApiTokensPanel } from "@/components/settings/api-tokens-panel";
+import { listApiTokensForUser } from "@/server/data/api-tokens";
 import { formatEastern } from "@/lib/dates";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const [entitlements, subscription] = await Promise.all([
+  const [entitlements, subscription, apiTokens] = await Promise.all([
     getEntitlementsForUser(user.id),
     getSubscriptionForUser(user.id),
+    listApiTokensForUser(user.id),
   ]);
 
   return (
@@ -32,6 +35,11 @@ export default async function SettingsPage() {
 
       <div className="mb-6">
         <ThemeToggle />
+      </div>
+
+      <div className="mb-6">
+        {/* Rendered once with the server's clock so "Last used" hydrates identically. */}
+        <ApiTokensPanel initialTokens={apiTokens} nowMs={Date.now()} />
       </div>
 
       <div className="mb-6">

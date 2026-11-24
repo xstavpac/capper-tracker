@@ -9,7 +9,7 @@ export const RED = "text-[#B91C1C] dark:text-red-400";
 // A hue: a soft card tint + border, the header's icon tile, the subtitle's dark shade, the control's
 // border, and the footer's icon + link color. Dark mode: the /live panel with a faint wash of the hue (globals.css .dk-tint).
 export type PanelTint = { card: string; iconWrap: string; subtitleClass: string; control: string; accent: string };
-export type PanelTheme = PanelTint & { title: string; subtitle: string; icon: ReactNode };
+export type PanelTheme = PanelTint & { title: string; subtitle: ReactNode; icon: ReactNode };
 
 export const TINTS = {
   blue: {

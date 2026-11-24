@@ -323,3 +323,11 @@ export const GridIcon = ({ className }: P) => (
     <rect x="13" y="13" width="7" height="7" rx="1.5" />
   </svg>
 );
+
+// Settings › API tokens.
+export const KeyIcon = ({ className }: P) => (
+  <svg {...svgProps(className)}>
+    <circle cx="8" cy="15" r="4" />
+    <path d="M10.85 12.15 19 4M18 5l2 2M15 8l2 2" />
+  </svg>
+);
