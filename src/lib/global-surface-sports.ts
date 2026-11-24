@@ -7,14 +7,15 @@
 //
 //   - the ticker (every app page's layout, and the public score feeds behind
 //     it) leaves NCAAB out;
-//   - /live never opens on NCAAB by itself. It stays one click away in the tab
+//   - /live opens on NCAAB by itself only as a last resort (no other league has a game live or
+//     left today; DEFAULT_TAB_DEPRIORITIZED_SPORT_KEYS). It stays one click away in the tab
 //     row (after NCAAF) and a ?sport=basketball_ncaab link is never overridden.
 //
 // Pure: imported by server data modules, API routes and tests alike.
 import { NCAAB_SPORT_KEY } from "@/lib/final-pick-gate";
 
 export const TICKER_EXCLUDED_SPORT_KEYS: ReadonlySet<string> = new Set([NCAAB_SPORT_KEY]);
-export const DEFAULT_TAB_EXCLUDED_SPORT_KEYS: ReadonlySet<string> = new Set([NCAAB_SPORT_KEY]);
+export const DEFAULT_TAB_DEPRIORITIZED_SPORT_KEYS: ReadonlySet<string> = new Set([NCAAB_SPORT_KEY]);
 
 // Whether a league takes part in the ticker and its public score feeds.
 export function isTickerSportKey(sportKey: string): boolean {
