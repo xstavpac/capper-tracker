@@ -230,6 +230,15 @@ async function main() {
     "cleared · Combined and Your picks only disabled, titled 'Add picks from Live first'",
     Boolean(fillFrom("Combined")?.disabled && fillFrom("Your picks only")?.disabled) && fillFrom("Combined")?.title === "Add picks from Live first"
   );
+  check(
+    "cleared · 'Add picks from Live first' is ONLY the hover title on the two disabled buttons, never visible text",
+    !text().includes("Add picks from Live first") &&
+      Array.from(el.querySelectorAll('[title="Add picks from Live first"]')).map((b) => (b.textContent ?? "").trim()).join("|") === "Combined|Your picks only"
+  );
+  {
+    const row = el.querySelector('[role="radiogroup"][aria-label="Fill from"]')?.closest(".grid");
+    check("cleared · the Fill from row holds only its label and the three buttons (no helper)", row?.textContent === "Fill fromBest availableCombinedYour picks only", JSON.stringify(row?.textContent));
+  }
   check("cleared · no helper beside Fill from; subtitle and tile say so", !text().includes("Generator picks every leg from your cappers.") && text().includes("No picks in your slip yet") && text().includes("add picks from Live"));
 
   await act(() => root.unmount());
