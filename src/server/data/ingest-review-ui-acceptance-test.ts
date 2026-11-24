@@ -104,6 +104,9 @@ async function main() {
     for (const id of [users.main, users.other]) {
       await prisma.user.create({ data: { id, supabaseId: id + "-sb", email: id + "@example.invalid" } });
     }
+    // The ingest never creates a capper from an unknown name (lib/capper-name-guard.ts): the cappers this test posts as
+    // are saved first, as they would be in a real account.
+    for (const name of ["Alpha Capper"]) await prisma.capper.create({ data: { userId: users.main, name, source: "OTHER" } });
     process.env.INGEST_USER_ID = users.main;
     process.env.PICKS_INGEST_TOKEN = TOKEN;
     delete process.env.INGEST_ALLOWED_LEAGUES;

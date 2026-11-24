@@ -162,7 +162,7 @@ export function ReviewQueue({ initialCards }: { initialCards: ReviewCard[] }) {
                 </>
               )}
               {card.questionType === "CAPPER_FUZZY" && (
-                <CapperFuzzyPrompt name={card.capperName} suggestion={first?.capperName ?? ""}>
+                <CapperFuzzyPrompt name={card.capperName} suggestion={card.choices.find((c) => c.id === "use-suggestion")?.capperName ?? ""}>
                   {choiceButtons}
                   {dismiss}
                 </CapperFuzzyPrompt>

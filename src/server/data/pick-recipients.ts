@@ -13,7 +13,8 @@
 import { revalidateTag } from "next/cache";
 import { cacheKeys } from "@/lib/cache-keys";
 import { prisma } from "@/lib/prisma";
-import { revalidateCapperRoster } from "@/server/data/capper-roster";
+import { getCapperRoster, revalidateCapperRoster } from "@/server/data/capper-roster";
+import { recipientCapperName } from "@/lib/capper-name-guard";
 import { insertPicksDeduped, type DedupPickRow } from "@/server/data/pick-dedup";
 
 export type RecipientCopyInput = { row: DedupPickRow; sourcePickId: string };
@@ -38,7 +39,16 @@ export async function fanOutImportedPicks(sourceUserId: string, copies: Recipien
     result.recipients = recipientIds.length;
     for (const recipientId of recipientIds) {
       try {
-        const rows: DedupPickRow[] = copies.map(({ row, sourcePickId }) => ({
+        // The capper-name guard (lib/capper-name-guard.ts): an obvious variant of one of the recipient's saved cappers
+        // is filed there; a junk name is not copied. The roster is the per-user cached read.
+        const saved = (await getCapperRoster(recipientId)).map((c) => c.name);
+        const named = copies.flatMap((c) => {
+          const capperName = recipientCapperName(c.row.capperName, saved);
+          return capperName === null ? [] : [{ ...c, row: { ...c.row, capperName } }];
+        });
+        if (named.length < copies.length) console.warn("[pick-recipients] junk capper name, copy skipped", { recipientId, skipped: copies.length - named.length });
+        if (named.length === 0) continue;
+        const rows: DedupPickRow[] = named.map(({ row, sourcePickId }) => ({
           ...row,
           capperId: undefined,
           sportId: undefined,

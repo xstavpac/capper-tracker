@@ -3554,7 +3554,12 @@ export function parseCatalog(
   // Optional teams from the live NCAAF game feed (feed-teams.ts), so a school
   // outside the hand-kept list - every FCS school - resolves when it has a game
   // on the feed. Same contract as rosterFullNames: omitted, nothing changes.
-  feedTeams?: FeedTeam[]
+  feedTeams?: FeedTeam[],
+  // Automated imports only (Telegram / bot API ingest, see lib/capper-name-guard.ts). acceptNewHeader is asked about
+  // every NEW capper header (a name that is not a saved capper); false means the line is not a capper: it is skipped
+  // and the header above it stays active, so the picks under it still go to that capper. Omitted (the form, every
+  // other caller): nothing changes.
+  options?: { acceptNewHeader?: (name: string) => boolean }
 ): {
   picks: ParsedPick[];
   parlays: ParsedParlay[];
@@ -3571,6 +3576,8 @@ export function parseCatalog(
   // capperName is the last header NOT itself in this list. Expect false
   // positives ("KRASH 12-2").
   droppedAsHeaders: DroppedLine[];
+  // Header lines acceptNewHeader refused, with the capper that stayed active. Empty without the option.
+  rejectedHeaders: DroppedLine[];
 } {
   const sortedNames = [...knownCapperNames].sort((a, b) => b.length - a.length);
   const rawLines = normalizeTypography(text).split("\n").map((l) => normalizeNhlPlayerGoalsLine(normalizeMarketShorthand(l.trim())));
@@ -3602,6 +3609,13 @@ export function parseCatalog(
   let blockLeague: { league: "NBA" | "NHL"; capper: string } | null = null;
   let currentCapper = "";
   const droppedAsHeaders: DroppedLine[] = [];
+  const rejectedHeaders: DroppedLine[] = [];
+  // A new (not saved) capper name, or - when options.acceptNewHeader refuses it - the capper already active.
+  const guardNewHeader = (name: string, line: string): string => {
+    if (!options?.acceptNewHeader || options.acceptNewHeader(name)) return name;
+    rejectedHeaders.push({ text: line, capperName: currentCapper });
+    return currentCapper;
+  };
   // Attribution for droppedAsHeaders: the last capper header that wasn't
   // itself a dropped pick-like line. A dropped line still overwrites
   // currentCapper (behavior unchanged), so without this a run of dropped
@@ -3844,6 +3858,10 @@ export function parseCatalog(
     if (!name) return;
     const normalized = normalizeName(name);
     const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
+    if (!existingMatch && options?.acceptNewHeader && !options.acceptNewHeader(name)) {
+      guardNewHeader(name, line);
+      return;
+    }
     currentCapper = existingMatch ?? name;
     section = null;
     if (!existingMatch && looksPickLikeHeader(line)) {
@@ -3884,7 +3902,7 @@ export function parseCatalog(
       if (forcedName) {
         const normalized = normalizeName(forcedName);
         const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
-        currentCapper = existingMatch ?? forcedName;
+        currentCapper = existingMatch ?? guardNewHeader(forcedName, line);
         section = null;
       }
       continue;
@@ -4256,7 +4274,7 @@ export function parseCatalog(
           const pickPart = detected.leadingText.slice(sep.index + sep[0].length).trim();
           const normalized = normalizeName(namePart);
           const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
-          currentCapper = existingMatch ?? namePart;
+          currentCapper = existingMatch ?? guardNewHeader(namePart, line);
           namedCapper = true;
           const restClean = detected.rest.replace(/^[\s:.-]+/, "").trim();
           effectiveRest = [pickPart, restClean].filter(Boolean).join(" ").trim();
@@ -4439,7 +4457,7 @@ export function parseCatalog(
     if (taglineName) {
       const normalized = normalizeName(taglineName);
       const existingMatch = knownCapperNames.find((n) => normalizeName(n) === normalized);
-      currentCapper = existingMatch ?? taglineName;
+      currentCapper = existingMatch ?? guardNewHeader(taglineName, strippedText);
       continue;
     }
 
@@ -4460,5 +4478,5 @@ export function parseCatalog(
   for (const parlay of parlays) for (const leg of parlay.legs) leg.period = withRegulationPeriod(leg);
 
   flushBare();
-  return { picks: results, parlays, unresolved, unresolvedCapperNames, unresolvedLeagues, droppedAsHeaders };
+  return { picks: results, parlays, unresolved, unresolvedCapperNames, unresolvedLeagues, droppedAsHeaders, rejectedHeaders };
 }

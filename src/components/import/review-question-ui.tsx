@@ -81,10 +81,16 @@ export function ambiguousKindText(isPlayer: boolean, options: ReasonOption[]): s
 export function CapperFuzzyPrompt({ name, suggestion, children }: { name: string; suggestion: string; children: ReactNode }) {
   return (
     <div className="mt-2 rounded-lg border border-amber-400 bg-amber-50/60 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/5 dark:text-amber-200">
-      <div>
-        <span className="font-semibold">&quot;{name}&quot;</span> isn&apos;t an exact match for any saved capper. Did you mean{" "}
-        <span className="font-semibold">{suggestion}</span>?
-      </div>
+      {suggestion ? (
+        <div>
+          <span className="font-semibold">&quot;{name}&quot;</span> isn&apos;t an exact match for any saved capper. Did you mean{" "}
+          <span className="font-semibold">{suggestion}</span>?
+        </div>
+      ) : (
+        <div>
+          <span className="font-semibold">&quot;{name}&quot;</span> isn&apos;t a saved capper. Create it and log this pick?
+        </div>
+      )}
       <div className="mt-1.5 flex flex-wrap gap-1.5">{children}</div>
     </div>
   );

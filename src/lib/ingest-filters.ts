@@ -6,6 +6,7 @@
 //
 // Pure: no database, no network.
 import { isTeamPhrase, resolveAmbiguousPick, type ParsedPick } from "@/lib/parse-catalog";
+import { isPromoLine } from "@/lib/capper-name-guard";
 import type { SkippedLineEntry } from "@/server/data/import-skipped-lines";
 
 // NCAAB is in by default: it has had a game feed (ESPN men's college basketball scores, school list, grading keys)
@@ -145,4 +146,27 @@ export function narrowAmbiguousByLeague(allowed: Set<string>, picks: ParsedPick[
     else keep.push({ ...p, ambiguous: ok });
   }
   return { keep, skipped };
+}
+
+// Channel promo text ("2️⃣ DAYS FOR THE PRICE OF 1", "STILL HAVE TIME TO GET ON BOARD") never produces a pick or a
+// capper: the line is taken out before parsing, so the header and picks around it read as if it were not there.
+// Logged as PARSE_SILENT with a reason (no new skip stage needed).
+export function dropPromoLines(text: string): { text: string; skipped: SkippedLineEntry[] } {
+  const skipped: SkippedLineEntry[] = [];
+  const kept: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() && isPromoLine(line)) {
+      skipped.push({ stage: "PARSE_SILENT", capperName: "", rawText: line.trim(), reason: "Promo text, not a pick" });
+      continue;
+    }
+    kept.push(line);
+  }
+  return { text: kept.join("\n"), skipped };
+}
+
+// The ingest pre-filter: promo lines out, then combined-bet lines.
+export function preFilterIngestText(text: string): { text: string; skipped: SkippedLineEntry[] } {
+  const promo = dropPromoLines(text);
+  const combined = dropCombinedBetLines(promo.text);
+  return { text: combined.text, skipped: [...promo.skipped, ...combined.skipped] };
 }
