@@ -77,6 +77,22 @@ function check(label: string, pass: boolean, detail = "") {
   check("limit floored to 1 (second call denied)", !rl.check("x").ok);
 }
 
+// ---- peek reports without recording ----
+{
+  let t = 0;
+  const rl = new RateLimiter({ name: "test", limit: 2, windowMs: 10_000 }, () => t);
+  check("peek on an unseen key is allowed", rl.peek("p").ok);
+  for (let i = 0; i < 5; i++) rl.peek("p");
+  check("peeks record nothing (no bucket created)", rl.trackedKeys === 0);
+  rl.check("p");
+  check("peek after 1 of 2 still allowed", rl.peek("p").ok);
+  rl.check("p");
+  const denied = rl.peek("p");
+  check("peek after 2 of 2 denied with Retry-After", !denied.ok && denied.retryAfterSeconds === 10, JSON.stringify(denied));
+  t += 10_001;
+  check("peek allowed again after the window", rl.peek("p").ok);
+}
+
 // ---- rateLimitResponse shape ----
 {
   const res = rateLimitResponse(42);
