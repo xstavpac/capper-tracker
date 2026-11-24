@@ -41,6 +41,8 @@ import { getCachedNflRosterFullNames } from "@/server/data/nfl-roster-cache";
 import { getCapperRoster } from "@/server/data/capper-roster";
 import { recordImportSkippedLines, parseSkippedLineEntries, type SkippedLineEntry } from "@/server/data/import-skipped-lines";
 import type { DedupPickRow } from "@/server/data/pick-dedup";
+import type { ImportItemOutcome } from "@/server/data/bulk-import-core";
+import type { LineOutcome, LineOutcomeListener, LineRejectReason, TokenDayRule } from "@/lib/ingest-line-outcome";
 
 export type CatalogQuestion =
   // "Cardinals - which league?" The form shows `options` (label / sport / nickname) as buttons.
@@ -67,6 +69,21 @@ export type CatalogImportHooks = {
   // The text is a message being imported as it arrives (Telegram ingest): a game already final now - final at the
   // message's time - is never matched (bulk-import-core resolveGameAndOdds). Unset: matching exactly as the form's.
   realTimeIngest?: boolean;
+  // The four below are the bot API's (API_TOKEN batches, ingest-batch.ts). Telegram and the form leave them unset, so
+  // their imports run exactly as before.
+  // The bot API's day rule for game matching (bulk-import-core resolveGameAndOdds).
+  dayRule?: TokenDayRule;
+  // The imported picks are not copied to the user's active pick recipients (importPicksForUser).
+  skipRecipientFanOut?: boolean;
+  // The same line (same capper, same text) twice in one batch: the second is skipped as duplicate_in_request.
+  rejectRepeatedLines?: boolean;
+  // Called once for every pick line, with what became of it: accepted (inserted), needs_review (a question was
+  // raised - the line's review item), or rejected (skipped, refused or held for a reason nobody chose). A capper
+  // header gets none - unless it looks like a pick (then: rejected, unparseable). Synchronous; it must not throw.
+  // Order: not line order. But for one capper and line text, outcomes arrive in the order those lines appear (with
+  // rejectRepeatedLines, every repeat is reported after the first copy's outcome), so a caller can match outcomes to
+  // its lines by (capperName, raw) in order.
+  onLineOutcome?: LineOutcomeListener;
 };
 
 export type CatalogImportResult = {
@@ -85,6 +102,82 @@ export type CatalogImportResult = {
   // Extra skips from the hooks, already logged.
   hookSkipped: number;
 };
+
+// The skipped-line stages a hook or the parser reports, as the bot API's rejection reasons.
+const STAGE_REASON: Partial<Record<SkippedLineEntry["stage"], LineRejectReason>> = {
+  COMBINED_BET: "combined_pick",
+  LEAGUE_NOT_ALLOWED: "league_not_allowed",
+  PARSE_SILENT: "unparseable",
+  PARSE_UNRESOLVED: "unparseable",
+  RECOVERY_UNRESOLVED: "unparseable",
+  PROP_UNSUPPORTED: "unparseable",
+  DUPLICATE_SKIPPED: "duplicate",
+};
+
+// The needs_review outcome for a question (its index in the result's questions). The candidates' games are filled in
+// by the caller that drafts the review items (ingest-batch.ts), which matches each answer to its game.
+function reviewOutcome(q: CatalogQuestion, questionIndex: number): LineOutcome {
+  const base = { status: "needs_review" as const, questionIndex };
+  switch (q.type) {
+    case "AMBIGUOUS_TEAM":
+    case "PLAYER_AMBIGUITY":
+      return {
+        ...base,
+        capperName: q.pick.capperName,
+        reason: q.type === "AMBIGUOUS_TEAM" ? "ambiguous_team" : "ambiguous_player",
+        candidates: q.options.map((o) => ({ label: o.label, league: o.sport, game: null })),
+      };
+    case "MISSING_TOTAL_LINE":
+      return {
+        ...base,
+        capperName: q.pick.capperName,
+        reason: "missing_total_line",
+        candidates: [{ label: `Use the market line ${q.inferredLine}`, league: q.pick.sportName, game: null }],
+      };
+    case "CAPPER_FUZZY":
+      return {
+        ...base,
+        capperName: q.pick.capperName,
+        reason: "capper_name",
+        candidates: [
+          { label: `Use existing capper "${q.suggestion}"`, league: q.pick.sportName, game: null },
+          { label: `New capper "${q.rawName}"`, league: q.pick.sportName, game: null },
+        ],
+      };
+    case "FAR_FUTURE_GAME":
+      return {
+        ...base,
+        capperName: q.row.capperName,
+        reason: "far_future_game",
+        candidates: [
+          {
+            label: `${q.row.awayTeam} @ ${q.row.homeTeam}`,
+            league: q.row.sportName,
+            game: { away: q.row.awayTeam, home: q.row.homeTeam, startsAt: q.row.gameTime.toISOString() },
+          },
+        ],
+      };
+  }
+}
+
+function itemOutcome(p: ParsedPick, o: ImportItemOutcome): LineOutcome {
+  if (o.status === "refused") return { status: "rejected", capperName: p.capperName, reason: o.reason, ...(o.detail ? { detail: o.detail } : {}) };
+  const row = o.row;
+  return {
+    status: "accepted",
+    capperName: row.capperName,
+    league: row.sportName,
+    game: o.gameMatched ? { away: row.awayTeam, home: row.homeTeam, startsAt: row.gameTime.toISOString() } : null,
+    market: row.betType,
+    period: row.period ?? "FULL_GAME",
+    line: row.line ?? null,
+    odds: row.odds,
+    pickId: o.pickId,
+  };
+}
+
+// The key two lines must share to be "the same line" (rejectRepeatedLines): capper and text, case and spacing aside.
+const repeatKey = (p: ParsedPick) => p.capperName.trim().toLowerCase() + "\n" + p.raw.trim().replace(/\s+/g, " ").toLowerCase();
 
 export function toItem(p: ParsedPick, capperName: string, inferredLine?: number): BulkImportItem {
   return {
@@ -132,11 +225,19 @@ export async function runCatalogImportForUser(
   hooks: CatalogImportHooks = {}
 ): Promise<CatalogImportResult> {
   const hookSkippedLog: SkippedLineEntry[] = [];
+  const emit = (raw: string, outcome: LineOutcome) => hooks.onLineOutcome?.(raw, outcome);
+  const rejectEntries = (entries: SkippedLineEntry[]) => {
+    if (!hooks.onLineOutcome) return;
+    for (const e of entries) {
+      emit(e.rawText, { status: "rejected", capperName: e.capperName, reason: STAGE_REASON[e.stage] ?? "error", ...(e.reason ? { detail: e.reason } : {}) });
+    }
+  };
   let parseText = text;
   if (hooks.preFilterText) {
     const pre = hooks.preFilterText(text);
     parseText = pre.text;
     hookSkippedLog.push(...pre.skipped);
+    rejectEntries(pre.skipped);
   }
 
   const [rosterFullNames, feedTeams, roster, nameDecisions] = await Promise.all([
@@ -178,10 +279,31 @@ export async function runCatalogImportForUser(
     unresolved: unresolvedAfter.map((t) => ({ text: t, capperName: capperForUnresolved.get(t) ?? "", reason: reasons[t] })),
     recoveryRan,
   });
+  rejectEntries(parseLog);
 
   const parlaySplit = splitByCapper(parlays);
   const pickSplit = splitByCapper(effective);
+  if (hooks.onLineOutcome) {
+    for (const raw of [...pickSplit.noCapper, ...parlaySplit.noCapper]) emit(raw, { status: "rejected", capperName: "", reason: "no_capper" });
+    for (const p of parlaySplit.withCapper) emit(p.raw, { status: "rejected", capperName: p.capperName, reason: "parlay_not_supported" });
+  }
   let toResolve = pickSplit.withCapper;
+  // Reported last (below), so the first copy's outcome always comes before its repeats': for one capper and line
+  // text, outcomes arrive in the order the lines appear.
+  const repeated: ParsedPick[] = [];
+  if (hooks.rejectRepeatedLines) {
+    const seen = new Set<string>();
+    toResolve = toResolve.filter((p) => {
+      const key = repeatKey(p);
+      if (!seen.has(key)) {
+        seen.add(key);
+        return true;
+      }
+      hookSkippedLog.push({ stage: "DUPLICATE_SKIPPED", capperName: p.capperName, rawText: p.raw, guessedSport: p.sportName, reason: "The same line twice in one request" });
+      repeated.push(p);
+      return false;
+    });
+  }
   if (hooks.prepareAmbiguous) {
     // Before the hook, so a shared school is a question the hook can answer: with both
     // NCAAF and NCAAB allowed it stays a question (the hierarchy below settles it, or the
@@ -189,6 +311,7 @@ export async function runCatalogImportForUser(
     const prep = hooks.prepareAmbiguous(withCollegeCandidates(toResolve));
     toResolve = prep.keep;
     hookSkippedLog.push(...prep.skipped);
+    rejectEntries(prep.skipped);
   }
   const resolved = await autoResolveAmbiguousPicksForServer(toResolve, {}, userId);
   // A pair the user already answered is not asked again (SAME files it under the saved capper, DIFFERENT keeps
@@ -199,6 +322,11 @@ export async function runCatalogImportForUser(
   };
 
   const questions: CatalogQuestion[] = [];
+  // Every question is raised through here, so onLineOutcome hears about each one with its index.
+  const ask = (q: CatalogQuestion) => {
+    questions.push(q);
+    if (hooks.onLineOutcome) emit(q.pick.raw, reviewOutcome(q, questions.length - 1));
+  };
   let candidates: ParsedPick[] = [];
   for (const p of resolved.picks) {
     // Answered as a sport its "1P"/"2P"/"3P" can't belong to (see
@@ -206,10 +334,11 @@ export async function runCatalogImportForUser(
     if (p.unresolvedReason) {
       unresolvedAfter = [...unresolvedAfter, p.raw];
       hookSkippedLog.push({ stage: "RECOVERY_UNRESOLVED", capperName: p.capperName, rawText: p.raw, guessedSport: p.sportName, reason: p.unresolvedReason });
+      emit(p.raw, { status: "rejected", capperName: p.capperName, reason: "unparseable", detail: p.unresolvedReason });
       continue;
     }
     if (p.ambiguous && p.ambiguousKey) {
-      questions.push({
+      ask({
         type: isPlayerAmbiguityKey(p.ambiguousKey) ? "PLAYER_AMBIGUITY" : "AMBIGUOUS_TEAM",
         key: p.ambiguousKey,
         options: p.ambiguous,
@@ -223,6 +352,7 @@ export async function runCatalogImportForUser(
     const f = hooks.filterPicks(candidates);
     candidates = f.keep;
     hookSkippedLog.push(...f.skipped);
+    rejectEntries(f.skipped);
   }
 
   // Capper near-miss: the form asks "did you mean X?" for any name that is not an exact (case-insensitive)
@@ -233,7 +363,7 @@ export async function runCatalogImportForUser(
     if (remembered.suggestion && remembered.remembered === "SAME") p = { ...p, capperName: remembered.suggestion };
     const suggestion = fuzzySuggestion(p.capperName);
     if (suggestion) {
-      questions.push({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion, pick: p });
+      ask({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion, pick: p });
       continue;
     }
     afterFuzzy.push(p);
@@ -241,8 +371,8 @@ export async function runCatalogImportForUser(
 
   // Duplicate check (skip by default) and missing-total-line check (held by default).
   const dupItems = afterFuzzy.map((p) => ({ ...toItem(p, p.capperName), period: p.period }));
-  const flags = dupItems.length > 0 ? await checkDuplicatePicksForUser(userId, dupItems) : {};
-  const totalFlags = afterFuzzy.length > 0 ? await previewMissingTotalLinesCore(afterFuzzy.map((p) => toItem(p, p.capperName))) : {};
+  const flags = dupItems.length > 0 ? await checkDuplicatePicksForUser(userId, dupItems, hooks.dayRule) : {};
+  const totalFlags = afterFuzzy.length > 0 ? await previewMissingTotalLinesCore(afterFuzzy.map((p) => toItem(p, p.capperName)), hooks.dayRule) : {};
 
   const toImport: BulkImportItem[] = [];
   // Parallel to toImport: the parsed pick each item came from (a held far-future item becomes a question about it).
@@ -251,8 +381,9 @@ export async function runCatalogImportForUser(
   afterFuzzy.forEach((p, i) => {
     if (flags[i]) {
       skippedDuplicates.push({ capperName: p.capperName, sportName: p.sportName, raw: p.raw });
+      emit(p.raw, { status: "rejected", capperName: p.capperName, reason: "duplicate", detail: flags[i].message });
     } else if (totalFlags[i]) {
-      questions.push({ type: "MISSING_TOTAL_LINE", pick: p, inferredLine: totalFlags[i].inferredLine, reason: totalFlags[i].reason });
+      ask({ type: "MISSING_TOTAL_LINE", pick: p, inferredLine: totalFlags[i].inferredLine, reason: totalFlags[i].reason });
     } else {
       toImport.push(toItem(p, p.capperName));
       toImportPicks.push(p);
@@ -269,9 +400,13 @@ export async function runCatalogImportForUser(
           realTimeIngest: hooks.realTimeIngest === true,
           // Nobody is watching this import: a game days away is never saved without a person's yes.
           holdFarFuture: true,
-          onFarFutureHeld: (i, row) => questions.push({ type: "FAR_FUTURE_GAME", pick: toImportPicks[i], row }),
+          onFarFutureHeld: (i, row) => ask({ type: "FAR_FUTURE_GAME", pick: toImportPicks[i], row }),
+          dayRule: hooks.dayRule,
+          skipRecipientFanOut: hooks.skipRecipientFanOut === true,
+          onItemOutcome: hooks.onLineOutcome ? (i, o) => emit(toImportPicks[i].raw, itemOutcome(toImportPicks[i], o)) : undefined,
         })
       : null;
+  for (const p of repeated) emit(p.raw, { status: "rejected", capperName: p.capperName, reason: "duplicate_in_request" });
 
   return {
     day,

@@ -129,12 +129,21 @@ function main() {
     ["resolveGameAndOdds", "createPickRowResolver", "resolveGameFor", "lookupGame", "getLiveScoresForSport"].filter((s) => resolveBody.includes(s)),
     []
   );
-  expect("review choices are matched with the rule on (buildReviewDrafts -> createPickRowResolver({ realTimeIngest }))", review.includes("createPickRowResolver({ realTimeIngest })"), true);
+  // The bot API's day rule (PR 3 of the bot-tokens plan) rides along as an optional second argument; the rule is unchanged.
+  expect(
+    "review choices are matched with the rule on (buildReviewDrafts -> createPickRowResolver({ realTimeIngest }))",
+    /createPickRowResolver\(\{ realTimeIngest \}(, dayRule)?\)/.test(review),
+    true
+  );
 
   // ---- 6. plumbing -------------------------------------------------------------------------------------------------
+  // The Telegram body moved into the shared ingest core (ingest-batch.ts, bot-tokens PR 3): Telegram passes
+  // realTimeIngest: true to it, and the core hands that same flag to both the import and the review drafts.
   const telegram = src("telegram-ingest.ts");
-  expect("Telegram ingest: the import runs with realTimeIngest: true", /runCatalogImportForUser\([\s\S]*?realTimeIngest: true,[\s\S]*?\}\);/.test(telegram), true);
-  expect("Telegram ingest: review drafts are built with realTimeIngest: true", telegram.includes("buildReviewDrafts(result.questions, { realTimeIngest: true })"), true);
+  const batchCore = src("ingest-batch.ts");
+  expect("Telegram ingest: the shared core runs with realTimeIngest: true", /ingestBatch\([\s\S]*?realTimeIngest: true \}[\s\S]*?\);/.test(telegram), true);
+  expect("ingest core: the import runs with the caller's realTimeIngest", /runCatalogImportForUser\([\s\S]*?realTimeIngest: options\.realTimeIngest,[\s\S]*?\}\);/.test(batchCore), true);
+  expect("ingest core: review drafts are built with the caller's realTimeIngest", batchCore.includes("buildReviewDrafts(result.questions, { realTimeIngest: options.realTimeIngest"), true);
   const orchestrator = src("catalog-import-orchestrator.ts");
   expect(
     "orchestrator passes the hook through to importPicksForUser",
@@ -142,7 +151,8 @@ function main() {
     true
   );
   const core = src("bulk-import-core.ts");
-  expect("both lookups (first try and retry) carry the rule", (core.match(/lookupGame\(liveSportKey, nicknames, item\.gameNumber, getOdds, realTimeIngest\)/g) ?? []).length, 2);
+  // (, dayMatch): the bot API's day rule, an extra trailing argument (bot-tokens PR 3).
+  expect("both lookups (first try and retry) carry the rule", (core.match(/lookupGame\(liveSportKey, nicknames, item\.gameNumber, getOdds, realTimeIngest(, dayMatch)?\)/g) ?? []).length, 2);
   expect("lookupGame hands it to both resolvers", (core.match(/excludeFinal \}\)/g) ?? []).length >= 2, true);
   expect("importPicksForUser defaults it off", core.includes("{ realTimeIngest = false }: { realTimeIngest?: boolean } = {}"), true);
   expect("the skipped-line reason says why", core.includes('finishedBeforePost ? FINISHED_BEFORE_POST_REASON : "No scheduled game matched"'), true);

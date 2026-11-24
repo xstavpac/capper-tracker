@@ -19,9 +19,11 @@ import {
   isInProgressAt,
   type OddsLoader,
   type ScheduleCandidateResult,
+  type TokenDayMatch,
   LIVE_SPORTS,
   RESOLVABLE_SPORT_KEYS,
 } from "@/server/data/odds";
+import { namedPickDay, type LineRejectReason, type TokenDayRule } from "@/lib/ingest-line-outcome";
 import { resolvePropOdds, isNflOddsPropMarket } from "@/server/data/nfl-prop-odds";
 import { resolveAnytimeGoalOdds, resolveThreeWayOdds } from "@/server/data/nhl-goal-scorer-odds";
 import { findAltLinePrice } from "@/server/data/alt-line-odds";
@@ -80,8 +82,8 @@ export type BulkImportItem = {
   // doubleheader pick. Null for every pick with no such signal - resolution
   // then falls back to PR #105's existing doubleheader flag (never guesses).
   gameNumber: 1 | 2 | null;
-  // The pick's exact pasted line, for the import skipped-line log only -
-  // never used for resolution. Falls back to `description` when absent.
+  // The pick's exact pasted line, for the import skipped-line log - and, under the bot API's day rule only, for the
+  // day or date it names (resolveGameAndOdds). Falls back to `description` when absent.
   raw?: string;
   // The review screen's explicit "Import anyway" on a pick it flagged as a
   // possible duplicate. Without it the server refuses a duplicate, whatever
@@ -96,6 +98,15 @@ export type BulkImportItem = {
 // never reach the resolution loop, so the client reports them for the
 // skipped-line log alongside the picks that do.
 export type SkippedDuplicateItem = { capperName: string; sportName: string; raw: string };
+
+// What importPicksForUser's onItemOutcome reports for one item (the bot API's per-pick results).
+export type ImportItemOutcome =
+  | { status: "inserted"; pickId: string; row: DedupPickRow; gameMatched: boolean }
+  | {
+      status: "refused";
+      reason: Extract<LineRejectReason, "no_game_found" | "doubleheader_final" | "game_already_final" | "invalid_odds" | "total_without_line" | "duplicate" | "pick_limit" | "error">;
+      detail?: string;
+    };
 
 export type BulkImportResult =
   | {
@@ -144,6 +155,9 @@ export type ResolvableItem = {
   // any other period, or with no period sent at all, gets no feed price.
   period?: Period;
   inferredLine?: number;
+  // The pick's exact line. Read for matching only under the bot API's day rule (a day or date the line names, e.g.
+  // "Thu" or "11/27", which the description may have dropped); ignored everywhere else.
+  raw?: string;
 };
 
 // How long a line with no matching game waits before its one second look.
@@ -151,15 +165,17 @@ export const UNMATCHED_RETRY_DELAY_MS = 1000;
 
 // excludeFinal: real-time ingest only - a game already final when the message arrives is never matched (see
 // ResolveGameOpts.excludeFinal in odds.ts). Manual paste passes false and matches exactly as before.
+// day: the bot API's day rule (API_TOKEN batches only; see ResolveGameOpts.day). Undefined for every other caller.
 function lookupGame(
   liveSportKey: string,
   nicknames: string[],
   gameNumber: 1 | 2 | null,
   getOdds: OddsLoader,
-  excludeFinal = false
+  excludeFinal = false,
+  day?: TokenDayMatch
 ): Promise<ScheduleCandidateResult> {
-  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds, excludeFinal });
-  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds, excludeFinal });
+  if (nicknames.length >= 2) return resolveGameForTeams(liveSportKey, nicknames[0], nicknames[1], { gameNumber, getOdds, day, excludeFinal });
+  if (nicknames.length === 1) return resolveGameForNickname(liveSportKey, nicknames[0], { gameNumber, getOdds, day, excludeFinal });
   return Promise.resolve({ game: null, doubleheaderBothLegsFinal: false, finishedOnly: false });
 }
 
@@ -199,6 +215,10 @@ function lookupGame(
 // realTimeIngest: the line comes from a Telegram message imported as it arrives (telegram-ingest.ts, and the review
 // rows it resolves at the same moment). A game already final then is never matched - the line stays unmatched with
 // finishedBeforePost set. Every other caller leaves it off: a manual paste still matches a just-finished game.
+//
+// dayRule: the bot API's day rule (API_TOKEN batches only - lib/ingest-line-outcome.ts TokenDayRule). The game is the
+// team's game on the day the line names, else on the request's Eastern day (upcoming, live or final), else its next
+// game. Unset for Telegram and manual paste, which match exactly as before.
 export async function resolveGameAndOdds(
   item: ResolvableItem,
   getOdds: OddsLoader,
@@ -208,7 +228,8 @@ export async function resolveGameAndOdds(
     buyPropOdds = false,
     pricing,
     realTimeIngest = false,
-  }: { retryOnMiss?: boolean; altLines?: boolean; buyPropOdds?: boolean; pricing?: PricingOddsLoader; realTimeIngest?: boolean } = {}
+    dayRule,
+  }: { retryOnMiss?: boolean; altLines?: boolean; buyPropOdds?: boolean; pricing?: PricingOddsLoader; realTimeIngest?: boolean; dayRule?: TokenDayRule } = {}
 ): Promise<{
   homeTeam: string;
   awayTeam: string;
@@ -300,12 +321,15 @@ export async function resolveGameAndOdds(
     // otherwise hand lookupGame two nicknames that both resolve to the same
     // team, which it reads as a two-team matchup and fails.
     const nicknames = [...new Set(item.teamNicknames.map((n) => TEAM_NICKNAME_CANONICAL[n] ?? n))];
-    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest);
+    const dayMatch: TokenDayMatch | undefined = dayRule
+      ? { requestDay: dayRule.requestDay, namedDay: namedPickDay(item.raw ?? item.description, dayRule.requestDay) }
+      : undefined;
+    let lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest, dayMatch);
     // One retry before giving up - covers a transient miss/blip against the
     // live schedule source rather than treating it as a genuine non-match.
     if (!lookup.game && retryOnMiss) {
       await new Promise((resolve) => setTimeout(resolve, UNMATCHED_RETRY_DELAY_MS));
-      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest);
+      lookup = await lookupGame(liveSportKey, nicknames, item.gameNumber, getOdds, realTimeIngest, dayMatch);
     }
     const game = lookup.game;
     doubleheaderBothLegsFinal = lookup.doubleheaderBothLegsFinal;
@@ -635,7 +659,8 @@ export type MissingTotalLineResult = {
 // Deliberately never touches a TOTAL pick that already has a real, valid
 // number - extractLine returning non-null means the capper specified an
 // actual (possibly alternate) line, which must never be overridden.
-export async function previewMissingTotalLinesCore(items: ResolvableItem[]): Promise<Record<number, MissingTotalLineResult>> {
+// dayRule: the bot API's day rule (see resolveGameAndOdds), so the proposed line is the matched game's. Unset elsewhere.
+export async function previewMissingTotalLinesCore(items: ResolvableItem[], dayRule?: TokenDayRule): Promise<Record<number, MissingTotalLineResult>> {
   const getOdds = createRequestOddsLoader();
 
   const results: Record<number, MissingTotalLineResult> = {};
@@ -647,7 +672,7 @@ export async function previewMissingTotalLinesCore(items: ResolvableItem[]): Pro
       const liveSportKey = LIVE_SPORTS.find((s) => s.label.toUpperCase() === item.sportName.toUpperCase())?.key;
       if (!liveSportKey || !RESOLVABLE_SPORT_KEYS.includes(liveSportKey)) return;
 
-      const { matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds);
+      const { matched, homeTeam, awayTeam, gameTime } = await resolveGameAndOdds(item, getOdds, { dayRule });
       if (!matched) return;
 
       const point = await findMarketTotalLine(
@@ -694,7 +719,8 @@ export type { DuplicateFlag };
 //
 // Read-only, same pattern as previewBulkImportOdds: keyed by each item's
 // position in the input array so the caller can remap into `parsed` indices.
-export async function checkDuplicatePicksForUser(userId: string, items: DuplicateCheckItem[]): Promise<Record<number, DuplicateFlag>> {
+// dayRule: the bot API's day rule (see resolveGameAndOdds), so "same game" is the game the import will match. Unset elsewhere.
+export async function checkDuplicatePicksForUser(userId: string, items: DuplicateCheckItem[], dayRule?: TokenDayRule): Promise<Record<number, DuplicateFlag>> {
   const user = { id: userId };
   const getOdds = createRequestOddsLoader();
 
@@ -717,7 +743,7 @@ export async function checkDuplicatePicksForUser(userId: string, items: Duplicat
       // resolveGameAndOdds; unresolved items fall back to placeholder
       // homeTeam/awayTeam values that aren't safe to match on).
       const { homeTeam, awayTeam, gameTime, odds, oddsSource, matched, pickedSide, mlFavoredSide } =
-        await resolveGameAndOdds(item, getOdds);
+        await resolveGameAndOdds(item, getOdds, { dayRule });
       if (!matched) return null;
 
       // odds (not item.odds) - for a pick with no explicit price, item.odds
@@ -851,11 +877,27 @@ export async function importPicksForUser(
   // unless its item says confirmFarFuture - it is listed in farFutureHeld, and onFarFutureHeld gets the row it
   // would have inserted (the Telegram ingest parks that row in the review queue). The manual paste and the ingest
   // both set it; left off, every matched pick is saved as before.
+  // The three below are set only by the bot API's ingest (API_TOKEN batches); the manual paste and Telegram leave them
+  // off, so their imports run exactly as before:
+  //   dayRule: the bot API's day rule for game matching (resolveGameAndOdds).
+  //   skipRecipientFanOut: the picks are NOT copied to the user's active pick recipients.
+  //   onItemOutcome: what became of each item (by its index in `items`) - refused in the loop, or inserted / refused
+  //     by the insert. Not called for a far-future hold (onFarFutureHeld reports that one).
   {
     realTimeIngest = false,
     holdFarFuture = false,
     onFarFutureHeld,
-  }: { realTimeIngest?: boolean; holdFarFuture?: boolean; onFarFutureHeld?: (itemIndex: number, row: DedupPickRow) => void } = {}
+    dayRule,
+    skipRecipientFanOut = false,
+    onItemOutcome,
+  }: {
+    realTimeIngest?: boolean;
+    holdFarFuture?: boolean;
+    onFarFutureHeld?: (itemIndex: number, row: DedupPickRow) => void;
+    dayRule?: TokenDayRule;
+    skipRecipientFanOut?: boolean;
+    onItemOutcome?: (itemIndex: number, outcome: ImportItemOutcome) => void;
+  } = {}
 ): Promise<BulkImportResult> {
   const user = { id: userId };
   const getOdds = createRequestOddsLoader();
@@ -880,7 +922,7 @@ export async function importPicksForUser(
   type Resolution = Awaited<ReturnType<typeof resolveGameAndOdds>>;
   type Outcome = { ok: true; resolved: Resolution } | { ok: false; err: unknown };
   const resolveOne = (item: BulkImportItem, loader: OddsLoader, pricing: PricingOddsLoader): Promise<Outcome> =>
-    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, buyPropOdds: true, pricing, realTimeIngest }).then(
+    resolveGameAndOdds(item, loader, { retryOnMiss: false, altLines: true, buyPropOdds: true, pricing, realTimeIngest, dayRule }).then(
       (resolved): Outcome => ({ ok: true, resolved }),
       (err: unknown): Outcome => ({ ok: false, err })
     );
@@ -912,6 +954,8 @@ export async function importPicksForUser(
   // per-item failure than the billing gate below, which is all-or-nothing
   // across whatever DID resolve.
   const toInsert: DedupPickRow[] = [];
+  // Parallel to toInsert: the index in `items` each row came from (onItemOutcome reports by item).
+  const toInsertItem: number[] = [];
   // Parallel to toInsert: inserted with resolveGameAndOdds' placeholders
   // (no score source for its sport, so no game was looked up) - logged on
   // the import run.
@@ -968,10 +1012,12 @@ export async function importPicksForUser(
         if (doubleheaderBothLegsFinal) {
           doubleheaderBothFinal.push(item.capperName + " - " + item.description);
           logSkip(item, "DOUBLEHEADER_FINAL", "Doubleheader with every leg already final");
+          onItemOutcome?.(i, { status: "refused", reason: "doubleheader_final" });
         } else {
           unmatchedGames.push(item.capperName + " - " + item.description);
           // Real-time ingest: the team's only games were already final when the message arrived - posted after the game.
           logSkip(item, "GAME_UNMATCHED", finishedBeforePost ? FINISHED_BEFORE_POST_REASON : "No scheduled game matched");
+          onItemOutcome?.(i, { status: "refused", reason: finishedBeforePost ? "game_already_final" : "no_game_found" });
         }
         continue;
       }
@@ -984,6 +1030,7 @@ export async function importPicksForUser(
         // price lookup itself resolving to 0.
         errors.push(item.capperName + " - " + item.description + ": Odds must be a valid non-zero number.");
         logSkip(item, "INVALID_ODDS", "Odds must be a valid non-zero number (resolved " + odds + ")");
+        onItemOutcome?.(i, { status: "refused", reason: "invalid_odds" });
         continue;
       }
 
@@ -996,6 +1043,7 @@ export async function importPicksForUser(
         // principle as the unmatched-game rejection above.
         unmatchedGames.push(item.capperName + " - " + item.description);
         logSkip(item, "TOTAL_NO_LINE", "TOTAL with no number and no confirmed inferred line");
+        onItemOutcome?.(i, { status: "refused", reason: "total_without_line" });
         continue;
       }
 
@@ -1046,11 +1094,13 @@ export async function importPicksForUser(
         continue;
       }
       toInsert.push(row);
+      toInsertItem.push(i);
       if (enteredLive) enteredLiveIdx.add(toInsert.length - 1);
       fallback.push(!resolvable);
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
       errors.push(item.capperName + " - " + item.description + ": " + message);
+      onItemOutcome?.(i, { status: "refused", reason: "error", detail: message });
     }
   }
 
@@ -1080,6 +1130,7 @@ export async function importPicksForUser(
   ]);
   if (!outcome.ok) {
     console.error("[bulkImportPicksAction] duplicate check / insert failed - nothing imported", outcome.err);
+    toInsertItem.forEach((itemIndex) => onItemOutcome?.(itemIndex, { status: "refused", reason: "error", detail: "The import could not be saved" }));
     return {
       success: false,
       error: "The import could not be checked for duplicates and saved, so nothing was imported. Please try again.",
@@ -1087,11 +1138,22 @@ export async function importPicksForUser(
   }
   const result = outcome.result;
   const duplicatesSkipped = result.skippedDuplicates.map((d) => d.capperName + " - " + d.label);
+  if (onItemOutcome) {
+    if (result.allowed) {
+      result.insertedIndexes.forEach((rowIndex, k) =>
+        onItemOutcome(toInsertItem[rowIndex], { status: "inserted", pickId: result.created[k].id, row: toInsert[rowIndex], gameMatched: !fallback[rowIndex] })
+      );
+      for (const d of result.skippedDuplicates) onItemOutcome(toInsertItem[d.index], { status: "refused", reason: "duplicate", detail: d.existingLabel });
+    } else {
+      toInsertItem.forEach((itemIndex) => onItemOutcome(itemIndex, { status: "refused", reason: "pick_limit", detail: result.message }));
+    }
+  }
 
   // Imported picks also go to this user's active pick recipients (pick-recipients.ts). Best-effort and after the
-  // source's own commit: it never throws, so it cannot fail or undo this import.
+  // source's own commit: it never throws, so it cannot fail or undo this import. Not for the bot API's picks
+  // (skipRecipientFanOut).
   let recipientsFailed = 0;
-  if (result.allowed && result.created.length > 0) {
+  if (!skipRecipientFanOut && result.allowed && result.created.length > 0) {
     try {
       const delivery = await fanOutImportedPicks(
         user.id,
@@ -1181,13 +1243,14 @@ export type PickRowResolution = { ok: true; row: DedupPickRow } | { ok: false; r
 // The skipped-line / unmatched reason for a real-time ingest line whose team's only games were already final.
 export const FINISHED_BEFORE_POST_REASON = "Game already final when the message was posted";
 
-export function createPickRowResolver({ realTimeIngest = false }: { realTimeIngest?: boolean } = {}): (item: BulkImportItem) => Promise<PickRowResolution> {
+// dayRule: the bot API's day rule (API_TOKEN batches' review choices), as in importPicksForUser. Unset elsewhere.
+export function createPickRowResolver({ realTimeIngest = false }: { realTimeIngest?: boolean } = {}, dayRule?: TokenDayRule): (item: BulkImportItem) => Promise<PickRowResolution> {
   const getOdds = createRequestOddsLoader();
   const pricing = createPricingOddsLoader(getOdds);
   return async (item) => {
     try {
       if (!item.capperName.trim()) return { ok: false, reason: "Capper name is required." };
-      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, buyPropOdds: true, pricing, realTimeIngest });
+      const r = await resolveGameAndOdds(item, getOdds, { retryOnMiss: true, altLines: true, buyPropOdds: true, pricing, realTimeIngest, dayRule });
       if (r.resolvable && !r.matched) {
         return {
           ok: false,
