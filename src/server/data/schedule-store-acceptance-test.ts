@@ -10,7 +10,9 @@
 //      (postponed left out), football keeps the odds snapshot
 //   5. the wide-schedule tiebreaker and catalog import matching read the store
 //      through resolveGameForNickname; the token day rule matches a named day 2
-//      days out from it
+//      days out from it; the bot API's game_not_scheduled_yet split
+//      (leagueDaySlateStored) treats a stored day as scheduled, so that reason
+//      is left for days past the stored week
 //
 // Test rows are written under a sport key no league uses (feed health under its
 // own 2031 dates) and deleted by id afterwards.
@@ -33,7 +35,7 @@ import {
 } from "@/server/data/schedule-store";
 import { feedHealthSql, parseFeedHealthRow } from "@/server/data/feed-health";
 import { runTeamWideScheduleCheck } from "@/server/data/catalog-disambiguation-checks";
-import { resolveGameForNickname } from "@/server/data/odds";
+import { leagueDaySlateStored, resolveGameForNickname } from "@/server/data/odds";
 import { namedPickDay } from "@/lib/ingest-line-outcome";
 
 let failures = 0;
@@ -216,6 +218,7 @@ async function resolverPart() {
         new Map([
           [plus2, [{ id: "w2", home: "Las Vegas Aces", away: "Seattle Storm", start: plus2 + "T23:00:00Z", status: "preview" }]],
           [plus3, [{ id: "w3", home: "New York Liberty", away: "Chicago Sky", start: plus3 + "T23:00:00Z", status: "preview" }]],
+          [addDaysToDateKey(today, 4), []],
         ]),
         now
       )!
@@ -231,6 +234,11 @@ async function resolverPart() {
     expect("token day rule: a named day 2 days out matches its stored game", [namedDay, token.game?.id], [plus2, "w2"]);
     const wrongDay = await resolveGameForNickname(WNBA, "aces", { getOdds: async () => [], day: { requestDay, namedDay: plus3 } });
     expect("token day rule: a named day with no stored game for the team matches nothing", wrongDay.game, null);
+    // PR 4's split of no_game_found: game_not_scheduled_yet only when the day's slate isn't stored.
+    expect("slate stored: a stored day with games", await leagueDaySlateStored(WNBA, plus2, now), true);
+    expect("slate stored: a stored day with NO games is still stored (-> no_game_found)", await leagueDaySlateStored(WNBA, addDaysToDateKey(today, 4), now), true);
+    expect("slate stored: an in-window day the pull never stored, nothing in other feeds -> not stored", await leagueDaySlateStored(WNBA, addDaysToDateKey(today, 5), now), false);
+    expect("slate stored: a day past the stored week -> not stored (-> game_not_scheduled_yet)", await leagueDaySlateStored(WNBA, addDaysToDateKey(today, 9), now), false);
   } finally {
     await deleteIds((await idsFor(WNBA)).filter((id) => !before.includes(id)));
   }

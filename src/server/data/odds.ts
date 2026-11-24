@@ -15,7 +15,8 @@ import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { mlbLogoUrl, normalizeEspnLogoUrl } from "@/lib/team-logo";
 import { getBoardGamesProjection, getYesterdayBoardGames } from "@/server/data/odds-projections";
 import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
-import { getUpcomingScheduleGames } from "@/server/data/schedule-store";
+import { getStoredSchedule, getUpcomingScheduleGames } from "@/server/data/schedule-store";
+import { scheduleWindowKeys } from "@/lib/schedule-store";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
 // keep the window tight (env-overridable, clamped 1-300s).
@@ -2609,11 +2610,18 @@ async function resolveScheduleGame(
   return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames, { excludeFinal, sportKey });
 }
 
-// Whether the stored game feeds hold ANY game of this league on an Eastern calendar day (YYYY-MM-DD): the score feed,
-// then the odds listing, then (NCAAF) the FCS schedule - the same cached feeds the matcher reads, no new source. The
-// bot API asks only for a line that named a future day and matched no game: no game of the league stored on that day
-// means that day's slate isn't stored yet (game_not_scheduled_yet), not that the team has no game (no_game_found).
-export async function leagueHasGamesOnDay(sportKey: string, dayKey: string): Promise<boolean> {
+// Whether this league's slate for an Eastern calendar day (YYYY-MM-DD) is stored. The bot API asks only for a line
+// that named a future day and matched no game: a stored slate means the team has no game that day (no_game_found);
+// no stored slate means that day isn't scheduled with us yet (game_not_scheduled_yet: resend closer to game day).
+//   1. The 7-day schedule store (today..today+6 ET) holds a row for the day - even an empty one: the slate is known.
+//      So game_not_scheduled_yet applies only past the stored week, or to a day whose pull never landed.
+//   2. Otherwise any game of the league on that day in the score feed, the odds listing, then (NCAAF) the FCS
+//      schedule - the same cached feeds the matcher reads.
+export async function leagueDaySlateStored(sportKey: string, dayKey: string, now: Date = new Date()): Promise<boolean> {
+  if (scheduleWindowKeys(now).includes(dayKey)) {
+    const rows = await fetchFeedOrEmpty("stored schedule", () => getStoredSchedule(sportKey, now));
+    if (rows.some((r) => r.gameDate === dayKey)) return true;
+  }
   const onDay = (g: { commenceTime: string }) => easternDateKey(new Date(g.commenceTime)) === dayKey;
   if ((await fetchFeedOrEmpty("score", () => getLiveScoresForSport(sportKey))).some(onDay)) return true;
   if ((await fetchFeedOrEmpty("odds", () => getOddsForSport(sportKey))).some(onDay)) return true;

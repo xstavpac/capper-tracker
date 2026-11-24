@@ -67,7 +67,7 @@ const oddsFor = (sportKey: string): OddsGame[] =>
   BOARD.filter((b) => b.sportKey === sportKey && b.status === "odds").map(
     (b) => ({ id: PREFIX + b.id, sportKey, homeTeam: b.home, awayTeam: b.away, commenceTime: b.commenceTime, bookmakers: [] }) as unknown as OddsGame
   );
-// What leagueHasGamesOnDay answers over this board (the endpoint's split of no_game_found).
+// What leagueDaySlateStored answers over this board (the endpoint's split of no_game_found).
 const boardHasGamesOnDay = async (sportKey: string, day: string) => BOARD.some((b) => b.sportKey === sportKey && easternDateKey(new Date(b.commenceTime)) === day);
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -84,7 +84,7 @@ stub("./odds", {
   resolveGameForNickname: async (sportKey: string, nick: string, opts?: Opts) => match(sportKey, ends(sportKey, nick), opts),
   resolveGameForTeams: async (sportKey: string, a: string, b: string, opts?: Opts) =>
     match(sportKey, (g) => ends(sportKey, a)(g) && ends(sportKey, b)(g), opts),
-  leagueHasGamesOnDay: boardHasGamesOnDay,
+  leagueDaySlateStored: boardHasGamesOnDay,
   findFavoredSide: async () => null,
   findMarketPrice: async () => null,
   findMarketPricePoint: async () => null,
