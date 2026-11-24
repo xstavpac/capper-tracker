@@ -27,6 +27,7 @@ import { TraceCollector, standardScoringVersion } from "@/lib/parlay/run-trace";
 import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { normalizeFavoritesOnly } from "@/lib/parlay/favorites-only";
+import { normalizeIncludeLive } from "@/lib/parlay/include-live";
 import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import {
@@ -101,6 +102,8 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
       minWinPct: normalizeMinWinPct(s.minWinPct),
       // The Favorites only star: only a literal true turns it on; absent is off.
       ...(normalizeFavoritesOnly(s.favoritesOnly) ? { favoritesOnly: true } : {}),
+      // "Include live games": only a literal false turns it off; absent is on.
+      ...(normalizeIncludeLive(s.includeLive) ? {} : { includeLive: false }),
     },
   };
 }

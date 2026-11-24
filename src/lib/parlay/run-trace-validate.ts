@@ -98,7 +98,9 @@ function cleanSwapLeg(v: unknown): SwapLegTrace | null {
   const exC = n(ex.SAME_GAME_CONFLICT);
   // Present only for a run with the Favorites only star on.
   const exFav = ex.FILTER_FAVORITES === undefined ? undefined : n(ex.FILTER_FAVORITES);
-  if ([gamePicks, paired, noRecord, belowGate, qualified, exF, exS, exP, exC, exFav].some((x) => x === null)) return null;
+  // Present only when "Include live games" off removed something.
+  const exLive = ex.FILTER_LIVE === undefined ? undefined : n(ex.FILTER_LIVE);
+  if ([gamePicks, paired, noRecord, belowGate, qualified, exF, exS, exP, exC, exFav, exLive].some((x) => x === null)) return null;
   const classifier: Record<string, number> = {};
   for (const [k, c] of Object.entries(v.classifier).slice(0, 16)) {
     const cc = n(c);
@@ -111,7 +113,7 @@ function cleanSwapLeg(v: unknown): SwapLegTrace | null {
     result: result as SwapLegTrace["result"],
     ...(rule ? { rule } : {}),
     gamePicks: gamePicks!,
-    excluded: { FILTER_BET_TYPE: exF!, ...(exFav !== undefined ? { FILTER_FAVORITES: exFav! } : {}), IN_SLIP: exS!, ALREADY_IN_PARLAY: exP!, SAME_GAME_CONFLICT: exC! },
+    excluded: { FILTER_BET_TYPE: exF!, ...(exFav !== undefined ? { FILTER_FAVORITES: exFav! } : {}), ...(exLive !== undefined ? { FILTER_LIVE: exLive! } : {}), IN_SLIP: exS!, ALREADY_IN_PARLAY: exP!, SAME_GAME_CONFLICT: exC! },
     classifier,
     paired: paired!,
     noRecord: noRecord!,
