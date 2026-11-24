@@ -171,11 +171,14 @@ async function main() {
   expect("no sportKey: 0-0 row still matches (old behavior kept for callers that don't pass one)", matchGameResult([phantomG5], originalSlot)?.game.id, "849817");
   expect("NFL: 0-0 is still a possible final", matchGameResult([phantomG5], originalSlot, "americanfootball_nfl")?.game.id, "849817");
 
-  // Fuzzy path: nickname-only teams. A reversed-orientation game 1h away must
-  // lose to the same-orientation one 2h away.
+  // Fuzzy path: the same teams spelled differently (not the exact strings). A reversed-orientation game 1h away
+  // must lose to the same-orientation one 2h away.
   const sameWay = gr("same", "2026-10-18T19:00:00Z", CLE, TB, 1, 3);
   const flipped = gr("flipped", "2026-10-18T22:00:00Z", TB, CLE, 3, 1);
-  const fuzzyPick = pick("2026-10-18T21:00:00Z", "Guardians", "Rays");
+  const fuzzyPick = pick("2026-10-18T21:00:00Z", CLE.toLowerCase(), TB.toLowerCase());
+  // Nickname-only teams ("Guardians" / "Rays") are no longer enough to decide a game: PENDING, never a guess
+  // (grading-no-wrong-game-acceptance-test.ts).
+  expect("fuzzy: nickname-only teams match nothing", matchGameResult([sameWay, flipped], pick("2026-10-18T21:00:00Z", "Guardians", "Rays"), MLB), null);
   expect("fuzzy: same orientation wins over a closer reversed game", matchGameResult([sameWay, flipped], fuzzyPick, MLB)?.game.id, "same");
   expect("fuzzy: reversed is the fallback inside 6h", matchGameResult([flipped], fuzzyPick, MLB)?.game.id, "flipped");
   expect(

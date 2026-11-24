@@ -907,27 +907,52 @@ export function matchGameResult<
   // that same team played on an adjacent day, against a different opponent, and
   // silently graded against that instead). Requiring both sides keeps the fallback
   // scoped to "this exact matchup, just spelled differently" the way it was intended.
+  //
+  // The nickname test only NARROWS: it never decides. A row is this pick's game only when BOTH of the pick's teams
+  // are the row's two teams by full identity (teamNamesMatch, sport-scoped: aliases, "St"/"State", accents), in
+  // either orientation. Nicknames alone let a pick whose own final wasn't stored yet grade off another game whose
+  // mascots collide - prod 2026-11: "LSU Tigers / Louisiana Tech Bulldogs" graded off "Mississippi State Bulldogs /
+  // Jackson State Tigers" (both nicknames in the text). With no such row the pick stays PENDING, which is also
+  // what keeps the pick-gated sports (NCAAB) persisting the real final on the next run (finalsWithPicks).
   const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
   const fuzzy = withinDrift(
     byGameNumber(
       inWindow.filter(
-        (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam))
+        (c) =>
+          searchText.includes(teamNickname(c.homeTeam)) &&
+          searchText.includes(teamNickname(c.awayTeam)) &&
+          teamOrientation(pick, c, sportKey) !== null
       )
     ),
     pick.gameTime
   );
   if (fuzzy.length === 0) return null;
-  // The text search above can't tell home from away, so a series game with
-  // the sides flipped can land in the same 6h window. Prefer a candidate
-  // whose home/away nicknames sit on the pick's own home/away fields; a
-  // reversed one is only a fallback, and only inside that same window.
-  const pickHome = pick.homeTeam.toLowerCase();
-  const pickAway = pick.awayTeam.toLowerCase();
-  const sameOrientation = fuzzy.filter(
-    (c) => pickHome.includes(teamNickname(c.homeTeam)) && pickAway.includes(teamNickname(c.awayTeam))
-  );
+  // A series game with the sides flipped can land in the same 6h window: prefer the row listing the pick's teams in
+  // the pick's own orientation; a reversed one is only a fallback, inside that same window.
+  const sameOrientation = fuzzy.filter((c) => teamOrientation(pick, c, sportKey) === "same");
   return { game: closestByDate(sameOrientation.length > 0 ? sameOrientation : fuzzy, pick.gameTime), matchType: "fuzzy" };
 }
+
+// Why a pick with no matched game is still PENDING, when a row in its window shares both nicknames but not both teams
+// (another game whose mascots collide): the pending-picks page says so instead of "no matching game found".
+export function nicknameOnlyCandidate<T extends { gameDate: Date; homeTeam: string; awayTeam: string }>(
+  candidates: T[],
+  pick: { gameTime: Date; homeTeam: string; awayTeam: string; betDetail: string | null },
+  sportKey: string | undefined
+): T | null {
+  const searchText = ((pick.betDetail ?? "") + " " + pick.homeTeam + " " + pick.awayTeam).toLowerCase();
+  const near = withinDrift(inPickWindow(candidates, pick.gameTime), pick.gameTime).filter(
+    (c) => searchText.includes(teamNickname(c.homeTeam)) && searchText.includes(teamNickname(c.awayTeam)) && teamOrientation(pick, c, sportKey) === null
+  );
+  return near.length > 0 ? closestByDate(near, pick.gameTime) : null;
+}
+
+export const NICKNAME_ONLY_REASON = (row: { homeTeam: string; awayTeam: string }) =>
+  "no final stored for this game yet - the only nearby final with the same nicknames is a different game (" +
+  row.awayTeam +
+  " @ " +
+  row.homeTeam +
+  "), which is never used to grade it";
 
 export async function findMatchingGameResult(
   sportKey: string,
@@ -948,6 +973,20 @@ export async function findMatchingGameResult(
   if (candidates.length === 0) return null;
 
   return matchGameResult(candidates, pick, sportKey);
+}
+
+// The pending-picks page's reason for a pick findMatchingGameResult found nothing for: names the colliding other
+// game when that is why (NICKNAME_ONLY_REASON), else null. Three small columns over the same +-2-day window.
+export async function nicknameOnlyNoMatchReason(
+  sportKey: string,
+  pick: { gameTime: Date; homeTeam: string; awayTeam: string; betDetail: string | null }
+): Promise<string | null> {
+  const rows = await prisma.gameResult.findMany({
+    where: { sportKey, gameDate: { gte: new Date(pick.gameTime.getTime() - 2 * 86400000), lt: new Date(pick.gameTime.getTime() + 2 * 86400000) } },
+    select: { homeTeam: true, awayTeam: true, gameDate: true },
+  });
+  const other = nicknameOnlyCandidate(rows, pick, sportKey);
+  return other ? NICKNAME_ONLY_REASON(other) : null;
 }
 
 type SegmentScore = { home: number; away: number };

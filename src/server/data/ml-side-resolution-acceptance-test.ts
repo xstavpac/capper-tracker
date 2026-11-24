@@ -68,7 +68,10 @@ check("a stored pickedSide is used (and not reported as newly stored)", summary(
 check("no GameResult in the window", summary(resolveMlSides(pick(), [], KEY)), { reason: "NO_GAME_RESULT" });
 check("a game two days away is not this game", summary(resolveMlSides(pick(), [game({ gameDate: hoursLater(48) })], KEY)), { reason: "NO_GAME_RESULT" });
 check("a 0-0 MLB row is a game never played, not a match", summary(resolveMlSides(pick(), [game({ homeScore: 0, awayScore: 0 })], KEY)), { reason: "NO_GAME_RESULT" });
-check("a fuzzy (nickname-only) match is not used", summary(resolveMlSides(pick({ homeTeam: "Phillies", awayTeam: "D-backs" }), [game()], KEY)), { reason: "FUZZY_MATCH_ONLY" });
+// Nickname-only teams no longer match a game at all (#525: a fuzzy candidate needs both teams by full identity).
+check("a nickname-only pick matches no game", summary(resolveMlSides(pick({ homeTeam: "Phillies", awayTeam: "D-backs" }), [game()], KEY)), { reason: "NO_GAME_RESULT" });
+// The same teams spelled differently match fuzzily - and a fuzzy match is still not used here.
+check("a fuzzy (same teams, not the exact strings) match is not used", summary(resolveMlSides(pick({ homeTeam: HOME.toLowerCase(), awayTeam: AWAY.toLowerCase() }), [game()], KEY)), { reason: "FUZZY_MATCH_ONLY" });
 check("the ledger row has no favorite", summary(resolveMlSides(pick(), [game({ favTeam: null })], KEY)), { reason: "NO_FAVORITE" });
 check("a favorite that is neither team", summary(resolveMlSides(pick(), [game({ favTeam: "Somebody Else" })], KEY)), { reason: "NO_FAVORITE" });
 check("text naming neither team", summary(resolveMlSides(pick({ betDetail: "ML" }), [game()], KEY)), { reason: "NO_PICK_SIDE" });
