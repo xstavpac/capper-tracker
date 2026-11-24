@@ -7,8 +7,8 @@
 // definition of "this week".
 //
 // A game that has kicked off stays in the window while it is within its sport's
-// progress cutoff (game-progress.ts poolEligible: through Q3 / 1H / P2 / the 6th
-// inning); past it, or with no progress known, it is out. A started game is never
+// progress cutoff (game-progress.ts poolEligible: until Q3 / 1H / P2 has ended, the 6th
+// inning, and its backstop); past it, or with no progress known, it is out. A started game is never
 // out for its date alone (one that tipped off last night and is still early is
 // on today's board).
 //

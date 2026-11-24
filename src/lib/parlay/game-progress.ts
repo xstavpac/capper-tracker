@@ -2,16 +2,26 @@
 // build from it. A game that has kicked off is not dropped from the pool: it
 // stays eligible until it passes its sport's progress cutoff.
 //
-//   NBA, WNBA, NFL, NCAAF  through the end of Q3   (period <= 3)
-//   NCAAB                  through the end of 1H   (period <= 1)
-//   NHL                    through the end of P2   (period <= 2)
+//   NBA, WNBA, NFL, NCAAF  until Q3 has ended  (Q1-Q3 in play; "End Q3", Q4 and OT out)
+//   NCAAB                  until 1H has ended  (1H in play; halftime, 2H and OT out)
+//   NHL                    until P2 has ended  (P1-P2 in play; 2nd intermission, P3, OT and shootout out)
 //   MLB                    through the 6th inning  (inning <= 6; "End 6th" is in, "Top 7th" is out)
+//
+// A period-based cutoff period has ended when the feed's clock for it reads 0
+// ("0:00" / "0.0": ESPN's end-of-period, intermission and halftime state), so
+// the break after it is out, not in.
+//
+// Backstop: whatever the feed says, a started game is out once its scheduled
+// start is further back than its sport's backstopMin (a little past when the
+// cutoff is normally reached). A stale or stuck feed read - a game still
+// "preview" (delayed start) or still "live P1" hours after it began - cannot
+// keep it in the pool indefinitely.
 //
 // A started game with no usable progress (no feed row, feed live with no
 // period/inning, a league with no cutoff) is NOT eligible. Final, postponed and
 // cancelled go by game-over.ts and are never eligible. A game the feed still
 // calls "preview" after its scheduled start (delayed start / warmup) has not
-// progressed at all, so it stays eligible.
+// progressed at all, so it stays eligible - until the backstop.
 //
 // The price shown for a started game is still the pregame snapshot price.
 // startedPriceLabel says what that price is: an estimate while the score is
@@ -40,17 +50,35 @@ export type GameLiveState = {
 
 export type LiveClock = GameClock & { leagueName: string; liveState?: GameLiveState | null };
 
-type Cutoff = { unit: "period" | "inning"; max: number };
+// backstopMin: minutes after the SCHEDULED start past which a started game is
+// out whatever the feed says. Each is a little later than the cutoff is
+// normally reached (the scheduled-to-actual start delay included), so a fresh
+// feed still decides an ordinary game; a long one may drop a few minutes early.
+//   NBA   Q3 ends ~115 min in -> 125     WNBA  ~100 -> 110
+//   NFL   Q3 ends ~155 min in -> 165     NCAAF ~170 -> 180
+//   NCAAB 1H ends ~50-55 in   ->  65     NHL   P2 ends ~100 -> 110
+//   MLB   6th ends ~115 in    -> 130
+type Cutoff = { unit: "period" | "inning"; max: number; backstopMin: number };
 
 export const PROGRESS_CUTOFFS: Record<string, Cutoff> = {
-  NBA: { unit: "period", max: 3 },
-  WNBA: { unit: "period", max: 3 },
-  NFL: { unit: "period", max: 3 },
-  NCAAF: { unit: "period", max: 3 },
-  NCAAB: { unit: "period", max: 1 },
-  NHL: { unit: "period", max: 2 },
-  MLB: { unit: "inning", max: 6 },
+  NBA: { unit: "period", max: 3, backstopMin: 125 },
+  WNBA: { unit: "period", max: 3, backstopMin: 110 },
+  NFL: { unit: "period", max: 3, backstopMin: 165 },
+  NCAAF: { unit: "period", max: 3, backstopMin: 180 },
+  NCAAB: { unit: "period", max: 1, backstopMin: 65 },
+  NHL: { unit: "period", max: 2, backstopMin: 110 },
+  MLB: { unit: "inning", max: 6, backstopMin: 130 },
 };
+
+// A league with no cutoff: only a delayed start ("preview") can be eligible, and only this long.
+export const DEFAULT_BACKSTOP_MIN = 60;
+
+// Kicked off more than the league's backstop ago. An unparseable start counts as past it.
+export function pastBackstop(leagueName: string, gameTime: string, now: Date): boolean {
+  const start = new Date(gameTime).getTime();
+  const minutes = PROGRESS_CUTOFFS[leagueName]?.backstopMin ?? DEFAULT_BACKSTOP_MIN;
+  return !Number.isFinite(start) || now.getTime() - start > minutes * 60_000;
+}
 
 // "5th" -> 5. Null for anything without a leading number.
 export function inningNumber(ordinal: string | null | undefined): number | null {
@@ -59,19 +87,24 @@ export function inningNumber(ordinal: string | null | undefined): number | null 
 }
 
 // Within the league's cutoff, judged on progress alone. Unknown progress, or a
-// league with no cutoff, is outside.
+// league with no cutoff, is outside. For a period cutoff, the cutoff period
+// itself is in only while its clock runs: at 0 it has ended (end of period /
+// intermission / halftime), which is out.
 export function withinProgressCutoff(leagueName: string, state: GameLiveState | null | undefined): boolean {
   const cutoff = PROGRESS_CUTOFFS[leagueName];
   if (!cutoff || !state) return false;
   const at = cutoff.unit === "period" ? state.period : state.inning;
-  return typeof at === "number" && Number.isFinite(at) && at >= 1 && at <= cutoff.max;
+  if (typeof at !== "number" || !Number.isFinite(at) || at < 1 || at > cutoff.max) return false;
+  return !(cutoff.unit === "period" && at === cutoff.max && periodEnded(state.clock));
 }
 
 // May the generator build from this game right now? Not started: yes. Over: no.
-// Started: a delayed start ("preview") yes; live within the cutoff yes; anything else no.
+// Started: past the league's backstop no, whatever the feed says; otherwise a
+// delayed start ("preview") yes; live within the cutoff yes; anything else no.
 export function poolEligible(game: LiveClock, now: Date): boolean {
   if (isGameOver(game, now)) return false;
   if (!hasKickedOff(game.gameTime, now)) return true;
+  if (pastBackstop(game.leagueName, game.gameTime, now)) return false;
   if (game.gameStatus === "preview") return true;
   if (game.gameStatus !== "live") return false;
   return withinProgressCutoff(game.leagueName, game.liveState);
@@ -90,6 +123,11 @@ export function isStarted(game: GameClock, now: Date): boolean {
 }
 
 const END_OF_PERIOD = /^0(?::00|\.0+)?$/;
+
+// The feed's clock for the current period has run out: "0:00", "0.0", "0".
+function periodEnded(clock: string | null): boolean {
+  return clock !== null && END_OF_PERIOD.test(clock.trim());
+}
 const QUARTER_LEAGUES = new Set(["NBA", "WNBA", "NFL", "NCAAF"]);
 
 function overtime(n: number): string {

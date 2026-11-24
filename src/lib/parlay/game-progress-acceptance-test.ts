@@ -43,10 +43,42 @@ const live = (leagueName: string, s: Partial<GameLiveState>, gameStatus: GameFee
 // ---- 1. cutoffs, per sport ----
 for (const league of ["NBA", "WNBA", "NFL", "NCAAF"]) {
   check(league + ": Q1-Q3 in, Q4 and OT out", [1, 2, 3, 4, 5].map((period) => poolEligible(live(league, { period, clock: "5:00" }), NOW)), [true, true, true, false, false]);
-  check(league + ": end of Q3 (0:00) still in", poolEligible(live(league, { period: 3, clock: "0:00" }), NOW), true);
+  check(league + ": end of Q3 (0:00 / 0.0) out - Q3 has ended", [poolEligible(live(league, { period: 3, clock: "0:00" }), NOW), poolEligible(live(league, { period: 3, clock: "0.0" }), NOW)], [false, false]);
+  check(league + ": Q3 in progress (0:01 left) in; halftime (end of Q2) in", [poolEligible(live(league, { period: 3, clock: "0:01" }), NOW), poolEligible(live(league, { period: 2, clock: "0.0" }), NOW)], [true, true]);
 }
-check("NCAAB: 1st half in (incl. halftime), 2nd half out", [poolEligible(live("NCAAB", { period: 1, clock: "8:40" }), NOW), poolEligible(live("NCAAB", { period: 1, clock: "0.0" }), NOW), poolEligible(live("NCAAB", { period: 2, clock: "19:50" }), NOW)], [true, true, false]);
+check("NCAAB: 1st half in, halftime out, 2nd half and OT out", [poolEligible(live("NCAAB", { period: 1, clock: "8:40" }), NOW), poolEligible(live("NCAAB", { period: 1, clock: "0.0" }), NOW), poolEligible(live("NCAAB", { period: 2, clock: "19:50" }), NOW), poolEligible(live("NCAAB", { period: 3, clock: "4:00" }), NOW)], [true, false, false, false]);
 check("NHL: P1-P2 in, P3 and OT out", [1, 2, 3, 4].map((period) => poolEligible(live("NHL", { period }), NOW)), [true, true, false, false]);
+check("NHL: 2nd period in progress in", poolEligible(live("NHL", { period: 2, clock: "5:01" }), NOW), true);
+check("NHL: 2nd intermission (P2, 0:00) out", [poolEligible(live("NHL", { period: 2, clock: "0:00" }), NOW), poolEligible(live("NHL", { period: 2, clock: "0.0" }), NOW)], [false, false]);
+check("NHL: 1st intermission (P1, 0:00) in", poolEligible(live("NHL", { period: 1, clock: "0:00" }), NOW), true);
+check("NHL: 3rd period, OT, shootout out", [poolEligible(live("NHL", { period: 3, clock: "15:00" }), NOW), poolEligible(live("NHL", { period: 4, clock: "3:00" }), NOW), poolEligible(live("NHL", { period: 5, clock: "0:00" }), NOW)], [false, false, false]);
+
+// ---- backstop: time since the scheduled start, whatever the feed says ----
+{
+  const at = (minutes: number) => new Date(new Date(STARTED).getTime() + minutes * 60_000);
+  const nhlP1 = live("NHL", { period: 1, clock: "12:00" });
+  check("NHL backstop: stale 'live P1' in at 110 min, out at 111", [poolEligible(nhlP1, at(110)), poolEligible(nhlP1, at(111))], [true, false]);
+  check("NHL backstop: the 2026-11-24 case - stale P1/P2 read 159 min after puck drop is out", [poolEligible(nhlP1, at(159)), poolEligible(live("NHL", { period: 2, clock: "8:00" }), at(159))], [false, false]);
+  const stalePreview = { gameTime: STARTED, leagueName: "NHL", gameStatus: "preview" as const };
+  check("NHL backstop: stale 'preview' (delayed start) in at 60 min, out at 111", [poolEligible(stalePreview, at(60)), poolEligible(stalePreview, at(111))], [true, false]);
+  check("NHL backstop: no feed status at all, past the backstop: out", poolEligible({ gameTime: STARTED, leagueName: "NHL", gameStatus: null }, at(200)), false);
+  const backstops: [string, number, GameLiveState["period"]][] = [["NBA", 125, 2], ["WNBA", 110, 2], ["NFL", 165, 2], ["NCAAF", 180, 2], ["NCAAB", 65, 1]];
+  for (const [league, minutes, period] of backstops) {
+    const g = live(league, { period, clock: "5:00" });
+    check(league + " backstop: within-cutoff read in at " + minutes + " min, out after", [poolEligible(g, at(minutes)), poolEligible(g, at(minutes + 1))], [true, false]);
+    const p = { gameTime: STARTED, leagueName: league, gameStatus: "preview" as const };
+    check(league + " backstop: stale 'preview' out after " + minutes + " min", poolEligible(p, at(minutes + 1)), false);
+  }
+  const mlb = live("MLB", { inningHalf: "Top", inning: 3 });
+  check("MLB backstop: in at 130 min, out after", [poolEligible(mlb, at(130)), poolEligible(mlb, at(131))], [true, false]);
+  check("no-cutoff league: delayed start out after 60 min", [poolEligible({ gameTime: STARTED, leagueName: "CFL", gameStatus: "preview" }, at(60)), poolEligible({ gameTime: STARTED, leagueName: "CFL", gameStatus: "preview" }, at(61))], [true, false]);
+  check("backstop never touches a game that has not started", poolEligible({ gameTime: "2099-06-03T00:00:00.000Z", leagueName: "NHL", gameStatus: "preview" }, at(500)), true);
+  const win = autoGenerateWindow("NHL", [STARTED], at(159));
+  check("window: NHL stale P1 at 159 min out", win(STARTED, { gameStatus: "live", liveState: state({ period: 1, clock: "10:00" }) }), false);
+  const nhlGame = { gameId: "N1", gameLabel: "Kings @ Canadiens", gameTime: STARTED, gameStatus: "live" as const, liveState: state({ period: 1, clock: "10:00" }), leagueName: "NHL", picks: [] };
+  check("stale? yes: an NHL game past its backstop drops on the reload check", snapshotIsStale({ builtAt: at(159).toISOString(), games: [nhlGame], slipPicks: [], targets: [] }, at(159)), true);
+  check("stale? no: a target's game stays past the backstop (exempt, as before)", snapshotIsStale({ builtAt: at(159).toISOString(), games: [nhlGame], slipPicks: [], targets: ["N1"] }, at(159)), false);
+}
 check(
   "MLB: through the 6th in (End 6th in), Top 7th out",
   [
