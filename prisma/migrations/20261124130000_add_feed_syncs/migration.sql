@@ -12,3 +12,7 @@ CREATE TABLE "feed_syncs" (
 
     CONSTRAINT "feed_syncs_pkey" PRIMARY KEY ("feed","sportKey")
 );
+
+-- RLS on, no policies (project convention, rls-guard-acceptance-test.ts): the app
+-- connects as the owning role; PostgREST anon/authenticated get nothing.
+ALTER TABLE "feed_syncs" ENABLE ROW LEVEL SECURITY;
