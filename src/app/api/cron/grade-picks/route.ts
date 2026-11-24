@@ -1,7 +1,8 @@
 import { revalidateTag } from "next/cache";
 import { persistFinalScores, gradeAllPendingPicks, regradeAllFuzzyMatchedPicks, type GameResultChange } from "@/server/data/grading";
 import { gradeAllPendingLegs, regradeAllFuzzyMatchedLegs } from "@/server/data/parlay-grading";
-import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS } from "@/server/data/odds";
+import { RESOLVABLE_SPORT_KEYS, LIVE_SPORTS, scoreFeedFetches } from "@/server/data/odds";
+import { trackScoreSync, withFeedSyncs } from "@/server/data/feed-syncs";
 import { cacheKeys } from "@/lib/cache-keys";
 import { runCronLogged } from "@/server/data/cron-runs";
 
@@ -57,7 +58,9 @@ export async function GET(req: Request) {
 async function run(): Promise<Response> {
   const runStart = Date.now();
 
-  const results = await Promise.all(
+  // Each league's score pull is recorded in feed_syncs (one statement after
+  // the batch) for the ops console's Feed health tab.
+  const results = await withFeedSyncs("scores", (scoreSyncs) => Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       const sportName = LIVE_SPORTS.find((s) => s.key === sportKey)?.label;
       if (!sportName) return { sport: sportKey, skipped: true, changedUserIds: new Set<string>(), timing: null };
@@ -65,7 +68,9 @@ async function run(): Promise<Response> {
       // Every start-time / team change persistFinalScores makes to an existing
       // row, old -> new, so it lands in this run's cron_runs summary.
       const gameResultChanges: GameResultChange[] = [];
-      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey, gameResultChanges));
+      const [persisted, persistMs] = await timed(() =>
+        trackScoreSync(sportKey, scoreSyncs, scoreFeedFetches(sportKey), () => persistFinalScores(sportKey, gameResultChanges))
+      );
       const [grading, gradeMs] = await timed(() => gradeAllPendingPicks(sportKey, sportName));
       const [regrading, regradeMs] = await timed(() => regradeAllFuzzyMatchedPicks(sportKey, sportName));
       const [legGrading, legGradeMs] = await timed(() => gradeAllPendingLegs(sportKey, sportName));
@@ -93,7 +98,7 @@ async function run(): Promise<Response> {
         },
       };
     })
-  );
+  ));
 
   // Only the users whose pick status actually changed this run get their
   // Dashboard cache busted - never a global flush. Leg grading is

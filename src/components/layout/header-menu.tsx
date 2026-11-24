@@ -93,6 +93,8 @@ type HeaderMenuProps = {
   id: string;
   user: HeaderUser;
   showAdminOps: boolean;
+  // Leagues in Feed health's ⚠ Check feed - the count badge on Admin.
+  adminAlertCount?: number;
   slipSize: number;
   onNavigate: () => void;
 };
@@ -100,7 +102,7 @@ type HeaderMenuProps = {
 // The hamburger's dropdown. Opening, closing (outside click, Esc, route
 // change) and placement are SiteHeader's; this is the card's content.
 export const HeaderMenu = forwardRef<HTMLDivElement, HeaderMenuProps>(function HeaderMenu(
-  { id, user, showAdminOps, slipSize, onNavigate },
+  { id, user, showAdminOps, adminAlertCount = 0, slipSize, onNavigate },
   ref
 ) {
   const pathname = usePathname();
@@ -169,6 +171,15 @@ export const HeaderMenu = forwardRef<HTMLDivElement, HeaderMenuProps>(function H
         <Link href="/admin" onClick={onNavigate} className={linkRow("/admin")}>
           <AdminIcon className={ICON} />
           <span className="flex-1">Admin</span>
+          {adminAlertCount > 0 && (
+            <span
+              title={`${adminAlertCount} ${adminAlertCount === 1 ? "league" : "leagues"} to check in Feed health`}
+              className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#FFE3CC] px-1.5 text-[11px] font-semibold text-[#C2410C] dark:bg-orange-500/15 dark:text-orange-400"
+            >
+              {adminAlertCount}
+              <span className="sr-only"> {adminAlertCount === 1 ? "league" : "leagues"} to check in Feed health</span>
+            </span>
+          )}
         </Link>
       )}
 

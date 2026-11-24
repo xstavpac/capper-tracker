@@ -1629,6 +1629,21 @@ export const RESOLVABLE_SPORT_KEYS = [
   "icehockey_nhl",
 ];
 
+// The score sources dispatchLiveScoresForSport below gates by season: off
+// season it returns [] without fetching anything. Feed health's sync record
+// (feed-syncs.ts) counts only runs that actually fetched, so it asks this.
+// Keep in step with the isSportInSeason gates below.
+const SEASON_GATED_SCORE_SPORT_KEYS: ReadonlySet<string> = new Set([
+  "americanfootball_nfl",
+  "americanfootball_ncaaf",
+  "basketball_ncaab",
+  "icehockey_nhl",
+  "americanfootball_cfl",
+]);
+export function scoreFeedFetches(sportKey: string, now: Date = new Date()): boolean {
+  return !SEASON_GATED_SCORE_SPORT_KEYS.has(sportKey) || isSportInSeason(sportKey, now);
+}
+
 // Dispatches to the right free score source for a sport. Add a case here
 // (and a getXLiveScores() above) when wiring up a new sport.
 async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]> {

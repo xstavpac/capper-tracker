@@ -4,6 +4,7 @@ export const ADMIN_TABS = [
   { key: "db-monitor", href: "/admin/db-monitor", label: "DB Monitor" },
   { key: "crons", href: "/admin/crons", label: "Crons" },
   { key: "odds-api", href: "/admin/odds-api", label: "Odds API" },
+  { key: "feed-health", href: "/admin/feed-health", label: "Feed health" },
   { key: "grading", href: "/admin/grading", label: "Grading" },
   { key: "bug-reports", href: "/admin/bug-reports", label: "Bug reports" },
   { key: "generator", href: "/admin/generator", label: "Generator" },

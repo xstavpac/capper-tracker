@@ -1,5 +1,6 @@
 import { persistFinalScores, type GameResultChange } from "@/server/data/grading";
-import { RESOLVABLE_SPORT_KEYS } from "@/server/data/odds";
+import { RESOLVABLE_SPORT_KEYS, scoreFeedFetches } from "@/server/data/odds";
+import { trackScoreSync, withFeedSyncs } from "@/server/data/feed-syncs";
 import { recomputeTeamTendencies, snapshotTeamTendencies } from "@/server/data/team-tendencies";
 import {
   captureTeamStatSnapshots,
@@ -68,12 +69,16 @@ async function run(): Promise<Response> {
   const pipelineEnabled = isTendencyPipelineEnabled();
   if (!pipelineEnabled) console.log(tendencyPipelineSkippedLog());
 
-  const results = await Promise.all(
+  // Each league's score pull is recorded in feed_syncs (one statement after
+  // the batch) for the ops console's Feed health tab.
+  const results = await withFeedSyncs("scores", (scoreSyncs) => Promise.all(
     RESOLVABLE_SPORT_KEYS.map(async (sportKey) => {
       // Every start-time / team change persistFinalScores makes to an existing
       // row, old -> new, so it lands in this run's cron_runs summary.
       const gameResultChanges: GameResultChange[] = [];
-      const [persisted, persistMs] = await timed(() => persistFinalScores(sportKey, gameResultChanges));
+      const [persisted, persistMs] = await timed(() =>
+        trackScoreSync(sportKey, scoreSyncs, scoreFeedFetches(sportKey), () => persistFinalScores(sportKey, gameResultChanges))
+      );
       // Recompute right after this sport's scores are persisted, so a
       // freshly-final game is reflected in tendencies the same run it
       // lands in GameResult, not a day later on the next cron pass. Then
@@ -106,7 +111,7 @@ async function run(): Promise<Response> {
         },
       };
     })
-  );
+  ));
 
   // MLB-only, same as first-five/NRFI grading elsewhere in this app - the
   // snapshot fields (team hitting/pitching aggregates, probable-starter

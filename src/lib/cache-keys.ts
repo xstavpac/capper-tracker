@@ -100,6 +100,10 @@ export const cacheKeys = {
   // entry shared by the admins, no user data in it. TTL only - the tab pages
   // read fresh, so a dot can trail its page by up to the TTL.
   adminStatus: () => "admin-status",
+  // Feed health's ⚠ Check feed count (server/data/feed-health.ts): the Feed
+  // health tab dot and the header's Admin badge. Same TTL and sharing as
+  // adminStatus; the tab page itself reads fresh.
+  feedHealth: () => "feed-health",
   // Consensus Hybrid's recent swings (server/data/recent-swings.ts): every team in
   // a sport, its last n finished games against their stored lines, as of one
   // Eastern day - shared by every user that day. TTL only: the games it reads

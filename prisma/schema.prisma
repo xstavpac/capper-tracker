@@ -1691,6 +1691,28 @@ model CronRun {
   @@map("cron_runs")
 }
 
+// Feed health (ops console): the last success and last error of each feed's
+// sync, per league. One row per (feed, sportKey) - at most 2 x 7 rows ever.
+// Upserted once per cron run by recordFeedSyncs (server/data/feed-syncs.ts),
+// in one statement covering every league that run touched, never per game.
+//   feed "scores": persistFinalScores in grade-picks / refresh-scores (ESPN,
+//     MLB Stats API, NHL). A run counts as a success when it didn't throw;
+//     the score readers turn an upstream non-OK into "no games", so that kind
+//     of failure shows up in the Feed health counts, not here.
+//   feed "odds": the Odds API seed (refresh-odds) and backfill (backfill-odds).
+// A season-gated run that fetched nothing records nothing.
+model FeedSync {
+  feed          String // "scores" | "odds"
+  sportKey      String
+  lastSuccessAt DateTime?
+  lastErrorAt   DateTime?
+  lastError     String? // clipped to 300 chars
+  updatedAt     DateTime  @default(now())
+
+  @@id([feed, sportKey])
+  @@map("feed_syncs")
+}
+
 // The latest reason the grading pass couldn't grade a still-PENDING pick
 // (no final game matched, or a matched game the pick can't be graded from -
 // e.g. a player not in the box score). Upserted by the grading passes on
