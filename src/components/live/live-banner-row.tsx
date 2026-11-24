@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { ClipboardIcon, GridIcon } from "@/components/dashboard/cappers-icons";
 import { LIVE_PILL, LIVE_PILL_OFF, LIVE_PILL_ON, LIVE_PILL_ROW } from "@/components/live/live-pill-styles";
@@ -58,6 +58,22 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   useEffect(() => setPendingLeague(null), [league]);
   const shownLeague = pendingLeague ?? league;
 
+  // scroll={false} on the pills keeps the viewport where it was (Next scrolls a link navigation to the
+  // top by default). The new league's board can be shorter than where the viewer was scrolled to; the
+  // browser then clamps to the page bottom, so when the position fell, land at the top of the games
+  // list, just under this row, instead.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const scrollAtClick = useRef<number | null>(null);
+  useEffect(() => {
+    const before = scrollAtClick.current;
+    scrollAtClick.current = null;
+    if (before === null || window.scrollY >= before - 1) return;
+    const row = rowRef.current;
+    if (!row || typeof window.scrollTo !== "function") return;
+    const listTop = row.getBoundingClientRect().bottom + window.scrollY;
+    if (window.scrollY > listTop) window.scrollTo({ top: listTop, behavior: "auto" });
+  }, [league]);
+
   const logoOf = (key: string) => {
     const meta = SLATE_LEAGUES.find((m) => m.key === key);
     return meta ? leagueLogoForLight(meta.logo) : null;
@@ -70,8 +86,12 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
         key={l.key}
         href={l.href}
         prefetch={false}
+        scroll={false}
         onClick={(e) => {
-          if (plainClick(e)) setPendingLeague(l.key);
+          if (plainClick(e)) {
+            scrollAtClick.current = window.scrollY;
+            setPendingLeague(l.key);
+          }
         }}
         aria-current={l.key === league ? "page" : undefined}
         className={LIVE_PILL + (on ? LIVE_PILL_ON : LIVE_PILL_OFF)}
@@ -90,7 +110,7 @@ export function LiveBannerRow({ leagues, league, views, view, children }: { leag
   };
 
   return (
-    <div className="flex max-w-full flex-col gap-[14px] md:flex-row md:flex-wrap md:items-center md:gap-x-3 md:gap-y-[10px] lg:flex-nowrap">
+    <div ref={rowRef} className="flex max-w-full flex-col gap-[14px] md:flex-row md:flex-wrap md:items-center md:gap-x-3 md:gap-y-[10px] lg:flex-nowrap">
       <nav
         aria-label="League"
         className="flex flex-col gap-[14px] md:flex-row md:flex-wrap md:gap-2 lg:-mx-4 lg:-my-5 lg:min-w-0 lg:flex-nowrap lg:overflow-x-auto lg:px-4 lg:py-5 lg:[-ms-overflow-style:none] lg:[scrollbar-width:none] lg:[&::-webkit-scrollbar]:hidden"
