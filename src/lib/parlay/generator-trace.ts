@@ -7,6 +7,7 @@
 import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import type { BetCategoryResult } from "@/lib/parlay/bet-category";
 import { classifyPair } from "@/lib/parlay/relationship-classifier";
+import { normalizeIncludeLive } from "@/lib/parlay/include-live";
 import { sameGameConflict } from "@/lib/parlay/same-game-rules";
 import { toParlayCandidate, toParlayLeg } from "@/lib/parlay/qualification-core";
 import { propMarketKey } from "@/lib/prop-market-key";
@@ -119,6 +120,8 @@ export function traceSwapLeg(input: {
   allGamePicks: number;
   // With the Favorites only star on: the picks it removed after Bet Types.
   favoritesFiltered?: number;
+  // With "Include live games" off and the leg's game started: the picks that removed after the star.
+  liveFiltered?: number;
   slipIds: Set<string>;
   inParlay: Set<string>;
   siblings: GeneratorPick[];
@@ -129,8 +132,9 @@ export function traceSwapLeg(input: {
   const out = {
     gamePicks: input.allGamePicks,
     excluded: {
-      FILTER_BET_TYPE: input.allGamePicks - input.gamePicks.length - (input.favoritesFiltered ?? 0),
+      FILTER_BET_TYPE: input.allGamePicks - input.gamePicks.length - (input.favoritesFiltered ?? 0) - (input.liveFiltered ?? 0),
       ...(input.favoritesFiltered !== undefined ? { FILTER_FAVORITES: input.favoritesFiltered } : {}),
+      ...(input.liveFiltered !== undefined ? { FILTER_LIVE: input.liveFiltered } : {}),
       IN_SLIP: 0,
       ALREADY_IN_PARLAY: 0,
       SAME_GAME_CONFLICT: 0,
@@ -207,6 +211,8 @@ export function traceSettings(pool: { leagues: string[]; slipPickIds: string[]; 
     fillFrom: s.fillFrom,
     minWinPct: s.minWinPct ?? null,
     ...(s.favoritesOnly ? { favoritesOnly: true } : {}),
+    // "Include live games": always recorded, on or off.
+    includeLive: normalizeIncludeLive(s.includeLive),
   };
 }
 

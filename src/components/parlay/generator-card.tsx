@@ -27,7 +27,7 @@ import type { CapperLeagueRecords } from "@/server/data/picks";
 import { PanelShell, TINTS } from "@/components/dashboard/panel-shell";
 import { BoltIcon, DatabaseIcon, GamepadIcon, LayersIcon, TrophyIcon } from "@/components/dashboard/cappers-icons";
 import { useParlayPool, type PooledPick } from "@/components/parlay/parlay-pool-context";
-import { FilterRow, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, TextSegments } from "@/components/parlay/parlay-controls";
+import { FilterRow, LABEL, LegStepper, PILL_OUTLINE, PILL_PRIMARY, PillSwitch, ScopeChip, Section, SettingRow, SettingsBlock, StepperControl, TextSegments } from "@/components/parlay/parlay-controls";
 import { IncludePicksChips, PickMixControl } from "@/components/parlay/pick-mix-control";
 import { HybridControls, HybridResults, ModeToggle, type Mode } from "@/components/parlay/hybrid-mode";
 import { useHybridGenerator } from "@/components/parlay/use-hybrid-generator";
@@ -47,6 +47,7 @@ import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selecti
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
 import { removedHeading, removedPickText } from "@/lib/parlay/slip-state";
 import { FAVORITES_EMPTY, FAVORITES_STAR_LABEL, FAVORITES_SUBTITLE, NO_FAVORITES_SUBTITLE, readStoredFavoritesOnly, writeStoredFavoritesOnly } from "@/lib/parlay/favorites-only";
+import { INCLUDE_LIVE_LABEL, readStoredIncludeLive, writeStoredIncludeLive } from "@/lib/parlay/include-live";
 import { StarIcon } from "@/components/dashboard/star-icon";
 import type { FillFrom, GeneratedParlay, GeneratorSettings } from "@/lib/parlay/generator";
 
@@ -184,6 +185,16 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
     setFavoritesOnlyState(next);
     writeStoredFavoritesOnly(userId, next);
   }
+  // "Include live games" (include-live.ts) - remembered the same way, on by default. Standard only: Hybrid has its own filters.
+  const [includeLive, setIncludeLiveState] = useState(true);
+  useEffect(() => {
+    setIncludeLiveState(readStoredIncludeLive(userId));
+  }, [userId]);
+  function toggleIncludeLive() {
+    const next = !includeLive;
+    setIncludeLiveState(next);
+    writeStoredIncludeLive(userId, next);
+  }
   const [parlay, setParlay] = useState<GeneratedParlay | null>(null);
   // The parlay as the last build made it, before any hand swap: what Reset all puts back.
   const [asBuilt, setAsBuilt] = useState<GeneratedParlay | null>(null);
@@ -212,8 +223,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
   );
   const settings: GeneratorSettings = useMemo(
     // favoritesOnly only when on, so a build with the star off is the same request as before it existed.
-    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct, ...(favoritesOnly ? { favoritesOnly: true } : {}) }),
-    [legCount, maxPerGame, include, mix, fillFrom, minWinPct, favoritesOnly]
+    // includeLive only when off, the same way: a build with the switch on is the request it always was.
+    () => ({ legCount, maxLegsPerGame: maxPerGame, include, mix, fillFrom, minWinPct, ...(favoritesOnly ? { favoritesOnly: true } : {}), ...(includeLive ? {} : { includeLive: false }) }),
+    [legCount, maxPerGame, include, mix, fillFrom, minWinPct, favoritesOnly, includeLive]
   );
   const key = poolKey(inputs);
 
@@ -580,6 +592,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
               </div>
               {yourPicksOnly && <span className="text-xs font-medium text-muted-foreground">Applies to Best available</span>}
             </FilterRow>
+            <FilterRow label="Live">
+              <PillSwitch label={INCLUDE_LIVE_LABEL} on={includeLive} onToggle={toggleIncludeLive} />
+            </FilterRow>
             <FilterRow label="Favorites">
               <button
                 type="button"
@@ -686,6 +701,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
           busy={busy}
           noAlternative={noAlternative}
           unavailableTargetLabels={(parlay?.unavailableTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
+          liveTargetLabels={(parlay?.liveTargets ?? []).map((id) => targetLabel.get(id) ?? "A targeted game")}
           onRegenerate={() => void run("regenerate", true)}
           changedPickIds={changedPickIds}
           selectionMode={selectionMode}

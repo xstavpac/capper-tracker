@@ -23,6 +23,7 @@ import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
 import { ClipboardIcon, ClockIcon, FlameIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
 import { LABEL } from "@/components/parlay/parlay-controls";
+import { LIVE_TARGET_NOTE } from "@/lib/parlay/include-live";
 import { SendToFanDuel } from "@/components/parlay/send-to-fanduel";
 import { combineOdds, decimalToAmerican, formatAmericanOdds, formatPayout, hasUsablePrice, payoutOn, type CombineLeg } from "@/lib/parlay/combine-odds";
 import { ANALYZING_STATUS, easeOut, LAND_MS, ODDS_TWEEN_MS } from "@/lib/parlay/build-reveal";
@@ -784,6 +785,7 @@ export function GeneratorResult({
   busy,
   noAlternative,
   unavailableTargetLabels,
+  liveTargetLabels = [],
   onRegenerate,
   changedPickIds = null,
   selectionMode,
@@ -805,6 +807,8 @@ export function GeneratorResult({
   noAlternative: NoAlternativeReason | null;
   // Targeted games that are over or have left the board, by name.
   unavailableTargetLabels: string[];
+  // Targeted games skipped because they started with "Include live games" off.
+  liveTargetLabels?: string[];
   onRegenerate: () => void;
   // A Regenerate's parlay: the pickIds of the legs that differ from the parlay the card showed before
   // (changed-legs.ts) - only these land with the highlight. Null: a Generate, every leg lands as built.
@@ -932,6 +936,7 @@ export function GeneratorResult({
         ...(done.limited ? done.shortfall.slice(1) : done.shortfall),
         ...done.mixNotes,
         ...(unavailableTargetLabels.length > 0 ? [`${unavailableTargetLabels.join(", ")}: over or no longer on the board — not used.`] : []),
+        ...(liveTargetLabels.length > 0 ? [`${liveTargetLabels.join(", ")}: ${LIVE_TARGET_NOTE}`] : []),
       ]
     : [];
   const leagues = new Set(legs.map((l) => l.pick.leagueName)).size;

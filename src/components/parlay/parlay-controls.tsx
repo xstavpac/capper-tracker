@@ -314,6 +314,25 @@ export function Section({
   );
 }
 
+// A compact on/off switch the size of the Favorites pill: its label, then a small track. Pick Filters'
+// "Include live games".
+export function PillSwitch({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className="pill-inactive inline-flex min-h-9 items-center gap-2 rounded-full border px-3 text-xs font-semibold transition hover:text-foreground"
+    >
+      {label}
+      <span aria-hidden="true" className={"relative inline-block h-4 w-7 shrink-0 rounded-full transition " + (on ? "bg-brand-600" : "bg-[#C9CEDA] dark:bg-white/20")}>
+        <span className={"absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all " + (on ? "left-[14px]" : "left-0.5")} />
+      </span>
+    </button>
+  );
+}
+
 // LEAGUES / BET TYPES: an uppercase label, then the chips on its row (under it on a phone).
 export function FilterRow({ label, className = "", children }: { label: string; className?: string; children: ReactNode }) {
   return (

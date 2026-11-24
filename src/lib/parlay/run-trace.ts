@@ -38,6 +38,7 @@ export const REASON_LABELS = {
   IS_SLIP_PICK: "Already a slip pick",
   FILTER_BET_TYPE: "Bet Types filter",
   FILTER_FAVORITES: "Favorites only (capper not a favorite)",
+  FILTER_LIVE: "Include live games off (game started)",
   PRICE_FLOOR: "Priced shorter than the -250 leg price floor",
   NO_CATEGORY: "Pick has no record category",
   NO_RECORD: "Capper has no record in this bet",
@@ -111,7 +112,8 @@ export type SwapLegTrace = {
   // the Favorites only star on, by it - FILTER_FAVORITES, absent when the star is
   // off), already a leg or in the slip, blocked by a same-game rule against a sibling leg.
   gamePicks: number;
-  excluded: { FILTER_BET_TYPE: number; FILTER_FAVORITES?: number; IN_SLIP: number; ALREADY_IN_PARLAY: number; SAME_GAME_CONFLICT: number };
+  // FILTER_LIVE: removed by "Include live games" off (the leg's game started); absent when nothing was.
+  excluded: { FILTER_BET_TYPE: number; FILTER_FAVORITES?: number; FILTER_LIVE?: number; IN_SLIP: number; ALREADY_IN_PARLAY: number; SAME_GAME_CONFLICT: number };
   // What the classifier said about the rest against this leg: R1..R6 or INACTIVE / UNDERIVABLE /
   // UNCLASSIFIED / EXACT_DUPLICATE / NOT_SAME_GAME.
   classifier: Record<string, number>;

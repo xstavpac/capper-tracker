@@ -129,6 +129,7 @@ import { MAX_LEGS_PER_GAME, MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import { legSetKey } from "@/lib/parlay/parlay-set";
 import { isGameOver, type GameClock } from "@/lib/parlay/game-over";
 import { poolEligible } from "@/lib/parlay/game-progress";
+import { keepsLiveGame, normalizeIncludeLive } from "@/lib/parlay/include-live";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 import { categoryFavDog, classifySwapCandidate, teamFavDog } from "@/lib/parlay/swap-classify";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
@@ -193,6 +194,10 @@ export type GeneratorSettings = {
   // (pick.capperIsFavorite, from the capper roster the pool is read with). Slip
   // picks are never filtered. Absent is off.
   favoritesOnly?: boolean;
+  // The "Include live games" switch (include-live.ts): only a literal false turns it off. Off, generated legs,
+  // Hedge / Contrarian alternates and Swap rows never come from a started game (scheduled start passed, not
+  // over), and a targeted started game is skipped (liveTargets). Slip picks are never filtered. Absent is on.
+  includeLive?: boolean;
   // What gates and ranks: RECORD (record-score.ts's combined win %, the default) or EDGE
   // (scoring.ts's price-aware edge, kept for comparison). The card never sets it; the
   // edge model's frozen diffs and the backtest do.
@@ -352,6 +357,9 @@ export type GeneratedParlay = {
   mixNotes: string[];
   // Targeted game ids that are not in the snapshot (over or off the board).
   unavailableTargets: string[];
+  // Targeted game ids skipped because they have started and "Include live games" is off. Absent when none
+  // (so a build with the switch on is byte-identical to one from before it).
+  liveTargets?: string[];
   dropped: DroppedSlipPick[];
   // Hedge and Contrarian for each Swap setting (swap-scope.ts), all built with
   // the parlay so switching the setting is never a rebuild: the Primary - and
@@ -503,6 +511,9 @@ type QualifyContext = {
   scoreOf: (pick: GeneratorPick) => PickScore;
   // The leg price floor (price-floor.ts): on under the record model. Slip picks never reach qualifyPick.
   priceFloor: boolean;
+  // "Include live games" (include-live.ts) and the build's clock: off, a started game's picks are out.
+  includeLive: boolean;
+  now: Date;
 };
 // A gate failure still carries its candidate: the Swap modal lists same-game picks below
 // the gate (legAlternatives), marked belowGate. Nothing else reads it.
@@ -518,6 +529,7 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
   const { include, favoritesOnly, snapshot, gate, scoreOf } = ctx;
   if (!keepsPick(include, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_BET_TYPE", pickRef(pick), betCategory(pick)) };
   if (!keepsFavorite(favoritesOnly, pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_FAVORITES", pickRef(pick)) };
+  if (!keepsLiveGame(ctx.includeLive, game, ctx.now)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "FILTER_LIVE", pickRef(pick)) };
   // Shorter than the price floor: out entirely - INCLUDED, so never a below-gate row either.
   if (ctx.priceFloor && belowPriceFloor(pick)) return { ok: false, at: "INCLUDED", drop: (t) => t.drop("INCLUDED", "PRICE_FLOOR", pickRef(pick), String(pick.odds)) };
   const gated = gateRecord(pick, snapshot);
@@ -585,6 +597,7 @@ export function buildGeneratedParlay(
   const over = (g: GameClock) => isGameOver(g, now);
   const include = toIncludeSelection(settings.include);
   const favoritesOnly = settings.favoritesOnly === true;
+  const includeLive = normalizeIncludeLive(settings.includeLive);
   const categories = selectedCategories(include);
   const mix = toPickMix(settings.mix, categories);
   const maxPerGame = Math.min(MAX_LEGS_PER_GAME, Math.max(1, Math.floor(settings.maxLegsPerGame) || 1));
@@ -698,8 +711,11 @@ export function buildGeneratedParlay(
   const slipGameIds = new Set(slipLegs.map((p) => p.gameId));
   const targeted = snapshot.targets.length > 0;
   const unavailableTargets = targeted ? snapshot.targets.filter((id) => !gameById.has(id)) : [];
+  // Include live games off: a targeted game under way is skipped and named (a slip pick's game stays, for the slip pick).
+  const liveTargets = targeted ? snapshot.targets.filter((id) => gameById.has(id) && !slipGameIds.has(id) && !keepsLiveGame(includeLive, gameById.get(id)!, now)) : [];
+  const liveTargetIds = new Set(liveTargets);
   const eligible: GeneratorGame[] = targeted
-    ? Array.from(new Set([...snapshot.targets, ...slipGameIds]))
+    ? Array.from(new Set([...snapshot.targets.filter((id) => !liveTargetIds.has(id)), ...slipGameIds]))
         .map((id) => gameById.get(id))
         .filter((g): g is GeneratorGame => g !== undefined)
     : Array.from(gameById.values());
@@ -709,7 +725,7 @@ export function buildGeneratedParlay(
   for (const p of slipLegs) slipOnGame.set(p.gameId, [...(slipOnGame.get(p.gameId) ?? []), p]);
   const candidatesOf = new Map<string, Candidate[]>();
   const priceFloor = settings.scoreModel !== "EDGE";
-  const qualifyCtx: QualifyContext = { include, favoritesOnly, snapshot, gate, scoreOf, priceFloor };
+  const qualifyCtx: QualifyContext = { include, favoritesOnly, snapshot, gate, scoreOf, priceFloor, includeLive, now };
   // How many picks passed each step, for the run trace.
   const passed = { scope: 0, notSlip: 0, included: 0, record: 0, gate: 0, noConflict: 0 };
   for (const game of eligible) {
@@ -868,6 +884,7 @@ export function buildGeneratedParlay(
     t.extras({
       ...(unavailableTargets.length > 0 ? { unavailableTargets: unavailableTargets.length } : {}),
       notes: [
+        ...(liveTargets.length > 0 ? [`liveTargets:${liveTargets.length}`] : []),
         `variety:${variety}`,
         ...(noAlternativeReason ? [`noAlternative:${noAlternativeReason}`] : []),
         `need:${need}`,
@@ -946,7 +963,8 @@ export function buildGeneratedParlay(
   if (targeted && fillFrom === "BEST_AVAILABLE") {
     for (const id of snapshot.targets) {
       const game = gameById.get(id);
-      if (!game || (candidatesOf.get(id)?.length ?? 0) > 0 || slipOnGame.has(id)) continue;
+      // A live target skipped by "Include live games" off is said once, in liveTargets.
+      if (!game || liveTargetIds.has(id) || (candidatesOf.get(id)?.length ?? 0) > 0 || slipOnGame.has(id)) continue;
       shortfall.push(`${game.gameLabel}: no qualified picks — ${gamesUsed} of ${eligible.length} games used`);
     }
   }
@@ -954,10 +972,10 @@ export function buildGeneratedParlay(
   // Hedge's alternates go through selection.ts: the top one on Generate, a
   // mode-weighted draw (one seed per leg) on Regenerate.
   const hedgeSelect: HedgeSelect = { draw: regenerate ? { seed: deriveSeed(regenerate.seed, "hedge"), beta } : null, picked: [] };
-  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, trace, hedgeSelect, priceFloor));
+  const hedge = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "AUTO_HEDGE", scope, gate, scoreOf, trace, hedgeSelect, priceFloor, includeLive, now));
   // Contrarian's the same way, on its own sub-seed.
   const contrarianSelect: HedgeSelect = { draw: regenerate ? { seed: deriveSeed(regenerate.seed, "contrarian"), beta } : null, picked: [] };
-  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, trace, contrarianSelect, priceFloor));
+  const contrarian = bySwapScope((scope) => buildSwap(legs, gameById, include, favoritesOnly, snapshot, "CONTRARIAN", scope, gate, scoreOf, trace, contrarianSelect, priceFloor, includeLive, now));
   traced((t) => t.extras({ scoring: traceScoring({ platformRows: snapshot.platformRateRows ?? 0, legs, hedge: hedge.ALL, scoreOf }) }));
   if (selectionTrace) {
     const tr: SelectionTrace = {
@@ -983,6 +1001,7 @@ export function buildGeneratedParlay(
     limited,
     mixNotes,
     unavailableTargets,
+    ...(liveTargets.length > 0 ? { liveTargets } : {}),
     dropped,
     hedge,
     contrarian,
@@ -1069,7 +1088,16 @@ export function legAlternatives(
     return out;
   }
 
-  const ctx: QualifyContext = { include: toIncludeSelection(settings.include), favoritesOnly: settings.favoritesOnly === true, snapshot, gate, scoreOf, priceFloor: settings.scoreModel !== "EDGE" };
+  const ctx: QualifyContext = {
+    include: toIncludeSelection(settings.include),
+    favoritesOnly: settings.favoritesOnly === true,
+    snapshot,
+    gate,
+    scoreOf,
+    priceFloor: settings.scoreModel !== "EDGE",
+    includeLive: normalizeIncludeLive(settings.includeLive),
+    now,
+  };
   const slipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
   const targeted = snapshot.targets.length > 0;
   // A started game is in play within its sport's progress cutoff, or as a target or a slip pick's game
@@ -1362,7 +1390,9 @@ function buildSwap(
   scoreOf: (pick: GeneratorPick) => PickScore,
   trace: TraceCollector | undefined,
   hedgeSelect: HedgeSelect,
-  priceFloor: boolean
+  priceFloor: boolean,
+  includeLive: boolean,
+  now: Date
 ): EngineSwap {
   // Contrarian: the other side of the same bet (contrarian-match.ts), gated by
   // scoring.ts at its own price. The leg's own score is never compared.
@@ -1378,7 +1408,10 @@ function buildSwap(
     // The price floor (price-floor.ts) holds for alternates too: a capped pick is never one.
     const typePicks = (gameById.get(leg.gameId)?.picks ?? []).filter((p) => keepsPick(include, p) && !(priceFloor && belowPriceFloor(p)));
     // The star filters alternates the same way it filters generated legs.
-    const gamePicks = favoritesOnly ? typePicks.filter((p) => keepsFavorite(true, p)) : typePicks;
+    const favPicks = favoritesOnly ? typePicks.filter((p) => keepsFavorite(true, p)) : typePicks;
+    // Include live games off: nothing on a started game is an alternate (a live slip leg keeps no Hedge / Contrarian).
+    const legGame = gameById.get(leg.gameId);
+    const gamePicks = legGame && !keepsLiveGame(includeLive, legGame, now) ? [] : favPicks;
     const siblings = legs.filter((l) => l !== leg && l.gameId === leg.gameId).map((l) => current.get(l.pick.pickId)!);
     const others = gamePicks.filter((p) => !inParlay.has(p.pickId) && siblings.every((s) => sameGameConflict(asCandidate(p), asCandidate(s)) === null));
     const primary = toParlayLeg(leg.pick);
@@ -1393,7 +1426,8 @@ function buildSwap(
               leg: leg.pick,
               gamePicks,
               allGamePicks: gameById.get(leg.gameId)?.picks.length ?? 0,
-              ...(favoritesOnly ? { favoritesFiltered: typePicks.length - gamePicks.length } : {}),
+              ...(favoritesOnly ? { favoritesFiltered: typePicks.length - favPicks.length } : {}),
+              ...(favPicks.length !== gamePicks.length ? { liveFiltered: favPicks.length - gamePicks.length } : {}),
               slipIds: new Set(snapshot.slipPicks.map((p) => p.pickId)),
               inParlay,
               siblings,
