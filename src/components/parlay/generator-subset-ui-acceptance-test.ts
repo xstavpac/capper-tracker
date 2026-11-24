@@ -173,7 +173,7 @@ async function main() {
     await click(button("Generate parlay"));
     await waitUntil(() => !text().includes("Generating…"), "Generating… to clear");
   };
-  const fillFrom = (label: "Best available" | "Your picks only") => Array.from(el.querySelectorAll('[role="radiogroup"][aria-label="Fill from"] [role="radio"]')).find((b) => (b.textContent ?? "").trim() === label);
+  const fillFrom = (label: "Best available" | "Combined" | "Your picks only") => Array.from(el.querySelectorAll('[role="radiogroup"][aria-label="Fill from"] [role="radio"]')).find((b) => (b.textContent ?? "").trim() === label);
   const legsShown = () => button("More legs")?.previousElementSibling?.textContent;
   const parlayIds = () => Array.from(el.querySelectorAll("ol > li")).map((li) => li.textContent ?? "").join("|");
   const unusedButton = () => buttons().find((b) => /pick(s)? not used this time/.test(b.textContent ?? ""));
@@ -182,6 +182,11 @@ async function main() {
   const root: Root = createRoot(el);
   await act(() => root.render(h(AppRouterContext.Provider, { value: router as never }, h(ParlayPoolProvider, { userId: "u1", children: null }, h(Probe), h(GeneratorCard, { leagues: ["MLB"] })))));
   await settle();
+
+  // ---- A slip with picks loads in Combined (combined-fill.ts): no floor, the stored 3 legs stay ----
+  check("Combined · the default with picks; Total legs stays 3", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && ctx.legCount === 3, `legs=${ctx.legCount}`);
+  check("Combined · the Total legs note is the split (2 of 3 from your picks)", text().includes("Up to 25 · 2 from your picks, 1 from your cappers."));
+  await click(fillFrom("Best available"));
 
   // ---- Best available, 20 picks: the old rule - never fewer legs than picks ----
   check("Best available · 20 picks: Total legs is pushed up to 20", ctx.legCount === 20, `legs=${ctx.legCount}`);

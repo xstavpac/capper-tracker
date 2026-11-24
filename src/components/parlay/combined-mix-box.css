@@ -1,0 +1,59 @@
+/* Combined's mix slider (combined-mix-box.tsx): an 8px rounded track, blue up to the thumb
+   (--mix-fill), lavender after; a white round thumb with a blue border and a soft glow. */
+.mix-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+.mix-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.mix-slider::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #2f6bff 0, #2f6bff var(--mix-fill), #e4e3fb var(--mix-fill), #e4e3fb 100%);
+}
+.mix-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 9999px;
+  background: #e4e3fb;
+}
+.mix-slider::-moz-range-progress {
+  height: 8px;
+  border-radius: 9999px;
+  background: #2f6bff;
+}
+.mix-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #2f6bff;
+  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.18), 0 2px 6px rgba(47, 107, 255, 0.35);
+}
+.mix-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 3px solid #2f6bff;
+  box-shadow: 0 0 0 4px rgba(47, 107, 255, 0.18), 0 2px 6px rgba(47, 107, 255, 0.35);
+}
+.mix-slider:focus-visible {
+  outline: none;
+}
+.mix-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 5px rgba(47, 107, 255, 0.35);
+}
+.dark .mix-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #4f7dff 0, #4f7dff var(--mix-fill), #2e2c55 var(--mix-fill), #2e2c55 100%);
+}
+.dark .mix-slider::-moz-range-track {
+  background: #2e2c55;
+}

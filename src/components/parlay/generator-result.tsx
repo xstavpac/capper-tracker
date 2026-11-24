@@ -21,7 +21,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { PICK_CATEGORY_LABELS } from "@/server/data/stats";
 import type { ExpanderPick } from "@/components/live/game-picks-expander";
-import { ClipboardIcon, ClockIcon, FlameIcon, ListChecksIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
+import { ClipboardIcon, ClockIcon, FlameIcon, ListChecksIcon, PinIcon, RefreshIcon } from "@/components/dashboard/cappers-icons";
+import { headerSplit, rotationStrip } from "@/lib/parlay/combined-ui";
 import { LABEL } from "@/components/parlay/parlay-controls";
 import { currentOdds } from "@/lib/parlay/live-price";
 import { LIVE_TARGET_NOTE } from "@/lib/parlay/include-live";
@@ -147,7 +148,11 @@ const ARRIVE_MOTION = "animate-leg-land transition-[background-color,box-shadow]
 const LEG_CARD =
   "group relative flex items-center gap-3 rounded-[14px] border border-[#E6E8EF] bg-white px-3.5 py-3 transition-[transform,box-shadow] duration-150 hover:-translate-y-px hover:shadow-[0_6px_18px_rgba(15,20,32,0.08)] dark:border-border dark:bg-card";
 
-function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLeg; arrive?: boolean; action?: ReactNode; overlay?: ReactNode }) {
+// Combined (generator.ts rule 7): one of your picks - a blue-tinted border and a 3px blue inset left edge.
+const MANUAL_LEG = "!border-[#c9d9f8] shadow-[inset_3px_0_0_#2f6bff] dark:!border-[#2a3a63] dark:shadow-[inset_3px_0_0_#6f9bff]";
+
+// `combined`: the parlay was built under Fill from = Combined, so a slip leg is marked as one of your picks (pin, blue).
+function LegCard({ n, leg, arrive, action, overlay, combined = false }: { n: number; leg: EngineLeg; arrive?: boolean; action?: ReactNode; overlay?: ReactNode; combined?: boolean }) {
   const { pick } = leg;
   const live = isGameLive(pick, new Date());
   // Lit from the moment it lands; the highlight starts fading once the slide-in is done.
@@ -161,14 +166,26 @@ function LegCard({ n, leg, arrive, action, overlay }: { n: number; leg: EngineLe
   const frame = arrive ? (lit ? LIT : UNLIT) + " " + ARRIVE_MOTION : "";
   const pct = leg.record?.winPct ?? null;
   return (
-    <li data-leg data-arrive={arrive ? true : undefined} className={LEG_CARD + " " + frame} aria-busy={overlay ? true : undefined}>
+    <li
+      data-leg
+      data-arrive={arrive ? true : undefined}
+      data-manual-leg={combined && leg.source === "SLIP" ? true : undefined}
+      className={LEG_CARD + " " + frame + (combined && leg.source === "SLIP" ? " " + MANUAL_LEG : "")}
+      aria-busy={overlay ? true : undefined}
+    >
       {overlay}
       <span className="flex h-7 w-7 shrink-0 items-center justify-center self-start rounded-full bg-banner text-xs font-bold tabular-nums text-white">{n}</span>
       <div className="min-w-0 flex-1">
         <GameLine pick={pick} gameLabel={leg.gameLabel} gameTime={leg.gameTime}>
           {live && <span className={TAG + " bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300"}>Live</span>}
           {leg.sameGame && <span className={TAG + " bg-[#E6ECFF] text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"}>SGP</span>}
-          {leg.source === "SLIP" && (
+          {leg.source === "SLIP" && combined && (
+            <span data-your-pick-tag className={TAG + " bg-[#e8efff] text-[#2f6bff] dark:bg-[#2f6bff]/20 dark:text-[#8fb0ff]"} title="One of your picks - Regenerate rotates through them">
+              <PinIcon className="h-3 w-3 stroke-[2.4]" />
+              Your pick
+            </span>
+          )}
+          {leg.source === "SLIP" && !combined && (
             <span className={TAG + " bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"} title="One of your picks - in every parlay">
               <ClipboardIcon className="h-3 w-3 stroke-[2.4]" />
               Your pick
@@ -998,6 +1015,16 @@ export function GeneratorResult({
                 )}
                 {analyzing && <span className="sr-only">{`0 / ${total}`}</span>}
               </p>
+              {done?.combined && !building && (
+                <p data-combined-split className="mt-0.5 flex flex-wrap items-center gap-x-1 text-xs font-semibold text-[#BFD3FF]">
+                  <span className="inline-flex items-center gap-1 text-[#8fb4ff]">
+                    <PinIcon className="h-3 w-3 stroke-[2.4]" />
+                    {headerSplit(done.combined.manual, done.combined.auto).manual}
+                  </span>
+                  {" "}
+                  <span>· {headerSplit(done.combined.manual, done.combined.auto).auto}</span>
+                </p>
+              )}
             </div>
           </div>
           {regenerate && (
@@ -1015,6 +1042,12 @@ export function GeneratorResult({
         {status && <BannerStatus text={status} active={building || swapping !== null} />}
       </div>
 
+      {done?.combined && (
+        <div data-rotation-strip className="mt-2.5 rounded-[10px] border border-[#c9d9f8] bg-[#eef3ff] px-3 py-1.5 text-xs font-medium text-[#24407a] dark:border-[#2a3a63] dark:bg-[#131c33] dark:text-[#b9cbf5]">
+          <p>{rotationStrip(done.combined.rotation)}</p>
+          {done.combined.backfillNote && <p className="mt-0.5 font-semibold">{done.combined.backfillNote}</p>}
+        </div>
+      )}
       {done && <p className="mt-2.5 text-xs font-medium text-muted-foreground">{pickSummary(done)} · {MODE_HELP[selectionMode]}</p>}
       {done?.limited && (
         <div role="status" data-limited className="mt-2.5 rounded-[12px] border border-amber-300 bg-amber-50/60 px-3.5 py-2.5 dark:border-amber-800 dark:bg-amber-500/10">
@@ -1054,6 +1087,7 @@ export function GeneratorResult({
               key={l.pick.pickId}
               n={pos + 1}
               leg={l}
+              combined={Boolean(done?.combined ?? parlay?.combined)}
               arrive={(changedPickIds ? changedPickIds.has(l.pick.pickId) : arrive) || landed === engineIndex}
               action={canSwap ? <SwapButton n={pos + 1} onClick={() => setModal(engineIndex)} /> : undefined}
               overlay={swapping === engineIndex ? <SwapOverlay /> : undefined}

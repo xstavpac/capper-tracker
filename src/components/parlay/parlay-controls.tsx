@@ -23,6 +23,9 @@ export const PILL_OUTLINE = PILL + OUTLINED;
 // The group a row of segments or tabs sits in.
 export const SEGMENT_GROUP = "glass-card-soft rounded-2xl p-1";
 export const SEGMENT_ON = "pill-active";
+// A segment that can't be chosen: grayed text, a dashed light border, a light gray fill.
+export const SEGMENT_DISABLED =
+  "cursor-not-allowed !border-dashed !border-[#d3dae6] bg-[#f3f5f9] text-[#a3afc2] dark:!border-white/15 dark:bg-white/[0.04] dark:text-[#5f6b80]";
 export const SEGMENT_OFF = "text-[#243a5e] hover:bg-white/50 dark:text-foreground dark:hover:bg-foreground/[0.035]";
 
 // One league's scope: filled blue when its games/picks are in, white outlined
@@ -163,13 +166,15 @@ export function TextSegments<T extends string>({
   value,
   onChange,
   disabled = [],
+  disabledTitle,
 }: {
   label: string;
   options: readonly { key: T; label: string }[];
   value: T;
   onChange: (key: T) => void;
-  // Options that can't be picked right now (shown, dimmed).
+  // Options that can't be picked right now: shown grayed, dashed border, not-allowed, with disabledTitle on hover.
   disabled?: readonly T[];
+  disabledTitle?: string;
 }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex items-center gap-0.5 glass-card-soft rounded-full p-0.5">
@@ -180,8 +185,12 @@ export function TextSegments<T extends string>({
           role="radio"
           aria-checked={o.key === value}
           disabled={disabled.includes(o.key)}
+          title={disabled.includes(o.key) ? disabledTitle : undefined}
           onClick={() => onChange(o.key)}
-          className={"flex h-10 items-center justify-center whitespace-nowrap rounded-full px-3.5 text-[13.5px] font-semibold transition disabled:opacity-40 disabled:hover:bg-transparent " + (o.key === value ? SEGMENT_ON : SEGMENT_OFF)}
+          className={
+            "flex h-10 items-center justify-center whitespace-nowrap rounded-full border border-transparent px-3.5 text-[13.5px] font-semibold transition " +
+            (disabled.includes(o.key) ? SEGMENT_DISABLED : o.key === value ? SEGMENT_ON : SEGMENT_OFF)
+          }
         >
           {o.label}
         </button>

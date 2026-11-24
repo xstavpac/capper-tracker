@@ -32,6 +32,7 @@ import { getSlipPickStatesAction } from "@/server/actions/parlay-slip";
 import { reconcileSlip, type PrunedLeg } from "@/lib/parlay/slip-reconcile";
 import { MAX_PARLAY_LEGS, MAX_POOL_PICKS } from "@/lib/parlay/leg-cap";
 import type { FillFrom } from "@/lib/parlay/generator";
+import { fillFromAfterSlipChange, type ManualSplit } from "@/lib/parlay/combined-fill";
 import type { IncludeSelection, PickMix } from "@/lib/parlay/include-picks";
 import { isGameOver } from "@/lib/parlay/game-over";
 import {
@@ -69,8 +70,10 @@ type ClearedSlip = { picks: PooledPick[]; targets: SlipGame[] };
 // The generator card's own settings. Held here, not in the card: the card is
 // unmounted by the trip to Live and back (Send to generator), and these must
 // outlive it. In memory only, like Live's slip mode.
-export type GeneratorFilters = { include: IncludeSelection; mix: PickMix | null; maxPerGame: number; fillFrom: FillFrom };
-export const DEFAULT_GENERATOR_FILTERS: GeneratorFilters = { include: "ALL", mix: null, maxPerGame: 1, fillFrom: "BEST_AVAILABLE" };
+// manualSplit: Combined's split (combined-fill.ts) as the slider set it, with the Total legs it was set at; null
+// until it is moved (half the legs).
+export type GeneratorFilters = { include: IncludeSelection; mix: PickMix | null; maxPerGame: number; fillFrom: FillFrom; manualSplit: ManualSplit | null };
+export const DEFAULT_GENERATOR_FILTERS: GeneratorFilters = { include: "ALL", mix: null, maxPerGame: 1, fillFrom: "BEST_AVAILABLE", manualSplit: null };
 
 type ParlayPoolContextValue = {
   // The signed-in user, for per-user preferences kept beside the slip.
@@ -180,6 +183,21 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const [leagueRemoval, setLeagueRemoval] = useState<LeagueRemoval | null>(null);
   const [generatorFilters, setGeneratorFilters] = useState<GeneratorFilters>(DEFAULT_GENERATOR_FILTERS);
   const patchGeneratorFilters = useCallback((patch: Partial<GeneratorFilters>) => setGeneratorFilters((f) => ({ ...f, ...patch })), []);
+  // Fill from follows the slip (combined-fill.ts): the first pick makes Combined the default, an empty slip
+  // falls back to Best available. Here, not in the card: picks are added on Live, with the card unmounted.
+  // Adjusted during render (not in an effect), so no child ever sees the new slip with the old Fill from - the
+  // card's Best available floor would otherwise push Total legs up to the slip's size first.
+  const [seenSlipSize, setSeenSlipSize] = useState(0);
+  if (seenSlipSize !== pool.length) {
+    const prev = seenSlipSize;
+    setSeenSlipSize(pool.length);
+    setGeneratorFilters((f) => {
+      const fillFrom = fillFromAfterSlipChange(prev, pool.length, f.fillFrom);
+      // A new or emptied slip starts the slider at half again.
+      const manualSplit = prev === 0 || pool.length === 0 ? null : f.manualSplit;
+      return fillFrom === f.fillFrom && manualSplit === f.manualSplit ? f : { ...f, fillFrom, manualSplit };
+    });
+  }
   // Guards the persist effect below - without it, that effect's own first
   // run (on mount, before hydration below has applied) fires with the
   // empty initial state and immediately overwrites a real saved slip.
