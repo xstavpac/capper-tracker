@@ -62,6 +62,22 @@
 //      not_selected. Pick Mix and Include Picks never shape this mode: slip
 //      picks are never filtered. With no more usable picks than the leg count,
 //      rule 1 holds unchanged: every one is in.
+//   7. Fill from = Combined: two pools in a user-set split (combined-fill.ts).
+//      manualSlots legs (settings.manualSlots, 0..min(leg count, live slip
+//      picks), half by default) come from the slip, ranked among themselves by
+//      the same combined win % (rankSlip) and exempt from every filter like any
+//      slip pick; the rest are Best available's generated legs, ranked among
+//      themselves, never a bet identical to a slip pick (same pick or betKey).
+//      Manual legs are chosen first (blocks() and max legs per game among
+//      them: a pick that can't fit is skipped for the next-best slip pick),
+//      then generated legs against them (step 4's rules). A pool that can't
+//      fill its share is backfilled from the other's next-best (backfillNote);
+//      the parlay is short only when both run out. Rotation: Generate takes
+//      the top manualSlots; each Regenerate takes the slip picks this rotation
+//      hasn't used yet, best first, until every one has been used, then the
+//      cycle restarts - never the same manual set twice in a row. The
+//      generated half draws as Best available's does (exposure, never a
+//      combination shown). The slip itself is never changed.
 //
 // With no `variation` a build is deterministic - the rank order: the same
 // snapshot and settings always give the same parlay (the frozen fixtures, the
@@ -133,13 +149,14 @@ import { keepsLiveGame, normalizeIncludeLive } from "@/lib/parlay/include-live";
 import type { LivePricing } from "@/lib/parlay/live-price";
 import type { Rule } from "@/lib/parlay/relationship-classifier";
 import { categoryFavDog, classifySwapCandidate, teamFavDog } from "@/lib/parlay/swap-classify";
+import { clampManualSlots, defaultManualSlots, nextRotationUsed, rotationOrder, type CombinedRotation } from "@/lib/parlay/combined-fill";
 import type { SwapLegTrace, TraceCollector } from "@/lib/parlay/run-trace";
 import { conflictSub, noRecordReason, pickRef, traceScoring, traceSelection, traceSlip, traceSwapLeg } from "@/lib/parlay/generator-trace";
 
 // ---------------------------------------------------------------------------
 // Inputs
 // ---------------------------------------------------------------------------
-export type FillFrom = "BEST_AVAILABLE" | "YOUR_PICKS_ONLY";
+export type FillFrom = "BEST_AVAILABLE" | "COMBINED" | "YOUR_PICKS_ONLY";
 
 export type GeneratorSnapshot = {
   // When the pool was read, for snapshotIsStale.
@@ -206,6 +223,9 @@ export type GeneratorSettings = {
   // (scoring.ts's price-aware edge, kept for comparison). The card never sets it; the
   // edge model's frozen diffs and the backtest do.
   scoreModel?: ScoreModelSetting;
+  // Fill from = Combined (rule 7): how many legs come from your picks. Clamped to
+  // 0..min(legCount, live slip picks); absent is half the legs (defaultManualSlots).
+  manualSlots?: number;
 };
 
 export type ScoreModelSetting = "RECORD" | "EDGE";
@@ -232,6 +252,8 @@ export type Variation = {
   exposure?: Exposure;
   shown?: string[];
   enumerationBudget?: { nodes?: number; ms?: number };
+  // Combined (rule 7), Regenerate only: the rotation so far (the session's). Absent: a new one.
+  rotation?: CombinedRotation;
 };
 
 // What a Generate request carries (the server action and the session): the click's seed and the mode.
@@ -386,6 +408,29 @@ export type GeneratedParlay = {
   // The same legs' betKeys (selection.ts): what the session counts into the card's
   // exposure, with historyGameKeysOf's games.
   historyBetKeys?: string[];
+  // Fill from = Combined only (rule 7): the split and the rotation.
+  combined?: CombinedResult;
+};
+
+export type CombinedResult = {
+  // The split asked for (clamped): manualSlots + autoSlots = the leg count.
+  manualSlots: number;
+  autoSlots: number;
+  // What the parlay holds: legs from your picks (backfill included) and generated.
+  manual: number;
+  auto: number;
+  // One line when a pool came up short and the other filled in; null otherwise.
+  backfillNote: string | null;
+  rotation: {
+    // 1 on Generate, +1 per Regenerate.
+    build: number;
+    // The slip picks this rotation has used after this build - what the next Regenerate carries.
+    used: string[];
+    // Live slip picks, those not yet used this rotation, and how many of them the next Regenerate takes.
+    slipSize: number;
+    unusedLeft: number;
+    nextUses: number;
+  };
 };
 
 // The games (gameExposureKey) a parlay's generated legs are on, for the card's exposure: a game
@@ -690,6 +735,48 @@ export function buildGeneratedParlay(
     if (gameHits > 0) tr.gameReuseHits = gameHits;
     return tr;
   };
+  // ---- 1c. Combined (rule 7): the manual half -------------------------------
+  // The slip ranked by the combined win % (rankSlip), walked in rotation order: picks this
+  // rotation hasn't used first. A pick that can't sit beside the ones already taken (blocks(),
+  // max legs per game) is skipped for the next. Generate (or a rebuild) starts a new rotation.
+  const combined = settings.fillFrom === "COMBINED" && liveSlip.length > 0;
+  const manualSlots = combined ? clampManualSlots(settings.manualSlots ?? defaultManualSlots(legCount, liveSlip.length), legCount, liveSlip.length) : 0;
+  const rotationIn = combined && regenerate?.rotation ? regenerate.rotation : null;
+  const slipIdList = liveSlip.map((p) => p.pickId);
+  const usedBefore = new Set((rotationIn?.used ?? []).filter((id) => slipById.has(id)));
+  let manualOrder: GeneratorPick[] = [];
+  const slipBlocks = (a: GeneratorPick, b: GeneratorPick) =>
+    a.gameId === b.gameId && blocks(toBuildCandidate(a, snapshot.leagueRecords), toBuildCandidate(b, snapshot.leagueRecords)).blocked;
+  if (combined) {
+    const ranked = rankSlip(liveSlip, snapshot.leagueRecords, scoreOf);
+    const walk = (order: GeneratorPick[]) => {
+      const out: GeneratorPick[] = [];
+      for (const p of order) {
+        if (out.length >= manualSlots) break;
+        const onGame = out.filter((q) => q.gameId === p.gameId);
+        if (onGame.length >= maxPerGame || onGame.some((q) => slipBlocks(p, q))) continue;
+        out.push(p);
+      }
+      return out;
+    };
+    manualOrder = rotationOrder(ranked, usedBefore);
+    let manual = walk(manualOrder);
+    // Never the same manual set twice in a row: the last build's picks go to the back, when others can fill.
+    const previous = regenerate && regenerate.history.length > 0 ? regenerate.history[0].filter((id) => slipById.has(id)) : null;
+    if (previous && manual.length > 0 && legSetKey(manual.map((p) => p.pickId)) === legSetKey(previous)) {
+      const prev = new Set(previous);
+      const retry = walk([...manualOrder.filter((p) => !prev.has(p.pickId)), ...manualOrder.filter((p) => prev.has(p.pickId))]);
+      if (retry.length >= manual.length && legSetKey(retry.map((p) => p.pickId)) !== legSetKey(previous)) {
+        manual = retry;
+        manualOrder = [...manualOrder.filter((p) => !prev.has(p.pickId)), ...manualOrder.filter((p) => prev.has(p.pickId))];
+      }
+    }
+    slipLegs = manual;
+    // The slip's other live picks are not in this parlay - another build may use them. Step 1's notes
+    // (duplicates, conflicts, per-game cap) are about putting every pick in, which Combined never does.
+    dropped.splice(0, dropped.length, ...dropped.filter((d) => d.reason === "over"));
+  }
+
   if (subset) {
     // Two slip picks that can't both be legs, worked out once (only picks on
     // one game ever block each other).
@@ -709,8 +796,10 @@ export function buildGeneratedParlay(
       dropped.push({ pickId: p.pickId, label: pickLabel(p), reason: "not_selected", against: null, note: `not in this parlay — Total legs is ${legCount}` });
     }
   }
-  const target = Math.max(legCount, slipLegs.length);
-  const fillFrom: FillFrom = slipLegs.length === 0 ? "BEST_AVAILABLE" : settings.fillFrom;
+  const target = combined ? legCount : Math.max(legCount, slipLegs.length);
+  const fillFrom: FillFrom = combined ? "COMBINED" : slipLegs.length === 0 ? "BEST_AVAILABLE" : settings.fillFrom;
+  // Combined: a generated leg is never a bet identical to one of your picks, chosen this time or not.
+  const slipBetKeys = combined ? new Set(liveSlip.map(betKeyOf)) : null;
 
   // ---- 2. Games -----------------------------------------------------------
   const allSlipIds = new Set(snapshot.slipPicks.map((p) => p.pickId));
@@ -740,7 +829,7 @@ export function buildGeneratedParlay(
     const list: Candidate[] = [];
     for (const pick of game.picks) {
       passed.scope++;
-      if (allSlipIds.has(pick.pickId)) {
+      if (allSlipIds.has(pick.pickId) || slipBetKeys?.has(betKeyOf(pick))) {
         traced((t) => t.drop("NOT_SLIP", "IS_SLIP_PICK", pickRef(pick)));
         continue;
       }
@@ -772,11 +861,16 @@ export function buildGeneratedParlay(
   const gamesWithCandidates = eligible.filter((g) => (candidatesOf.get(g.gameId)?.length ?? 0) > 0);
   const generatable = fillFrom === "YOUR_PICKS_ONLY" ? 0 : eligible.reduce((s, g) => s + Math.min(roomOn(g.gameId), candidatesOf.get(g.gameId)!.length), 0);
   // Under rule 6 the slip can make more legs than this parlay has: allInLegs.
-  const capacity = Math.max(allInLegs.length, Math.min(MAX_PARLAY_LEGS, slipLegs.length + generatable));
+  // Combined: every pick the slip can make plus every generated leg (an upper bound, as ever).
+  const capacity = combined
+    ? Math.min(MAX_PARLAY_LEGS, allInLegs.length + generatable)
+    : Math.max(allInLegs.length, Math.min(MAX_PARLAY_LEGS, slipLegs.length + generatable));
   const capacityText =
     fillFrom === "YOUR_PICKS_ONLY"
       ? `${capacity} max from your picks only`
-      : targeted
+      : combined
+        ? `${capacity} max from your picks and ${plural(gamesWithCandidates.length, "game")} with qualified picks`
+        : targeted
         ? `${capacity} max with ${plural(snapshot.targets.length, "game")} targeted`
         : `${capacity} max from ${plural(gamesWithCandidates.length, "game")} with qualified picks`;
 
@@ -835,13 +929,18 @@ export function buildGeneratedParlay(
       let found: Ranked<Candidate>[] | null = null;
       let fallback: Ranked<Candidate>[] | null = null;
       let rejected = 0;
+      // Combined: a combination is the whole parlay (your picks with the generated legs), and the
+      // generated half never comes back exactly as the last build had it while another draw fits.
+      const slipPart = combined ? slipLegs.map((p) => p.pickId) : [];
+      const previousAuto = combined && regenerate.history.length > 0 ? legSetKey(regenerate.history[0].filter((id) => !allSlipIds.has(id))) : null;
       for (let i = 0; i < STANDARD_DRAW_TRIES && !found; i++) {
         const d = selectLegs(orderCandidates(cands, drawAt(i)), fill).chosen;
-        const key = legSetKey(d.map((r) => r.id));
-        if (!shownKeys.has(key)) found = d;
+        const key = legSetKey([...slipPart, ...d.map((r) => r.id)]);
+        const sameAuto = previousAuto !== null && d.length > 0 && legSetKey(d.map((r) => r.id)) === previousAuto;
+        if (!shownKeys.has(key) && !sameAuto) found = d;
         else {
           rejected++;
-          if (!fallback && key !== onScreen) fallback = d;
+          if (!fallback && key !== onScreen && !sameAuto) fallback = d;
         }
       }
       tr.rejectedCombos = rejected;
@@ -849,15 +948,55 @@ export function buildGeneratedParlay(
       if (v) {
         picked = v;
         variety = "VARIED";
+      } else if (combined && onScreen !== null && legSetKey([...slipPart, ...picked.map((r) => r.id)]) !== onScreen) {
+        // The generated half has nothing new, but the rotation moved your picks on: still another parlay.
+        variety = "VARIED";
       } else variety = "NO_ALTERNATIVE";
     }
     chosen = picked.map((r) => r.item);
     selectionTrace = finishTrace(tr, picked);
   }
+
+  // ---- 5b. Combined: backfill (rule 7) ---------------------------------------
+  // The generated half came up short: your next-best picks (rotation order) fill it, under the
+  // same rules against every leg. Your picks short of their share were already made up by the
+  // generated half (need counts it). A slider at 0 leaves your picks out entirely.
+  let backfillNote: string | null = null;
+  const manualTaken = slipLegs.length;
+  if (combined) {
+    const autoAsked = legCount - manualTaken;
+    if (manualSlots > 0 && chosen.length < autoAsked) {
+      const inParlay = new Set(slipLegs.map((p) => p.pickId));
+      const extra: GeneratorPick[] = [];
+      for (const p of manualOrder) {
+        if (manualTaken + extra.length + chosen.length >= legCount) break;
+        if (inParlay.has(p.pickId)) continue;
+        const slipOn = [...slipLegs, ...extra].filter((q) => q.gameId === p.gameId);
+        const genOn = chosen.filter((c) => c.game.gameId === p.gameId).map((c) => c.pick);
+        if (slipOn.length + genOn.length >= maxPerGame || slipOn.some((q) => slipBlocks(p, q))) continue;
+        const game = gameById.get(p.gameId);
+        if (genOn.some((g) => !(sureOfGame(game, g) && sureOfGame(game, p)) || sameGameConflict(asCandidate(p), asCandidate(g)) !== null)) continue;
+        extra.push(p);
+      }
+      if (extra.length > 0) {
+        slipLegs = [...slipLegs, ...extra];
+        backfillNote = `Generator found ${chosen.length} of ${autoAsked} — filled ${extra.length} from your picks`;
+      }
+    } else if (manualTaken < manualSlots && chosen.length > legCount - manualSlots) {
+      backfillNote = `Your picks filled ${manualTaken} of ${manualSlots} — added ${chosen.length - (legCount - manualSlots)} generated`;
+    }
+    if (dropped.some((d) => d.reason !== "over")) dropped.splice(0, dropped.length, ...dropped.filter((d) => d.reason === "over"));
+    const used = new Set(slipLegs.map((p) => p.pickId));
+    for (const p of liveSlip) {
+      if (used.has(p.pickId)) continue;
+      dropped.push({ pickId: p.pickId, label: pickLabel(p), reason: "not_selected", against: null, note: "not in this parlay — Regenerate rotates your picks" });
+    }
+  }
   // Nothing to draw (every usable slip pick is in and no leg is generated) is
   // not the same as nothing new of comparable strength.
   const noAlternativeReason: GeneratedParlay["noAlternativeReason"] = variety !== "NO_ALTERNATIVE" ? null : !subset && need <= 0 ? "ALL_PICKS_USED" : "NO_COMPARABLE";
-  const historyIds = subset ? slipLegs.map((p) => p.pickId) : chosen.map((c) => c.pick.pickId);
+  // Combined: the whole parlay - your picks rotate too.
+  const historyIds = subset ? slipLegs.map((p) => p.pickId) : combined ? [...slipLegs.map((p) => p.pickId), ...chosen.map((c) => c.pick.pickId)] : chosen.map((c) => c.pick.pickId);
   // The run log's view of how this build varied (selection.ts VarietyTrace).
   if (selectionTrace) {
     const previous = variation && variation.history.length > 0 ? new Set(variation.history[0]) : null;
@@ -946,6 +1085,8 @@ export function buildGeneratedParlay(
   if (legs.length < target) {
     if (subset) {
       shortfall.push(`${legs.length} of ${target} legs: no ${target}-leg mix of your picks fits Max legs per game and the same-game rules.`);
+    } else if (combined) {
+      shortfall.push(`Built ${legs.length} of ${target} — no other eligible picks`);
     } else if (fillFrom === "YOUR_PICKS_ONLY") {
       shortfall.push(`Your picks only: ${plural(slipLegs.length, "pick")} in your slip. Switch Fill from to Best available to add legs.`);
     } else if (targeted) {
@@ -960,7 +1101,7 @@ export function buildGeneratedParlay(
   const limited = legs.length < target && !subset && fillFrom === "BEST_AVAILABLE" ? { have: legs.length, need: target } : null;
   if (limited) traced((t) => t.extras({ limited }));
   const mixNotes: string[] = [];
-  if (mixTarget && fillFrom === "BEST_AVAILABLE") {
+  if (mixTarget && fillFrom !== "YOUR_PICKS_ONLY") {
     for (const c of categories) {
       const got = legs.filter((l) => betCategory(l.pick) === c).length;
       if (got < mixTarget[c]) {
@@ -970,7 +1111,7 @@ export function buildGeneratedParlay(
       }
     }
   }
-  if (targeted && fillFrom === "BEST_AVAILABLE") {
+  if (targeted && fillFrom !== "YOUR_PICKS_ONLY") {
     for (const id of snapshot.targets) {
       const game = gameById.get(id);
       // A live target skipped by "Include live games" off is said once, in liveTargets.
@@ -1020,7 +1161,25 @@ export function buildGeneratedParlay(
     historyIds,
     generatedKey: legSetKey(historyIds),
     historyBetKeys: subset ? slipLegs.map(betKeyOf) : chosen.map((c) => betKeyOf(c.pick)),
+    ...(combined
+      ? {
+          combined: {
+            manualSlots,
+            autoSlots: legCount - manualSlots,
+            manual: slipLegs.length,
+            auto: chosen.length,
+            backfillNote,
+            rotation: rotationAfter((rotationIn?.build ?? 0) + 1, slipIdList, nextRotationUsed(slipIdList, usedBefore, slipLegs.map((p) => p.pickId)), manualSlots),
+          },
+        }
+      : {}),
   };
+}
+
+// The rotation after a Combined build: the used set (nextRotationUsed) and what the next Regenerate has left.
+function rotationAfter(build: number, slipIds: readonly string[], used: ReadonlySet<string>, manualSlots: number): CombinedResult["rotation"] {
+  const unusedLeft = slipIds.filter((id) => !used.has(id)).length;
+  return { build, used: slipIds.filter((id) => used.has(id)), slipSize: slipIds.length, unusedLeft, nextUses: Math.min(manualSlots, unusedLeft) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1097,6 +1256,11 @@ export function legAlternatives(
     addUnusedSlipPicks();
     return out;
   }
+  // Combined (rule 7): one of your picks swaps first to your other picks, then the generator's.
+  const combined = settings.fillFrom === "COMBINED" && snapshot.slipPicks.length > 0;
+  const slipFirst = combined && swapped.source === "SLIP";
+  if (slipFirst) addUnusedSlipPicks();
+  const slipBetKeys = combined ? new Set(snapshot.slipPicks.map(betKeyOf)) : null;
 
   const ctx: QualifyContext = {
     include: toIncludeSelection(settings.include),
@@ -1127,7 +1291,7 @@ export function legAlternatives(
     const onGame = legsOn(game.gameId);
     if (onGame.length >= maxPerGame) continue;
     for (const pick of game.picks) {
-      if (inParlay.has(pick.pickId) || slipIds.has(pick.pickId)) continue;
+      if (inParlay.has(pick.pickId) || slipIds.has(pick.pickId) || slipBetKeys?.has(betKeyOf(pick))) continue;
       const q = qualifyPick(pick, game, ctx);
       // Below the gate: kept for the swapped leg's own game only.
       const c = q.ok ? q.candidate : q.at === "PASSES_GATE" && tab === "THIS_GAME" ? q.candidate : undefined;
@@ -1140,7 +1304,7 @@ export function legAlternatives(
   found.sort((a, b) => byRank(a.c, b.c));
   for (const { tab, c } of found) add(tab, { ...generatedLegOf(c), combinedWinPct: c.score });
   // Then your own unused slip picks, ungated, after every gate-qualifying candidate.
-  addUnusedSlipPicks();
+  if (!slipFirst) addUnusedSlipPicks();
   // Then the swapped leg's game's picks below the gate, best first.
   below.sort(byRank);
   for (const c of below) add("THIS_GAME", { ...generatedLegOf(c), combinedWinPct: c.score, belowGate: { combinedWinPct: c.score, gate } });
@@ -1246,6 +1410,17 @@ export function applyLegSwap(
   // A slip pick swapped out is one of your picks not used this time; one swapped in no longer is.
   const dropped = parlay.dropped.filter((d) => d.pickId !== chosen.pick.pickId);
   if (out.source === "SLIP") dropped.push({ pickId: out.pick.pickId, label: pickLabel(out.pick), reason: "not_selected", against: null, note: "swapped out — not in this parlay" });
+  // Combined: a pick of yours swapped out goes back to the unused line (it wasn't really used); one
+  // swapped in is used.
+  let combined = parlay.combined;
+  if (combined) {
+    const r = combined.rotation;
+    const slipIds = snapshot.slipPicks.filter((p) => !isGameOver(p, now)).map((p) => p.pickId);
+    const used = new Set(r.used);
+    if (out.source === "SLIP") used.delete(out.pick.pickId);
+    if (chosen.source === "SLIP") used.add(chosen.pick.pickId);
+    combined = { ...combined, manual: fromSlip, auto: legs.length - fromSlip, rotation: rotationAfter(r.build, slipIds, used, combined.manualSlots) };
+  }
   return {
     ...parlay,
     legs,
@@ -1255,6 +1430,7 @@ export function applyLegSwap(
     gamesUsed: perGame.size,
     sameGameGames: Array.from(perGame.values()).filter((n) => n > 1).length,
     dropped,
+    ...(combined ? { combined } : {}),
   };
 }
 

@@ -22,6 +22,11 @@
 //   - Refresh: always one request - a fresh snapshot (picks, odds, records) and its
 //     parlay on the current Generate seed, whatever the pool and the snapshot's age.
 //     Restarts the result card like Generate.
+//   - Combined (generator.ts rule 7): the session keeps the rotation (which of your picks this
+//     result card has used, and the build number) from each parlay it shows, and hands it to the
+//     next Regenerate. Generate / Refresh, and any change to the slip's picks, start a new one. A
+//     hand swap updates it from the swapped parlay (a pick swapped out is unused again); adopt()
+//     takes it from a parlay the card puts back (Reset all).
 //   - Leg count, max per game, Include Picks, Pick Mix and Fill from don't
 //     change the pool, so they never cause a request - only a rebuild.
 //
@@ -56,6 +61,7 @@ import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { normalizeIncludeLive } from "@/lib/parlay/include-live";
 import { isStarted } from "@/lib/parlay/game-progress";
 import { standardScoringVersion, TraceCollector, type RunTrace } from "@/lib/parlay/run-trace";
+import type { CombinedRotation } from "@/lib/parlay/combined-fill";
 import { addExposure, DEFAULT_SELECTION_MODE, deriveSeed, freshSeed, NO_EXPOSURE, type Exposure, type SelectionMode } from "@/lib/parlay/selection";
 
 export type PoolInputs = {
@@ -104,7 +110,15 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
   // each bet and game (the exposure). In memory only; reset by Generate / Refresh.
   let shown = new Set<string>();
   let exposure: Exposure = NO_EXPOSURE;
+  // Combined's rotation on this result card, and the slip it was built on (a different slip starts a new one).
+  let rotation: CombinedRotation | null = null;
+  let rotationSlip: string | null = null;
   let requests = 0;
+  const slipKeyOf = (inputs: PoolInputs) => [...inputs.slipPickIds].sort().join(",");
+  const takeRotation = (p: GeneratedParlay, inputs: PoolInputs | null) => {
+    rotation = p.combined ? { build: p.combined.rotation.build, used: p.combined.rotation.used } : null;
+    if (inputs) rotationSlip = slipKeyOf(inputs);
+  };
 
   // The legs a Regenerate varies: the generated ones, or the slip picks drawn
   // under Your picks only with more picks than legs (historyIds, generator.ts).
@@ -117,6 +131,8 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     history = [];
     shown = new Set();
     exposure = NO_EXPOSURE;
+    rotation = null;
+    rotationSlip = null;
   };
   // The Generate draw for these options: a new seed first when asked.
   const generateDraw = (opts: GenerateOptions): GenerateDraw => {
@@ -178,11 +194,13 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
       if (usable(inputs, settings)) {
         const parlay = build(inputs, settings, generateVariation(draw));
         remember(parlay);
+        takeRotation(parlay, inputs);
         return { parlay, fetched: false };
       }
       const res = await load(inputs, settings, draw);
       if ("error" in res) return res;
       remember(res.parlay);
+      takeRotation(res.parlay, inputs);
       return { parlay: res.parlay, fetched: true };
     },
 
@@ -192,6 +210,7 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
       const res = await load(inputs, settings, generateDraw(opts));
       if ("error" in res) return res;
       remember(res.parlay);
+      takeRotation(res.parlay, inputs);
       return { parlay: res.parlay, fetched: true };
     },
 
@@ -205,8 +224,13 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
         fetched = true;
       }
       seed = (seed + 1) >>> 0;
-      const parlay = build(inputs, settings, { seed, history, mode, exposure, shown: Array.from(shown) });
-      if (parlay.variety !== "NO_ALTERNATIVE") remember(parlay);
+      // A different slip: the rotation starts again from your best picks.
+      const carried = rotation && rotationSlip === slipKeyOf(inputs) ? rotation : null;
+      const parlay = build(inputs, settings, { seed, history, mode, exposure, shown: Array.from(shown), ...(carried ? { rotation: carried } : {}) });
+      if (parlay.variety !== "NO_ALTERNATIVE") {
+        remember(parlay);
+        takeRotation(parlay, inputs);
+      }
       return { parlay, fetched };
     },
 
@@ -219,8 +243,18 @@ export function createGeneratorSession(deps: { generate: GenerateCall; now?: () 
     // The parlay with that leg replaced by `pickId` (one of its swap options), or null.
     swapLeg(parlay: GeneratedParlay, legIndex: number, pickId: string, settings: GeneratorSettings): GeneratedParlay | null {
       if (!snapshot) return null;
-      return applyLegSwap(snapshot, settings, parlay, legIndex, pickId, now());
+      const next = applyLegSwap(snapshot, settings, parlay, legIndex, pickId, now());
+      if (next) takeRotation(next, null);
+      return next;
     },
+
+    // The card put a parlay back (Reset all): Combined's rotation follows it.
+    adopt(parlay: GeneratedParlay): void {
+      takeRotation(parlay, null);
+    },
+
+    // Combined's rotation on this card (build number, picks used), for the UI and tests.
+    rotation: (): CombinedRotation | null => rotation,
 
     // For the UI and tests: how many requests this session has made.
     requestCount: () => requests,

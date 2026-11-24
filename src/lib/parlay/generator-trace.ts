@@ -209,6 +209,7 @@ export function traceSettings(pool: { leagues: string[]; slipPickIds: string[]; 
     include: s.include,
     ...(s.mix ? { mix: s.mix } : {}),
     fillFrom: s.fillFrom,
+    ...(s.fillFrom === "COMBINED" && s.manualSlots !== undefined ? { manualSlots: s.manualSlots } : {}),
     minWinPct: s.minWinPct ?? null,
     ...(s.favoritesOnly ? { favoritesOnly: true } : {}),
     // "Include live games": always recorded, on or off.

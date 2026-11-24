@@ -23,13 +23,9 @@ export function legRange({ yourPicksOnly, slipFloor, capacity }: { yourPicksOnly
   return { min, max };
 }
 
-// Fill from. A pool above MAX_PARLAY_LEGS can only be built as Your picks only (the
-// generator draws the best MAX_PARLAY_LEGS of it); no picks can only be Best available.
-export function effectiveFillFrom(poolSize: number, choice: "BEST_AVAILABLE" | "YOUR_PICKS_ONLY"): "BEST_AVAILABLE" | "YOUR_PICKS_ONLY" {
-  if (poolSize === 0) return "BEST_AVAILABLE";
-  if (poolSize > MAX_PARLAY_LEGS) return "YOUR_PICKS_ONLY";
-  return choice;
-}
+// Fill from (combined-fill.ts): a pool above MAX_PARLAY_LEGS can't be Best available (it would put
+// every pick in) - Your picks only or Combined; no picks can only be Best available.
+export { effectiveFillFrom } from "@/lib/parlay/combined-fill";
 
 export const POOL_OVER_CAP_NOTE = `More than ${MAX_PARLAY_LEGS} picks — the generator picks the best ${MAX_PARLAY_LEGS} from your pool.`;
 
