@@ -3,6 +3,7 @@ import { seedNflPropOddsForToday } from "@/server/data/nfl-prop-odds";
 import { seedNhlGoalScorerOddsForToday } from "@/server/data/nhl-goal-scorer-odds";
 import { classifyRefreshOddsRun } from "@/lib/odds-cron-status";
 import { runCronLogged } from "@/server/data/cron-runs";
+import { oddsSyncOutcome, recordFeedSyncs, type FeedSyncOutcome } from "@/server/data/feed-syncs";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,11 @@ export async function GET(req: Request) {
 // runCronLogged - only after the auth check above passes.
 async function run(): Promise<Response> {
   const results = await Promise.all(LIVE_SPORTS.map((sport) => seedOddsSnapshot(sport.key)));
+  // One feed_syncs statement for the Feed health tab (best-effort, never throws).
+  await recordFeedSyncs(
+    "odds",
+    results.map((r) => oddsSyncOutcome(r.sportKey, r.status)).filter((o): o is FeedSyncOutcome => o !== null)
+  );
 
   const { ok, status, httpStatus } = classifyRefreshOddsRun(results);
   const creditsRemaining = results.map((r) => r.creditsRemaining).find((c) => c !== null) ?? null;

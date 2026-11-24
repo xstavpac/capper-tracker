@@ -15,10 +15,12 @@ import { gradingStatusSql, parseStuck } from "@/server/data/grading-health";
 import { importsAlert } from "@/lib/import-health";
 import { importsStatusSql } from "@/server/data/import-runs";
 import type { AdminTabAlerts, AdminTabKey } from "@/lib/admin-tabs";
+import { getFeedHealthSummary } from "@/server/data/feed-health";
 
 // The ops console's red dots, for the admin layout, cached for
 // ADMIN_STATUS_CACHE_SECONDS in one entry shared by the admins - so a page
-// load costs nothing on a hit. On a miss it costs TWO statements:
+// load costs nothing on a hit. On a miss it costs TWO statements (plus Feed
+// health's own, cached separately - getFeedHealthSummary):
 //   1. the combined status statement below: one scalar subquery per tab
 //      (each tab's PR adds its own), a few small rows in all;
 //   2. the DB Monitor's own pg_stat_statements statement.
@@ -84,6 +86,15 @@ const CHECKS: StatusCheck[] = [
       const { oddsLatest, oddsSnapshots } = await status();
       const now = new Date();
       return oddsApiAlert(parseLatestUsage(oddsLatest), snapshotHealth(ODDS_SPORT_KEYS, parseLatestSnapshots(oddsSnapshots), now), now);
+    },
+  },
+  {
+    // Leagues in ⚠ Check feed: its own small aggregate statement, cached
+    // separately (the header badge reads the same entry).
+    tab: "feed-health",
+    run: async () => {
+      const s = await getFeedHealthSummary();
+      return s.checkCount ? `${s.leagues.join(", ")}: check feed - ${s.firstReason}` : null;
     },
   },
   {

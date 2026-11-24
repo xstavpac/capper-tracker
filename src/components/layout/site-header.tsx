@@ -65,9 +65,12 @@ export function SiteHeader({
   user,
   showAdminOps = false,
   reviewCount = 0,
+  adminAlertCount = 0,
 }: {
   user: HeaderUser;
   showAdminOps?: boolean;
+  // Leagues in Feed health's ⚠ Check feed; a count badge on the menu's Admin item (admins only).
+  adminAlertCount?: number;
   // Pending Telegram-ingest review items; a badge on Drop Catalog (the link to the Catalog Import page).
   reviewCount?: number;
 }) {
@@ -201,7 +204,7 @@ export function SiteHeader({
         </div>
       </div>
 
-      {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} slipSize={slipSize} onNavigate={() => setOpen(false)} />}
+      {open && <HeaderMenu ref={menuRef} id={menuId} user={user} showAdminOps={showAdminOps} adminAlertCount={adminAlertCount} slipSize={slipSize} onNavigate={() => setOpen(false)} />}
     </div>
     </header>
   );

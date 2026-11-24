@@ -1,6 +1,7 @@
 import { backfillOddsForSport, LIVE_SPORTS } from "@/server/data/odds";
 import { classifyBackfillOddsRun } from "@/lib/odds-cron-status";
 import { runCronLogged } from "@/server/data/cron-runs";
+import { oddsSyncOutcome, recordFeedSyncs, type FeedSyncOutcome } from "@/server/data/feed-syncs";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,11 @@ async function run(): Promise<Response> {
       const { added, status } = await backfillOddsForSport(sport.key);
       return { sport: sport.key, added, status };
     })
+  );
+  // One feed_syncs statement for the Feed health tab (best-effort, never throws).
+  await recordFeedSyncs(
+    "odds",
+    results.map((r) => oddsSyncOutcome(r.sport, r.status)).filter((o): o is FeedSyncOutcome => o !== null)
   );
 
   const { ok, status, httpStatus } = classifyBackfillOddsRun(results);
