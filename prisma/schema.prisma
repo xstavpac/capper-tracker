@@ -1700,9 +1700,11 @@ model CronRun {
 //     the score readers turn an upstream non-OK into "no games", so that kind
 //     of failure shows up in the Feed health counts, not here.
 //   feed "odds": the Odds API seed (refresh-odds) and backfill (backfill-odds).
+//   feed "schedule": the 7-day schedule pull in refresh-scores (schedule-store.ts).
+//     A success only when every planned date came back; one failed date is an error.
 // A season-gated run that fetched nothing records nothing.
 model FeedSync {
-  feed          String // "scores" | "odds"
+  feed          String // "scores" | "odds" | "schedule"
   sportKey      String
   lastSuccessAt DateTime?
   lastErrorAt   DateTime?
@@ -1711,6 +1713,24 @@ model FeedSync {
 
   @@id([feed, sportKey])
   @@map("feed_syncs")
+}
+
+// The next 7 days of each league's schedule (today included, Eastern dates):
+// one row per (league, ET date), games as a compact JSON array
+// [{ id, home, away, start, status, gameNumber?, doubleHeader? }] - the ESPN
+// event id / MLB gamePk, team display names, start ISO, the feed status at
+// pull time. Upserted once a day by refresh-scores (schedule-store.ts); a
+// date whose pull failed keeps its previous row. Days before today are
+// pruned by id in the same run. Read through the shared Data Cache.
+model ScheduleDay {
+  id        String   @id
+  sportKey  String
+  gameDate  String // Eastern date, YYYY-MM-DD
+  games     Json
+  fetchedAt DateTime @default(now())
+
+  @@unique([sportKey, gameDate])
+  @@map("schedule_days")
 }
 
 // The latest reason the grading pass couldn't grade a still-PENDING pick

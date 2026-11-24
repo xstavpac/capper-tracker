@@ -147,8 +147,11 @@ const SUMMARIZE: Record<CronName, (b: any) => { rowsTouched: number; summary: Re
       heavyConsensusDeleted: num(b.heavyConsensus?.deleted),
       // 1 when the recompute threw (the route catches it, so the run itself is still OK).
       heavyConsensusFailed: b.heavyConsensus?.error ? 1 : 0,
+      // The 7-day schedule store: rows (league x day) upserted, and dates whose pull failed (+1 if the step threw).
+      scheduleDaysStored: sum(b.schedule?.leagues ?? [], (x) => num(x.stored)),
+      scheduleFailedDates: sum(b.schedule?.leagues ?? [], (x) => (Array.isArray(x.failed) ? x.failed.length : 0)) + (b.schedule?.error ? 1 : 0),
     };
-    const { nflTeamSnapshotErrors: _e, heavyConsensusFailed: _h, ...written } = summary;
+    const { nflTeamSnapshotErrors: _e, heavyConsensusFailed: _h, scheduleFailedDates: _s, ...written } = summary;
     return { rowsTouched: Object.values(written).reduce((a, v) => a + v, 0), summary: { ...summary, ...gameResultChangeSummary(r) } };
   },
   "refresh-odds": (b) => {

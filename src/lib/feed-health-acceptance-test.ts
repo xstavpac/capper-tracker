@@ -19,6 +19,7 @@ import {
   emptyLeague,
   feedHealth,
   feedHealthAlert,
+  postedFrom,
   leagueFeedStatus,
   type FeedStatus,
   type FeedSyncRow,
@@ -41,9 +42,13 @@ const NCAAB = "basketball_ncaab";
 const NHL = "icehockey_nhl";
 const MLB = "baseball_mlb";
 const WNBA = "basketball_wnba";
-// The Odds API lists ~a week ahead for football; for the daily leagues the
-// snapshot holds only the current ET day's slate (prod, 2026-11-21..24).
+// The Odds API lists ~a week ahead for football. The daily leagues' posted side
+// is the 7-day schedule store (today..today+6 ET) since 2026-11-25; before that
+// it was the odds snapshot, which held only the current ET day's slate (prod,
+// 2026-11-21..24). DAILY_POSTED_DAYS models it - set it to 1 to re-run the old
+// backtest against today-only posting.
 const POSTED_WEEK = new Set([NFL, NCAAF]);
+const DAILY_POSTED_DAYS = 7;
 
 const REAL: Record<string, string> = {
   [NCAAF]:
@@ -99,7 +104,7 @@ function observe(sportKey: string, s: Schedule, now: number, opts: { postedCut?:
       if (t > now - 7 * DAY) past7 += n;
       if (lastGameAt === null || t > lastGameAt) lastGameAt = t;
     }
-    const postedHorizon = POSTED_WEEK.has(sportKey) ? t <= now + 7 * DAY : date === today;
+    const postedHorizon = POSTED_WEEK.has(sportKey) ? t <= now + 7 * DAY : date >= today && date <= addDays(today, DAILY_POSTED_DAYS - 1);
     if (!opts.postedCut && t > now && postedHorizon) {
       if (t <= now + 7 * DAY) next7 += n;
       if (nextGameAt === null || t < nextGameAt) nextGameAt = t;
@@ -112,7 +117,8 @@ function observe(sportKey: string, s: Schedule, now: number, opts: { postedCut?:
     lastGameAt: lastGameAt === null ? null : new Date(lastGameAt),
     next7,
     nextGameAt: nextGameAt === null ? null : new Date(nextGameAt),
-    postedFetchDate: opts.postedCut ? null : today,
+    postedFetchDate: opts.postedCut || !POSTED_WEEK.has(sportKey) ? null : today,
+    postedSource: opts.postedCut ? null : POSTED_WEEK.has(sportKey) ? "odds" : "schedule",
     syncs: opts.syncs ?? {},
   };
 }
@@ -197,7 +203,7 @@ expect("no games either side = Off season", leagueFeedStatus(emptyLeague(NBA), n
 // NBA All-Star break: Thursday Feb 12 -> Thursday Feb 19 (2026's real shape),
 // 7 games a night either side; posted side holds only today's slate.
 const nbaAllStar = sched(range("2027-01-20", "2027-02-11", 7), range("2027-02-18", "2027-03-20", 7));
-expect("NBA All-Star break (7 days, nothing posted until the day) never warns", sweep(NBA, nbaAllStar, "2027-01-25", "2027-03-01").check_feed, []);
+expect("NBA All-Star break (7 days) never warns", sweep(NBA, nbaAllStar, "2027-01-25", "2027-03-01").check_feed, []);
 // NHL: Christmas break (Dec 24-26) and a 6-day All-Star break.
 {
   const s = sched(range("2026-12-01", "2026-12-23", 7), range("2026-12-27", "2027-01-31", 7), range("2027-02-07", "2027-03-15", 7));
@@ -238,7 +244,7 @@ for (const { key, label } of FEED_HEALTH_LEAGUES) {
   const s = new Map([...parse(REAL[NBA])].filter(([d]) => d < "2026-11-12"));
   const h = statusAt(NBA, s, "2026-11-22T18:00:00Z", { postedCut: true });
   expect("missing NBA schedule: ⚠ Check feed", h.status, "check_feed");
-  expect("missing NBA schedule: reason says so", /none played in 8\+ days and none posted.*no odds snapshot/.test(h.reasons[0] ?? ""), true);
+  expect("missing NBA schedule: reason says so", /none played in 8\+ days and none posted.*no stored schedule and no odds snapshot/.test(h.reasons[0] ?? ""), true);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +253,7 @@ for (const { key, label } of FEED_HEALTH_LEAGUES) {
 {
   const s = parse(REAL[NBA]);
   const now = Date.parse("2026-11-20T18:00:00Z");
-  const sync = (feed: "scores" | "odds", agoH: number | null, errAgoH: number | null = null): FeedSyncRow => ({
+  const sync = (feed: "scores" | "odds" | "schedule", agoH: number | null, errAgoH: number | null = null): FeedSyncRow => ({
     feed,
     sportKey: NBA,
     lastSuccessAt: agoH === null ? null : new Date(now - agoH * HOUR),
@@ -262,6 +268,11 @@ for (const { key, label } of FEED_HEALTH_LEAGUES) {
   ]);
   expect("never succeeded but errored: ⚠ Check feed", at({ scores: sync("scores", null, 1), odds: sync("odds", 13) }).status, "check_feed");
   expect("no sync rows yet (just deployed): not judged", at({}).status, "in_season");
+  // The 7-day schedule pull: daily, same 26 h limit; a failed date leaves an error and no new success.
+  expect(`schedule sync ${SYNC_STALE_HOURS.schedule + 1}h old, last error 3h ago: ⚠ Check feed`, at({ scores: sync("scores", 0.25), odds: sync("odds", 13), schedule: sync("schedule", SYNC_STALE_HOURS.schedule + 1, 3) }).reasons, [
+    `schedule sync last succeeded 27h ago (limit ${SYNC_STALE_HOURS.schedule}h)`,
+  ]);
+  expect("schedule sync errored once but succeeded within 26h: no warning", at({ scores: sync("scores", 0.25), odds: sync("odds", 13), schedule: sync("schedule", 20, 2) }).status, "in_season");
   // Off season: a gated feed stops syncing; that's not a warning.
   const off = leagueFeedStatus({ ...emptyLeague(NBA), syncs: { scores: sync("scores", 24 * 60), odds: sync("odds", 24 * 60) } }, new Date(now));
   expect("stale syncs in the off season: Off season, no warning", off.status, "off_season");
@@ -278,6 +289,18 @@ for (const { key, label } of FEED_HEALTH_LEAGUES) {
   expect("alert names the flagged league", feedHealthAlert(h)?.startsWith("NBA: check feed - "), true);
   expect("no alert when nothing is flagged", feedHealthAlert(feedHealth([], now)), null);
   expect("every league has thresholds", FEED_HEALTH_LEAGUES.every((l) => !!FEED_THRESHOLDS[l.key]), true);
+}
+
+// ---------------------------------------------------------------------------
+// 7. The posted source. Daily leagues read the 7-day store: on 2026-11-24 (a
+//    real 3-game NBA night, 9 the next) next7 counts the week, not tonight only.
+// ---------------------------------------------------------------------------
+{
+  const s = sched(range("2026-11-10", "2026-11-23", 7), [["2026-11-24", 3], ["2026-11-25", 9], ["2026-11-27", 11], ["2026-11-28", 5], ["2026-11-29", 10], ["2026-11-30", 7]]);
+  const h = statusAt(NBA, s, "2026-11-24T18:00:00Z");
+  expect("NBA 2026-11-24: posted from the store, 45 games in the next 7 days", [h.postedSource, h.next7], ["schedule", 45]);
+  expect("posted label names the store", postedFrom(h), "7-day schedule store");
+  expect("posted label for football names the snapshot", postedFrom(statusAt(NFL, parse(REAL[NFL]), "2026-11-20T18:00:00Z")), "odds snapshot 2026-11-20");
 }
 
 if (failures > 0) {

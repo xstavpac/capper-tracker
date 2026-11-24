@@ -10,9 +10,12 @@
 //   - played games: game_results finals (the score feeds - ESPN / MLB / NHL),
 //     preseason rows excluded. NCAAB stores only finals that had picks
 //     (final-pick-gate.ts), so its counts are "games with picks".
-//   - posted games: the newest odds snapshot (The Odds API) no older than
-//     yesterday ET. Its horizon is whatever the Odds API lists: about a week
-//     for NFL / NCAAF, but only the current day for NBA, NHL, NCAAB and MLB.
+//   - posted games: for the daily leagues (NBA, NCAAB, NHL, MLB, WNBA) the
+//     7-day schedule store (schedule_days, ESPN / MLB Stats API, today..today+6
+//     ET) whenever it holds a row from today on; otherwise, and always for NFL /
+//     NCAAF, the newest odds snapshot (The Odds API) no older than yesterday ET,
+//     whose horizon is whatever the Odds API lists (about a week for football,
+//     only about the current day for the daily leagues).
 //   - feed_syncs: last success / last error per (feed, league).
 
 import type { AdminReport } from "@/lib/admin-report";
@@ -27,9 +30,23 @@ export const FEED_HEALTH_LEAGUES = [
   { key: "basketball_wnba", label: "WNBA" },
 ] as const;
 
-export type FeedName = "scores" | "odds";
-export const FEED_NAMES: FeedName[] = ["scores", "odds"];
-export const FEED_LABEL: Record<FeedName, string> = { scores: "Scores (ESPN / MLB / NHL)", odds: "Schedule + odds (The Odds API)" };
+export type FeedName = "scores" | "odds" | "schedule";
+export const FEED_NAMES: FeedName[] = ["scores", "odds", "schedule"];
+export const FEED_LABEL: Record<FeedName, string> = {
+  scores: "Scores (ESPN / MLB / NHL)",
+  odds: "Schedule + odds (The Odds API)",
+  schedule: "7-day schedule (ESPN / MLB Stats API)",
+};
+
+// Leagues whose "posted" side reads the 7-day schedule store (see the header).
+// Football keeps the odds snapshot, which already lists about a week ahead.
+export const SCHEDULE_POSTED_LEAGUES: ReadonlySet<string> = new Set([
+  "basketball_nba",
+  "basketball_ncaab",
+  "icehockey_nhl",
+  "baseball_mlb",
+  "basketball_wnba",
+]);
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -57,6 +74,15 @@ export const RECENT_DAYS = 14;
 //   Football's posted side lists ~a week ahead, which covers its weekly gaps
 //   (NFL Week 18 -> Wild Card is 6 days; NCAAF conference championships ->
 //   Army-Navy) - quietFutureDays 7 there.
+//   Re-checked 2026-11-25 when the daily leagues' posted side moved from the
+//   odds snapshot (today only) to the 7-day schedule store: unchanged. The new
+//   source only ever adds posted games, so (a) can fire only where it already
+//   did; with the week of lookahead a mid-season break now also clears (a) from
+//   the future side, and the backtest (feed-health-acceptance-test.ts, run with
+//   the 7-day posted horizon) still shows no warning on any real or modelled
+//   break and every outage caught within quietPastDays + 1. quietPastDays could
+//   now be lowered for the daily leagues (faster outage warnings); not done
+//   here, it needs its own backtest against a store that has some history.
 // - minRecent sits above the league's playoff tail, so the natural end of a
 //   season never trips (a): after the last final, the last 14 days hold only
 //   a handful of playoff games. NFL: Super Bowl + conf champ + divisional = 7
@@ -84,7 +110,9 @@ export const FEED_THRESHOLDS: Record<string, FeedThresholds> = {
 // Scores sync every 15 min (grade-picks) plus daily (refresh-scores): 6 h is
 // 24 missed runs. Odds seed once a day (refresh-odds 05:05 UTC) plus the
 // 4-hourly backfill: 26 h is a missed daily seed plus its grace.
-export const SYNC_STALE_HOURS: Record<FeedName, number> = { scores: 6, odds: 26 };
+// The schedule store is pulled once a day (refresh-scores 06:55 UTC): the same
+// 26 h as the odds seed.
+export const SYNC_STALE_HOURS: Record<FeedName, number> = { scores: 6, odds: 26, schedule: 26 };
 
 export type FeedSyncRow = { feed: FeedName; sportKey: string; lastSuccessAt: Date | null; lastErrorAt: Date | null; lastError: string | null };
 
@@ -95,7 +123,8 @@ export type LeagueFeedData = {
   lastGameAt: Date | null; // newest played game in the last 14 days
   next7: number; // posted, next 7 days
   nextGameAt: Date | null; // earliest posted game after now
-  postedFetchDate: string | null; // the odds snapshot the posted counts came from (null = none from today/yesterday)
+  postedFetchDate: string | null; // the odds snapshot the posted counts came from (null = none from today/yesterday, or the schedule store was used)
+  postedSource: "schedule" | "odds" | null; // where next7 / nextGameAt came from (null = no posted data at all)
   syncs: Partial<Record<FeedName, FeedSyncRow>>;
 };
 
@@ -132,7 +161,7 @@ export function leagueFeedStatus(d: LeagueFeedData, now: Date): LeagueFeedHealth
   if (quiet && d.past14 >= t.minRecent) {
     reasons.push(
       `${d.past14} games in the last ${RECENT_DAYS} days, then none played in ${t.quietPastDays}+ days and none posted for the next ${t.quietFutureDays}` +
-        (d.postedFetchDate ? "" : " (no odds snapshot from today or yesterday)")
+        (d.postedSource ? "" : " (no stored schedule and no odds snapshot from today or yesterday)")
     );
   }
 
@@ -174,7 +203,7 @@ export function feedHealth(rows: LeagueFeedData[], now: Date): LeagueFeedHealth[
 }
 
 export function emptyLeague(sportKey: string): LeagueFeedData {
-  return { sportKey, past7: 0, past14: 0, lastGameAt: null, next7: 0, nextGameAt: null, postedFetchDate: null, syncs: {} };
+  return { sportKey, past7: 0, past14: 0, lastGameAt: null, next7: 0, nextGameAt: null, postedFetchDate: null, postedSource: null, syncs: {} };
 }
 
 // The Feed health tab's red dot and the header badge's count.
@@ -182,6 +211,13 @@ export function feedHealthAlert(health: LeagueFeedHealth[]): string | null {
   const bad = health.filter((h) => h.status === "check_feed");
   if (bad.length === 0) return null;
   return `${bad.map((h) => h.label).join(", ")}: check feed - ${bad[0].reasons[0]}`;
+}
+
+// Where a league's posted counts came from, for the report and the tab.
+export function postedFrom(h: Pick<LeagueFeedData, "postedSource" | "postedFetchDate">): string {
+  if (h.postedSource === "schedule") return "7-day schedule store";
+  if (h.postedSource === "odds") return `odds snapshot ${h.postedFetchDate}`;
+  return "no stored schedule, no odds snapshot from today/yesterday";
 }
 
 // "Copy for Claude" for the Feed health tab.
@@ -195,7 +231,7 @@ export function feedHealthReport(health: LeagueFeedHealth[], now: Date): AdminRe
     return `${feed} sync: last success ${fmt(s.lastSuccessAt)}${s.lastErrorAt ? `, last error ${fmt(s.lastErrorAt)}: ${s.lastError ?? ""}` : ""}`;
   };
   return {
-    title: "Feed health report - stored schedules per league (game_results + latest odds snapshot + feed_syncs)",
+    title: "Feed health report - stored schedules per league (game_results + 7-day schedule store / latest odds snapshot + feed_syncs)",
     header: [`As of ${fmt(now)}. ${health.filter((h) => h.status === "check_feed").length} of ${health.length} leagues flagged.`],
     sections: [
       {
@@ -205,9 +241,10 @@ export function feedHealthReport(health: LeagueFeedHealth[], now: Date): AdminRe
           flags: h.reasons,
           lines: [
             `played: ${h.past7} in the last 7 days, ${h.past14} in 14; last ${fmt(h.lastGameAt)}`,
-            `posted: ${h.next7} in the next 7 days; next ${fmt(h.nextGameAt)} (snapshot ${h.postedFetchDate ?? "none from today/yesterday"})`,
+            `posted: ${h.next7} in the next 7 days; next ${fmt(h.nextGameAt)} (${postedFrom(h)})`,
             syncLine(h, "scores"),
             syncLine(h, "odds"),
+            syncLine(h, "schedule"),
             `thresholds: quiet ${h.thresholds.quietPastDays}d back / ${h.thresholds.quietFutureDays}d ahead after >= ${h.thresholds.minRecent} games in ${RECENT_DAYS}d`,
             ...(h.note ? [h.note] : []),
           ],

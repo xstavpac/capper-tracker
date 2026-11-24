@@ -6,6 +6,7 @@ import { cacheKeys } from "@/lib/cache-keys";
 import { ADMIN_STATUS_CACHE_SECONDS } from "@/lib/admin-thresholds";
 import {
   FEED_HEALTH_LEAGUES,
+  SCHEDULE_POSTED_LEAGUES,
   emptyLeague,
   feedHealth,
   type FeedName,
@@ -21,12 +22,18 @@ import {
 //   posted   - per league, the newest odds snapshot from today or yesterday
 //              (ET), its games' commence times counted inside Postgres; the
 //              snapshot blob itself never leaves the database
+//   scheduled - per daily league, the 7-day schedule store's rows from today
+//              ET on (schedule_days), start times counted inside Postgres
+//              (postponed / cancelled left out); the games JSON never leaves
+//              the database either. Used over "posted" whenever present.
 //   syncs    - feed_syncs, at most 14 small rows
 // About 2-3 KB back per view. No polling: the tab reads on page load, and the
 // header badge / tab dot read the cached count (getFeedHealthCheckCount).
 
 type Played = { sportKey: string; past7: number; past14: number; lastGameAt: string | null };
 type Posted = { sportKey: string; fetchDate: string; next7: number; nextGameAt: string | null };
+type Scheduled = { sportKey: string; next7: number; nextGameAt: string | null };
+type FeedHealthRow = { played: Played[]; posted: Posted[]; scheduled?: Scheduled[]; syncs: Sync[] };
 type Sync = { feed: FeedName; sportKey: string; lastSuccessAt: string | null; lastErrorAt: string | null; lastError: string | null };
 
 const LEAGUE_KEYS = FEED_HEALTH_LEAGUES.map((l) => l.key);
@@ -40,7 +47,9 @@ export function feedHealthSql(now: Date): Prisma.Sql {
   const wall = (d: Date) => d.toISOString().replace("Z", "");
   const nowIso = now.toISOString();
   const yesterdayKey = easternDateKey(new Date(now.getTime() - DAY));
+  const todayKey = easternDateKey(now);
   const keys = Prisma.join(LEAGUE_KEYS);
+  const scheduleKeys = Prisma.join([...SCHEDULE_POSTED_LEAGUES]);
   return Prisma.sql`
     SELECT
       (SELECT coalesce(json_agg(p), '[]'::json) FROM (
@@ -71,6 +80,18 @@ export function feedHealthSql(now: Date): Prisma.Sql {
          ) g ON true
          GROUP BY s."sportKey", s."fetchDate"
        ) u) AS posted,
+      (SELECT coalesce(json_agg(c), '[]'::json) FROM (
+         SELECT d."sportKey",
+                count(*) FILTER (WHERE g.playable AND g.st > ${nowIso}::timestamptz AND g.st <= ${nowIso}::timestamptz + interval '7 days')::int AS next7,
+                min(g.st) FILTER (WHERE g.playable AND g.st > ${nowIso}::timestamptz) AS "nextGameAt"
+         FROM schedule_days d
+         LEFT JOIN LATERAL (
+           SELECT (e->>'start')::timestamptz AS st, coalesce(e->>'status', '') NOT IN ('postponed', 'cancelled') AS playable
+           FROM jsonb_array_elements(CASE WHEN jsonb_typeof(d.games) = 'array' THEN d.games ELSE '[]'::jsonb END) e
+         ) g ON true
+         WHERE d."sportKey" IN (${scheduleKeys}) AND d."gameDate" >= ${todayKey}
+         GROUP BY d."sportKey"
+       ) c) AS scheduled,
       (SELECT coalesce(json_agg(f), '[]'::json) FROM (
          SELECT feed, "sportKey", "lastSuccessAt", "lastErrorAt", "lastError" FROM feed_syncs WHERE "sportKey" IN (${keys})
        ) f) AS syncs
@@ -80,13 +101,16 @@ export function feedHealthSql(now: Date): Prisma.Sql {
 // json_agg renders timestamp(3) without a zone; those hold UTC.
 const utc = (s: string | null) => (s === null ? null : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z"));
 
-export function parseFeedHealthRow(row: { played: Played[]; posted: Posted[]; syncs: Sync[] }): LeagueFeedData[] {
+export function parseFeedHealthRow(row: FeedHealthRow): LeagueFeedData[] {
   return LEAGUE_KEYS.map((sportKey) => {
     const d = emptyLeague(sportKey);
     const p = row.played.find((x) => x.sportKey === sportKey);
     if (p) Object.assign(d, { past7: p.past7, past14: p.past14, lastGameAt: utc(p.lastGameAt) });
     const u = row.posted.find((x) => x.sportKey === sportKey);
-    if (u) Object.assign(d, { next7: u.next7, nextGameAt: utc(u.nextGameAt), postedFetchDate: u.fetchDate });
+    if (u) Object.assign(d, { next7: u.next7, nextGameAt: utc(u.nextGameAt), postedFetchDate: u.fetchDate, postedSource: "odds" });
+    // A daily league with stored schedule days from today on reads them instead.
+    const c = SCHEDULE_POSTED_LEAGUES.has(sportKey) ? row.scheduled?.find((x) => x.sportKey === sportKey) : undefined;
+    if (c) Object.assign(d, { next7: c.next7, nextGameAt: utc(c.nextGameAt), postedFetchDate: null, postedSource: "schedule" });
     for (const s of row.syncs.filter((x) => x.sportKey === sportKey)) {
       const sync: FeedSyncRow = { feed: s.feed, sportKey, lastSuccessAt: utc(s.lastSuccessAt), lastErrorAt: utc(s.lastErrorAt), lastError: s.lastError };
       d.syncs[s.feed] = sync;
@@ -96,7 +120,7 @@ export function parseFeedHealthRow(row: { played: Played[]; posted: Posted[]; sy
 }
 
 export async function loadFeedHealth(now = new Date()): Promise<LeagueFeedHealth[]> {
-  const [row] = await prisma.$queryRaw<{ played: Played[]; posted: Posted[]; syncs: Sync[] }[]>(feedHealthSql(now));
+  const [row] = await prisma.$queryRaw<FeedHealthRow[]>(feedHealthSql(now));
   return feedHealth(parseFeedHealthRow(row), now);
 }
 

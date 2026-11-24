@@ -15,6 +15,7 @@ import { persistOddsApiUsage } from "@/server/data/odds-api-usage";
 import { mlbLogoUrl, normalizeEspnLogoUrl } from "@/lib/team-logo";
 import { getBoardGamesProjection, getYesterdayBoardGames } from "@/server/data/odds-projections";
 import { OddsSnapshotMissingError, readSnapshotOrSeed, type OddsSeedDeps } from "@/server/data/odds-seed-claim";
+import { getUpcomingScheduleGames } from "@/server/data/schedule-store";
 
 // Live scores are current-ish data polled every 25s per open /live tab -
 // keep the window tight (env-overridable, clamped 1-300s).
@@ -2333,8 +2334,8 @@ export function resolveScheduleGameFromFeeds(
   teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
   referenceTime: Date,
   gameNumber: 1 | 2 | null = null,
-  // Schedule-only games past the score feed's window that have no odds line
-  // (see getNcaafUpcomingFcsGames). Same standing as the odds feed: consulted
+  // Schedule-only games past the score feed's window: the stored 7-day schedule
+  // (schedule-store.ts, today+2..today+6) and NCAAF's FCS games (see getNcaafUpcomingFcsGames). Same standing as the odds feed: consulted
   // only when the score feed has no same-day or upcoming match. A game the
   // odds feed also lists is taken from the odds feed, not doubled.
   scheduleGames: ScoreGame[] = [],
@@ -2378,12 +2379,25 @@ export function resolveScheduleGameFromFeeds(
       teamMatches(g) &&
       inWindow(g) &&
       !isFinishedGame(g) &&
-      !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
+      !fromOdds.some((o) => isListingTwin(o, g))
   );
   const ahead = [...fromOdds, ...fromSchedule];
   if (ahead.length > 0) return done(pickBestScheduleCandidate(ahead, referenceTime, gameNumber));
 
   return done(markFinishedOnly(pickBestScheduleCandidate(fromScores, referenceTime, gameNumber)));
+}
+
+// A schedule listing the odds feed already has: same teams AND a start within
+// FINISHED_TWIN_DRIFT_MS. Teams alone used to be enough while the only schedule
+// listings were FCS games (no odds line, no rematch within a week); the 7-day
+// schedule store carries series (NHL / MLB play the same pair on back-to-back
+// days), and game 2 must not be dropped as a copy of game 1.
+function isListingTwin(o: { homeTeam: string; awayTeam: string; commenceTime: string }, g: { homeTeam: string; awayTeam: string; commenceTime: string }): boolean {
+  return (
+    teamNamesMatch(o.homeTeam, g.homeTeam) &&
+    teamNamesMatch(o.awayTeam, g.awayTeam) &&
+    Math.abs(Date.parse(o.commenceTime) - Date.parse(g.commenceTime)) <= FINISHED_TWIN_DRIFT_MS
+  );
 }
 
 // How far apart an odds/schedule listing and a finished score-feed game may start and still be the same game (the
@@ -2440,7 +2454,7 @@ export function resolveTokenDayGameFromFeeds(
       teamMatches(g) &&
       inWindow(g) &&
       !isScoreTwin(g) &&
-      !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
+      !fromOdds.some((o) => isListingTwin(o, g))
   );
   const listed = [...fromOdds, ...fromSchedule];
   const listedOnDay = listed.filter((g) => dayOf(g) === target);
@@ -2499,6 +2513,9 @@ export type ResolveGameOpts = {
   // The bot API's day rule (API_TOKEN batches only): matched by resolveTokenDayGameFromFeeds instead of
   // resolveScheduleGameFromFeeds. Unset everywhere else, so every other caller matches exactly as before.
   day?: TokenDayMatch;
+  // Where the stored 7-day schedule comes from (schedule-store.ts getUpcomingScheduleGames: today+2..today+6,
+  // past the score feed's window). Test seam; every production caller leaves it unset.
+  getSchedule?: (sportKey: string) => Promise<ScoreGame[]>;
 };
 
 // upcomingOnly's rule: not final. A score-feed game is live or preview (postponed / cancelled never reach a pool -
@@ -2547,8 +2564,18 @@ async function resolveScheduleGame(
     inProgressOnly = false,
     excludeFinal = false,
     day,
+    getSchedule = getUpcomingScheduleGames,
   }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
+  // Schedule-only listings past the score feed's window: the stored 7-day schedule (every league it covers) plus,
+  // for NCAAF, the FCS week-ahead fetch. Read only where the odds feed is - when the score feed has no match.
+  const listings = async (): Promise<ScoreGame[]> => {
+    const [stored, fcs] = await Promise.all([
+      fetchFeedOrEmpty("stored schedule", () => getSchedule(sportKey)),
+      sportKey === "americanfootball_ncaaf" ? fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames()) : Promise.resolve([] as ScoreGame[]),
+    ]);
+    return mergeScoreGamesById(stored, fcs);
+  };
   const teamMatches = (g: { homeTeam: string; awayTeam: string }) =>
     matchesTeam(g) &&
     (!upcomingOnly || notFinal(g as { status?: string })) &&
@@ -2570,8 +2597,7 @@ async function resolveScheduleGame(
         easternDateKey(new Date(g.commenceTime)) === target
     );
     const dayOdds = scoreHasDay ? [] : await fetchFeedOrEmpty("odds", () => getOdds(sportKey));
-    const daySchedule =
-      scoreHasDay || sportKey !== "americanfootball_ncaaf" ? [] : await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames());
+    const daySchedule = scoreHasDay ? [] : await listings();
     return resolveTokenDayGameFromFeeds(scoreGames, dayOdds, teamMatches, referenceTime, gameNumber, day, daySchedule, sportKey);
   }
 
@@ -2579,10 +2605,7 @@ async function resolveScheduleGame(
     (g) => teamMatches(g) && g.status !== "final" && !isUnplayed(g.status) && withinResolveWindow(g.commenceTime, referenceTime)
   );
   const oddsGames = scoreHasUpcoming ? [] : await fetchFeedOrEmpty("odds", () => getOdds(sportKey));
-  const scheduleGames =
-    scoreHasUpcoming || sportKey !== "americanfootball_ncaaf"
-      ? []
-      : await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames());
+  const scheduleGames = scoreHasUpcoming ? [] : await listings();
   return resolveScheduleGameFromFeeds(scoreGames, oddsGames, teamMatches, referenceTime, gameNumber, scheduleGames, { excludeFinal, sportKey });
 }
 
