@@ -42,6 +42,7 @@ import {
   type ExistingPickRow,
 } from "@/server/data/duplicate-db-match";
 import { resolveImportRefs, type PendingPickInsert, type ResolveStats } from "@/server/data/import-refs";
+import { readCappersByNormalizedNames } from "@/server/data/capper-find-or-create";
 import {
   ENTITLEMENT_TX_OPTIONS,
   insertPicksInTransaction,
@@ -157,7 +158,17 @@ export async function insertPicksDeduped(
     // Which existing capper / sport each row refers to. A capper or sport that
     // does not exist yet cannot have a logged pick, so those rows are only
     // compared with the earlier rows of this request.
-    const existingCappers = await tx.capper.findMany({ where: { userId }, select: { id: true, name: true } });
+    // Only the cappers this request names, never the whole roster: this runs once
+    // per ingested message / recipient copy, and the roster read was the app's
+    // largest row consumer (one full read per call, ~200+ rows each). A row that
+    // already carries both ids (the manual form) names nothing; any other row's
+    // capper name is looked up here or by resolveImportRefs below, both of which
+    // match by normalizeName, so this set is all either of them can ever match.
+    const existingCappers = await readCappersByNormalizedNames(
+      tx,
+      userId,
+      rows.filter((r) => !(r.capperId && r.sportId)).map((r) => r.capperName)
+    );
     const capperIdByNormalizedName = new Map<string, string>();
     for (const c of existingCappers) {
       const key = normalizeName(c.name);
@@ -259,7 +270,7 @@ export async function insertPicksDeduped(
       // transaction, exactly as before.
       const strip = ({ overrideDuplicate: _o, raw: _r, capperId: _c, sportId: _s, ...rest }: DedupPickRow) => rest;
       const needRefs = survivors.filter((p) => !(p.row.capperId && p.row.sportId));
-      // The roster read at the top of this transaction (same lock) is passed on, not read again.
+      // The targeted capper read at the top of this transaction (same lock) is passed on, not read again.
       const resolved = await resolveImportRefs(db, userId, needRefs.map((p) => strip(p.row)), existingCappers, resolveStats);
       const resolvedByIndex = new Map(needRefs.map((p, k) => [p.index, resolved[k]]));
       return survivors.map((p): PickInsertData => {

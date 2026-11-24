@@ -92,6 +92,7 @@ expect(
     "Capper include",
     "Capper merge (pick read)",
     "Capper names (import / find-or-create)",
+    "Capper names (targeted, pick write)",
     "Capper roster",
     "Cappers with pick counts",
     "Category panel",
@@ -275,6 +276,28 @@ const fixture = (name: string) => {
   const lines = formatClaudeReport(view).split("\n");
   expect("report: the expected note follows the label", lines.includes("1. Odds for tendencies [expected (daily cron, full history)] - calls 6, rows 9,881, avg 1,647 rows/call, exec 1,950 ms"), true);
   expect("report: over-ceiling reason", lines.includes("   [FLAG] Averages 6,000 rows/call, above its expected-read ceiling of 5,000"), true);
+
+  // The monitor's own reads and writes never show, and never flag, even far over the threshold.
+  const self = buildMonitorView(
+    {
+      statsReset: null,
+      dealloc: 0,
+      totalRows: 0,
+      statementCount: 5,
+      top: [
+        { queryid: "s1", query: asPgStatStatements(fixture("DB Monitor self-read of pg_stat_statements")), calls: 30, rows: 90000, totalExecMs: 50 },
+        { queryid: "s2", query: fixture("DB Monitor self-write, baseline upsert"), calls: 30, rows: 30000, totalExecMs: 50 },
+        { queryid: "s3", query: fixture("DB Monitor self-read of the baselines"), calls: 30, rows: 30000, totalExecMs: 50 },
+        { queryid: "s4", query: 'INSERT INTO query_stat_daily (id, date, label, calls, rows, "avgRows", "statsReset") VALUES ($1, $2, $3, $4, $5, $6, $7)', calls: 30, rows: 30, totalExecMs: 5 },
+        { queryid: "3", query: fixture("tendency game results"), calls: 6, rows: 2529, totalExecMs: 160 },
+      ],
+    },
+    500,
+    new Date()
+  );
+  expect("view: the monitor's own statements are left out; app rows stay", self.rows.map((r) => r.queryid), ["3"]);
+  expect("view: and raise no flag", self.flaggedCount, 0);
+  expect("report: none of them in the text", /pg_stat_statements s LEFT JOIN|query_stat_(?:baselines|daily)/.test(formatClaudeReport(self)), false);
 }
 
 // ---- 5. Byte estimate ----

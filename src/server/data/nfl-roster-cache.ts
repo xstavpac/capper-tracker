@@ -48,19 +48,14 @@ export async function getCachedNflGradingRoster(): Promise<RosterPlayer[]> {
   return (await readAll()).grading;
 }
 
-// One hour - long enough for a table this slow-moving. Wrapped with
-// cachedByTag (Next's shared Data Cache, with the bare-script/tsx-test
-// fallback that helper already provides) rather than the memoized read above:
-// this is fetched fresh on every bulk-import page load (see
-// get-nfl-roster-names.ts's server action), a much higher-traffic path than
-// the recovery and grading callers, so an uncached read here would be a real
-// repeated-Postgres-egress cost for no benefit. Active players only - it feeds
-// import name matching. The refresh cron revalidates this tag after every
-// committed NFL load; a manual scripts/load-nfl-roster.ts run is picked up by
-// the next of that run or the one-hour TTL.
+// The active players' full names, for the bulk-import parser (get-nfl-roster-names.ts's
+// server action, the catalog-import orchestrator). Served from the same memoized,
+// day-cached roster read as the two views above - it used to be its own 1 h Data Cache
+// entry over `findMany({ where: { active: true } })`, which re-read ~780 rows on every
+// expiry (DB Monitor, 2026-11-24: 236 calls since 2026-10-26, the largest roster read).
+// The rows change only through the daily refresh-rosters cron, which revalidates
+// rosterRows("NFL"); a manual scripts/load-nfl-roster.ts run is picked up by the next
+// cron or the 24 h TTL, as for grading.
 export async function getCachedNflRosterFullNames(): Promise<string[]> {
-  return cachedByTag(cacheKeys.nflRosterFullNames(), 60 * 60, async () => {
-    const rows = await prisma.nflRosterPlayer.findMany({ where: { active: true }, select: { fullName: true } });
-    return rows.map((r) => r.fullName);
-  });
+  return (await readAll()).matching.map((p) => p.playerName);
 }

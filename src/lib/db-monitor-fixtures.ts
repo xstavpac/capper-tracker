@@ -447,6 +447,13 @@ export const STATEMENT_FIXTURES: StatementFixture[] = [
     "expectFlags": []
   },
   {
+    "name": "pick write: only the named cappers (readCappersByNormalizedNames, via insertPicksDeduped)",
+    "run": "fix/db-monitor-followups",
+    "sql": "\n    SELECT id, name FROM cappers\n    WHERE \"userId\" = $1\n      AND regexp_replace(lower(translate(name, $2, 'ik')), '[^a-z0-9]', '', 'g') = ANY($3::text[])",
+    "expectLabel": "Capper names (targeted, pick write)",
+    "expectFlags": []
+  },
+  {
     "name": "NFL roster names (getCachedNflRosterFullNames)",
     "run": "aacbcd6",
     "sql": "SELECT \"public\".\"nfl_roster_players\".\"id\", \"public\".\"nfl_roster_players\".\"fullName\" FROM \"public\".\"nfl_roster_players\" WHERE \"public\".\"nfl_roster_players\".\"active\" = $1 OFFSET $2",

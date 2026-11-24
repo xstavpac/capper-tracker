@@ -12,6 +12,9 @@ export const cacheKeys = {
   cappersPage: (userId: string, params: string) => `cappers-page:${userId}:${params}`,
   capperPage: (userId: string, capperId: string, params: string) => `capper-page:${userId}:${capperId}:${params}`,
   cappersWithPickCounts: (userId: string) => `cappers-with-pick-counts:${userId}`,
+  // The /live category panel's ranking rows for one sport (queryCategoryPanel). Read only from the
+  // user's picks (and the never-renamed sports table), so the dashboard(userId) TAG covers it.
+  sportCategoryPanel: (userId: string, sportName: string) => `sport-category-panel:v1:${userId}:${sportName}`,
   // The user's capper roster (id, name, colorTag, isFavorite; favorites first). Its OWN tag, not
   // the dashboard one: the dashboard tag is also busted by every grading pass and pick write, none
   // of which touch the roster, and each bust would send the next page load back to the database.
@@ -76,19 +79,12 @@ export const cacheKeys = {
   // batch call per sport. Keyed by sport + the sport's own game id (MLB:
   // gamePk) so concurrent games never collide in the cache or the ttl-memo.
   liveGameState: (sportKey: string, gameId: string) => `live-game-state:${sportKey}:${gameId}`,
-  // The NflRosterPlayer table's full names only (no team/position/espnId) -
-  // what the client-side bulk-import parser fetches to give parseCatalog's
-  // findAmbiguousNickname player-prop guard roster data without shipping the
-  // whole roster's other columns over the wire. Only the roster loader writes
-  // the table: the daily refresh-rosters cron revalidates this tag after every
-  // committed NFL load, 0 rows written included (rosterCacheTagsToRevalidate,
-  // refresh-rosters.ts), which also picks up a manual scripts/load-nfl-roster.ts
-  // --commit; until that run, the TTL.
-  nflRosterFullNames: () => "nfl-roster-full-names",
   // One league's roster rows (nfl/nhl/nba/mlb-roster-cache.ts readAll), behind
-  // both the import name matching and the prop-grading views. Same writers and
-  // invalidation as nflRosterFullNames: the cron revalidates a league's tag
-  // after every committed load of that league.
+  // the import name matching, the prop-grading views and the NFL bulk-import name
+  // list (getCachedNflRosterFullNames). Only the roster loader writes the tables:
+  // the daily refresh-rosters cron revalidates a league's tag after every committed
+  // load of that league, 0 rows written included (rosterCacheTagsToRevalidate),
+  // which also picks up a manual scripts/load-*-roster.ts --commit; until then, the TTL.
   rosterRows: (league: string) => `roster-rows:${league.toLowerCase()}`,
   // Process-local memo key for a sport's id by name (sport-ids.ts). No tag:
   // sports rows are never renamed or deleted, and a miss is never cached.

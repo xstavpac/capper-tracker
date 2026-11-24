@@ -117,6 +117,34 @@ export async function findOrCreateCapper(
   return { capper: winner, created: false };
 }
 
+// The user's cappers whose normalizeName is one of `names`' normalized forms -
+// the targeted twin of reading the whole roster. Exhaustive for those keys, so a
+// caller that only ever looks up these names (insertPicksDeduped, and the
+// resolveImportRefs / findOrCreateCapper scans it hands the result to) sees
+// exactly what a full roster read would have shown it. Names whose normalized
+// form is empty are skipped: no rule matches them by normalized name.
+//
+// The SQL mirrors normalizeName (JS toLowerCase, then strip [^a-z0-9]). The only
+// characters JS lowercases INTO ASCII are U+0130 (I with dot, -> "i" + a
+// combining dot the strip removes) and U+212A (Kelvin sign, -> "k"); translate()
+// maps both first so Postgres' collation-dependent lower() can't disagree. The
+// rows are re-checked with normalizeName in JS, so the SQL can only widen, never
+// decide, a match.
+export async function readCappersByNormalizedNames(
+  db: Db,
+  userId: string,
+  names: readonly string[]
+): Promise<{ id: string; name: string }[]> {
+  const keys = Array.from(new Set(names.map(normalizeName).filter((k) => k !== "")));
+  if (keys.length === 0) return [];
+  const rows = await db.$queryRaw<{ id: string; name: string }[]>`
+    SELECT id, name FROM cappers
+    WHERE "userId" = ${userId}
+      AND regexp_replace(lower(translate(name, ${"İK"}, 'ik')), '[^a-z0-9]', '', 'g') = ANY(${keys}::text[])`;
+  const wanted = new Set(keys);
+  return rows.filter((c) => wanted.has(normalizeName(c.name)));
+}
+
 // True if `name` collides with one of this user's OTHER cappers under the same
 // rules as creation (strict normalizeName match, then the index expression).
 export async function findCapperNameCollision(

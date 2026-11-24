@@ -38,6 +38,8 @@ import {
   type StreakRow,
 } from "@/server/data/capper-list-aggregates";
 import { getCappersForUser } from "@/server/data/cappers";
+import { cachedByTag } from "@/server/data/cached";
+import { cacheKeys } from "@/lib/cache-keys";
 
 // SportCategoryPanelData / CategoryLeaderboardEntry come from stats.ts, not
 // from sport-category-panel-legacy.ts - that file is a parity-test/T2-harness-
@@ -110,9 +112,24 @@ export function specialistTagsFromCandidateRows(rows: SpecialistCandidateRow[]):
 // Category panel ("Best at...")
 // ---------------------------------------------------------------------------
 
+// The ranking rows are cached per (user, sport) in the shared Data Cache, tagged with
+// the user's dashboard tag: they read only the user's picks (plus the sports table,
+// whose rows are never renamed), and every pick write and grading pass revalidates
+// that tag (docs/cache-invalidation-contract.md). 600 s is a backstop for writes that
+// have no Next context (scripts/backfill-pick-category.ts, hand-run SQL). The SQL is
+// unchanged, so the DB Monitor label stays "Category panel". Capper names come from
+// the roster's own cache (getCappersForUser), so a rename never waits on this one.
+// DB Monitor 2026-11-24: ~100 calls/day at ~40 ms each, the top statement by CPU.
+const CATEGORY_PANEL_CACHE_SECONDS = 600;
+
 export async function getSportCategoryPanelData(userId: string, sportName: string): Promise<SportCategoryPanelData> {
   const [rows, roster] = await Promise.all([
-    queryCategoryPanel({ userId, sportName, chipSet: chipSetForLeague(sportName), minPicks: CATEGORY_LEADERBOARD_MIN_PICKS, limit: CATEGORY_LEADERBOARD_LIMIT }),
+    cachedByTag(
+      cacheKeys.sportCategoryPanel(userId, sportName),
+      CATEGORY_PANEL_CACHE_SECONDS,
+      () => queryCategoryPanel({ userId, sportName, chipSet: chipSetForLeague(sportName), minPicks: CATEGORY_LEADERBOARD_MIN_PICKS, limit: CATEGORY_LEADERBOARD_LIMIT }),
+      [cacheKeys.dashboard(userId)]
+    ),
     getCappersForUser(userId),
   ]);
 

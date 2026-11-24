@@ -150,12 +150,11 @@ async function main() {
 
   console.log("\n########## PART F: cache tags the cron revalidates ##########");
   {
-    // A first load: every league writes, so every league's cached roster drops (and NFL's name list).
+    // A first load: every league writes, so every league's cached roster drops (NFL's name list is served from it).
     const { tableFor } = spyTables();
     const out = await refreshRosters({ leagues: ALL.map((l) => leagueConfig(l, async () => roster(l))), tableFor, now: IN_SEASON_ALL });
-    check("every league wrote: each league's roster tag, plus NFL's name list", rosterCacheTagsToRevalidate(out), [
+    check("every league wrote: each league's roster tag", rosterCacheTagsToRevalidate(out), [
       "roster-rows:nfl",
-      "nfl-roster-full-names",
       "roster-rows:nhl",
       "roster-rows:nba",
       "roster-rows:mlb",
@@ -171,9 +170,9 @@ async function main() {
       now: IN_SEASON_ALL,
     });
     check(
-      "committed with 0 rows written: still each league's tag (and NFL's name list)",
+      "committed with 0 rows written: still each league's tag",
       { results: unchanged.map((o) => [o.status, "rowsWritten" in o ? o.rowsWritten : null]), tags: rosterCacheTagsToRevalidate(unchanged) },
-      { results: [["committed", 0], ["committed", 0]], tags: ["roster-rows:nfl", "nfl-roster-full-names", "roster-rows:nhl"] }
+      { results: [["committed", 0], ["committed", 0]], tags: ["roster-rows:nfl", "roster-rows:nhl"] }
     );
 
     // Aborted, failed and offseason-skipped leagues wrote nothing and get no tag; the committed league does.

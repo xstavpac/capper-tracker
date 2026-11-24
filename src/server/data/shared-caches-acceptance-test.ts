@@ -165,6 +165,23 @@ async function main() {
     const roster = cappers.slice(cappers.indexOf("export async function getCappersWithPickCounts"), cappers.indexOf("async function loadCappersWithPickCounts"));
     expect("capper roster is tagged with the user's dashboard tag", /cacheKeys\.dashboard\(userId\)/.test(roster), true);
 
+    const adapter = src("src/server/data/pick-aggregates-cappers-adapter.ts");
+    const panel = adapter.slice(adapter.indexOf("export async function getSportCategoryPanelData"));
+    expect(
+      "/live category panel rows: keyed per user AND sport, tagged with the user's dashboard tag, names from the roster's own cache",
+      [
+        /cachedByTag\(\s*cacheKeys\.sportCategoryPanel\(userId, sportName\),\s*CATEGORY_PANEL_CACHE_SECONDS,\s*\(\) => queryCategoryPanel\(/.test(panel),
+        /\[cacheKeys\.dashboard\(userId\)\]/.test(panel),
+        /getCappersForUser\(userId\)/.test(panel),
+      ],
+      [true, true, true]
+    );
+    expect(
+      "category panel key: user and sport both change it",
+      [cacheKeys.sportCategoryPanel("u1", "NFL") === cacheKeys.sportCategoryPanel("u2", "NFL"), cacheKeys.sportCategoryPanel("u1", "NFL") === cacheKeys.sportCategoryPanel("u1", "NBA")],
+      [false, false]
+    );
+
     const layout = src("src/app/(app)/layout.tsx");
     expect("layout reads flags from the shared snapshot only", [/getNavFeatureFlags\(/.test(layout), /isFeatureEnabledForUser/.test(layout)], [true, false]);
     // /admin's pages gate through admin-gate.ts (pinned in db-monitor-acceptance-test.ts).

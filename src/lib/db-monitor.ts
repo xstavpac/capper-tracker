@@ -307,6 +307,14 @@ export const STATEMENT_LABELS: StatementLabel[] = [
     matches: (s) => reads(s, "cappers") && whereIs(s, /^"cappers"\."userId" = \$\d+$/) && !has(s, /\bORDER BY\b/) && !has(s, /"_aggr_count_picks"/),
   },
   {
+    // Only the cappers a pick write names, matched on the normalizeName twin in SQL: replaced
+    // insertPicksDeduped's whole-roster read (the "Capper names" entry above), so a call returns
+    // about one row per distinct capper in the request, not the user's whole roster.
+    label: "Capper names (targeted, pick write)",
+    source: "readCappersByNormalizedNames (capper-find-or-create.ts), via insertPicksDeduped: imports, ingest, recipient copies",
+    matches: (s) => reads(s, "cappers") && has(s, /regexp_replace\(lower\(translate\(name, /) && has(s, /= ANY\(\$\d+::text\[\]\)/),
+  },
+  {
     // Prisma's follow-up read for `include: { capper: ... }` on a picks
     // findMany. Each IN-list length is its own pg_stat_statements entry.
     label: "Capper include",
@@ -480,7 +488,7 @@ export const STATEMENT_LABELS: StatementLabel[] = [
   },
   {
     label: "NFL roster names (bulk import)",
-    source: "getCachedNflRosterFullNames (nfl-roster-cache.ts, 1h Data Cache)",
+    source: "getCachedNflRosterFullNames before this branch (its own 1 h Data Cache); it now serves from the roster cache above, so this shape stops growing",
     matches: (s) => reads(s, "nfl_roster_players") && whereIs(s, /^"nfl_roster_players"\."active" = \$\d+$/),
   },
   // ---- Capper merge, build-time migrations ----
@@ -728,13 +736,27 @@ export type MonitorView = {
   flaggedCount: number;
 };
 
+// The monitor's own statements (the db-stats-snapshot cron's pg_stat_statements read,
+// its query_stat_baselines / query_stat_daily reads and writes): bookkeeping, not app
+// traffic, so they never appear in the list or raise a flag. loadDbMonitorSnapshot
+// also leaves them out of its top-N in SQL, so the list stays full; this is the
+// backstop for a snapshot read some other way.
+export function isMonitorSelfStatement(s: StatementShape, label: string | null): boolean {
+  return (
+    (label !== null && label.startsWith("DB Monitor: self-")) ||
+    /\bpg_stat_statements\b/.test(s.text) ||
+    /\bquery_stat_(?:baselines|daily)\b/.test(s.text)
+  );
+}
+
 export function buildMonitorView(raw: RawSnapshot, threshold: number, now: Date): MonitorView {
-  const rows = raw.top.map((st): MonitorRow => {
+  const rows = raw.top.flatMap((st): MonitorRow[] => {
     const shape = describeStatement(st.query);
     const label = labelFor(shape);
+    if (isMonitorSelfStatement(shape, label)) return [];
     const avgRows = st.calls > 0 ? st.rows / st.calls : 0;
     const expected = expectedFor(label);
-    return {
+    return [{
       queryid: st.queryid,
       label,
       expected: expected && avgRows <= expected.maxAvgRows ? expected.note : null,
@@ -745,7 +767,7 @@ export function buildMonitorView(raw: RawSnapshot, threshold: number, now: Date)
       text: redactLiterals(shape.tail),
       estBytes: st.rows * approxRowBytes(shape),
       flags: redFlagsFor(shape, label, avgRows, threshold),
-    };
+    }];
   });
   return {
     statsReset: raw.statsReset,
