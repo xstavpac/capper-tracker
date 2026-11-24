@@ -28,7 +28,7 @@ import { traceModeOf, traceSettings } from "@/lib/parlay/generator-trace";
 import { normalizeMinWinPct } from "@/lib/parlay/gate";
 import { normalizeFavoritesOnly } from "@/lib/parlay/favorites-only";
 import { normalizeIncludeLive } from "@/lib/parlay/include-live";
-import { legCapRejection, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
+import { legCapRejection, MAX_PARLAY_LEGS, MAX_POOL_REQUEST_PICKS, type ParlayRejection } from "@/lib/parlay/leg-cap";
 import { selectedCategories, toIncludeSelection, toPickMix } from "@/lib/parlay/include-picks";
 import {
   buildGeneratedParlay,
@@ -84,7 +84,9 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
   if (!Number.isFinite(legCount)) return { error: INVALID_REQUEST };
   const rejection = legCapRejection(legCount);
   if (rejection) return rejection;
-  const fillFrom: FillFrom = s.fillFrom === "YOUR_PICKS_ONLY" ? "YOUR_PICKS_ONLY" : "BEST_AVAILABLE";
+  const fillFrom: FillFrom = s.fillFrom === "YOUR_PICKS_ONLY" || s.fillFrom === "COMBINED" ? s.fillFrom : "BEST_AVAILABLE";
+  // Combined's split: a whole number of legs in range, else absent (the engine's default, half).
+  const manualSlots = typeof s.manualSlots === "number" && Number.isInteger(s.manualSlots) && s.manualSlots >= 0 && s.manualSlots <= MAX_PARLAY_LEGS ? s.manualSlots : null;
   const include = toIncludeSelection(s.include);
   const parsedDraw = parseGenerateDraw(draw);
   return {
@@ -98,6 +100,7 @@ function parseRequest(raw: unknown): GenerateRequest | ParlayRejection {
       include,
       mix: toPickMix(s.mix, selectedCategories(include)),
       fillFrom,
+      ...(fillFrom === "COMBINED" && manualSlots !== null ? { manualSlots } : {}),
       // Anything but a whole step in range is the 55% default.
       minWinPct: normalizeMinWinPct(s.minWinPct),
       // The Favorites only star: only a literal true turns it on; absent is off.
