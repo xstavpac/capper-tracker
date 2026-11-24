@@ -20,6 +20,7 @@ import { revalidateCapperRoster } from "@/server/data/capper-roster";
 import { revalidateReviewQueue } from "@/server/data/ingest-review-queue";
 import { recordCapperNameDecision } from "@/server/data/capper-name-decisions";
 import { farFutureWarning } from "@/lib/far-future-game";
+import type { TokenDayRule } from "@/lib/ingest-line-outcome";
 import type { IngestQuestionType, Prisma } from "@prisma/client";
 
 export type ReviewItemDraft = {
@@ -38,9 +39,13 @@ const choiceFrom = (base: Omit<ReviewChoice, "pick" | "unmatched">, r: PickRowRe
 //
 // realTimeIngest (the Telegram ingest passes it): matched as the message arrives, so a game already final then is
 // never a choice's game - and because the match is stored, approving the item later never re-judges it.
-export async function buildReviewDrafts(questions: CatalogQuestion[], { realTimeIngest = false }: { realTimeIngest?: boolean } = {}): Promise<ReviewItemDraft[]> {
+// dayRule (the bot API's ingest passes it): each choice is matched by the bot API's day rule, like its import.
+export async function buildReviewDrafts(
+  questions: CatalogQuestion[],
+  { realTimeIngest = false, dayRule }: { realTimeIngest?: boolean; dayRule?: TokenDayRule } = {}
+): Promise<ReviewItemDraft[]> {
   if (questions.length === 0) return [];
-  const resolve = createPickRowResolver({ realTimeIngest });
+  const resolve = createPickRowResolver({ realTimeIngest }, dayRule);
   const heldAt = Date.now();
   const drafts: ReviewItemDraft[] = [];
   for (const q of questions) {
@@ -136,7 +141,10 @@ export type ReviewResult =
 // the same duplicate-checked, limit-checked insert the importer uses, then marks the item RESOLVED. The item is
 // claimed first (PENDING -> RESOLVED, one conditional update), so a double tap inserts once.
 export async function resolveReviewItem(userId: string, itemId: string, choiceId: string): Promise<ReviewResult> {
-  const item = await prisma.ingestReviewItem.findFirst({ where: { id: itemId, userId }, select: { id: true, status: true, options: true, questionType: true } });
+  const item = await prisma.ingestReviewItem.findFirst({
+    where: { id: itemId, userId },
+    select: { id: true, status: true, options: true, questionType: true, ingestBatch: { select: { sourceType: true } } },
+  });
   if (!item) return { ok: false, error: "not_found", message: "No such review item." };
   if (item.status !== "PENDING") return { ok: false, error: "not_pending", message: "This item was already answered." };
   if (!isReviewOptions(item.options)) return { ok: false, error: "failed", message: "The stored options are unreadable." };
@@ -176,8 +184,11 @@ export async function resolveReviewItem(userId: string, itemId: string, choiceId
     const typed = item.options.choices.find((c) => c.id === "new-capper")?.capperName;
     if (existing && typed) await recordCapperNameDecision(userId, typed, existing, choice.id === "use-suggestion" ? "SAME" : "DIFFERENT").catch(() => undefined);
   }
-  // An approved review item is an imported pick: it goes to the active recipients like the rest of the batch did.
-  await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
+  // An approved review item is an imported pick: it goes to the active recipients like the rest of the batch did -
+  // except a bot API batch's (API_TOKEN), whose picks are never copied to recipients (skipRecipientFanOut).
+  if (item.ingestBatch.sourceType !== "API_TOKEN") {
+    await fanOutImportedPicks(userId, [{ row: storedToPickRow(choice.pick, choice.capperName), sourcePickId: pickId }]);
+  }
   await prisma.ingestReviewItem.updateMany({ where: { id: itemId, userId }, data: { resolvedPickId: pickId } });
   revalidateTag(cacheKeys.dashboard(userId));
   if (result.cappersAdded > 0) revalidateCapperRoster(userId);

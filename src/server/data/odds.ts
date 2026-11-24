@@ -2390,6 +2390,77 @@ export function resolveScheduleGameFromFeeds(
 // two feeds' start times differ by minutes; a rematch is days away). Same bound grading uses (MAX_GAME_TIME_DRIFT_MS).
 const FINISHED_TWIN_DRIFT_MS = 6 * 3600000;
 
+// The bot API's day rule (ResolveGameOpts.day; API_TOKEN batches only - Telegram and manual paste never set it).
+//   requestDay: the Eastern calendar date the request arrived (midnight ET cutoff - no 6 a.m. slate rollover).
+//   namedDay:   the day the pick's own text names ("Thu", "11/27"), or null.
+export type TokenDayMatch = { requestDay: string; namedDay: string | null };
+
+// Pure core of the bot API's game matching, over the same feeds resolveScheduleGameFromFeeds reads:
+//   1. The target day is namedDay when the pick names one, else requestDay (Eastern calendar dates).
+//   2. The team's game on the target day is THE game - upcoming, live or already final (a final game is accepted and
+//      graded normally; nothing here excludes it). The score feed is read first, then the odds / schedule listings.
+//      Never a later game when the team plays that day.
+//   3. No game on the target day: a pick that named the day matches nothing; otherwise the team's next game after
+//      that day that is not final (an NFL pick sent on a Tuesday matches Sunday's game). Bounded by the same
+//      MAX_RESOLVE_DATE_DRIFT_DAYS window as every other lookup.
+// Several games on the target day (an MLB doubleheader, a same-day rematch) are settled by pickBestScheduleCandidate's
+// doubleheader rules, exactly as elsewhere.
+export function resolveTokenDayGameFromFeeds(
+  scoreGames: ScoreGame[],
+  oddsGames: OddsGame[],
+  teamMatches: (g: { homeTeam: string; awayTeam: string }) => boolean,
+  referenceTime: Date,
+  gameNumber: 1 | 2 | null,
+  day: TokenDayMatch,
+  scheduleGames: ScoreGame[] = [],
+  sportKey?: string
+): ScheduleCandidateResult {
+  const target = day.namedDay ?? day.requestDay;
+  const dayOf = (g: { commenceTime: string }) => easternDateKey(new Date(g.commenceTime));
+  const inWindow = (g: { commenceTime: string }) => withinResolveWindow(g.commenceTime, referenceTime);
+  // pickBestScheduleCandidate's same-slate-day step compares against its reference time: the request time on the
+  // request day, otherwise midday of the named day (every candidate passed in is already on that day).
+  const dayReference = target === day.requestDay ? referenceTime : new Date(Date.parse(target + "T17:00:00Z"));
+
+  const teamScores = scoreGames.filter((g) => !isUnplayed(g.status) && teamMatches(g) && inWindow(g));
+  const scoreOnDay = teamScores.filter((g) => dayOf(g) === target);
+  if (scoreOnDay.length > 0) return pickBestScheduleCandidate(scoreOnDay, dayReference, gameNumber);
+
+  // An odds / schedule listing of a game the score feed already has (same teams, start within minutes) is that game.
+  const isScoreTwin = (g: { homeTeam: string; awayTeam: string; commenceTime: string }) =>
+    teamScores.some(
+      (s) =>
+        teamNamesMatch(s.homeTeam, g.homeTeam, sportKey) &&
+        teamNamesMatch(s.awayTeam, g.awayTeam, sportKey) &&
+        Math.abs(Date.parse(s.commenceTime) - Date.parse(g.commenceTime)) <= FINISHED_TWIN_DRIFT_MS
+    );
+  const fromOdds = oddsGames.filter((g) => teamMatches(g) && inWindow(g) && !isScoreTwin(g)).map(oddsGameToScheduleGame);
+  const fromSchedule = scheduleGames.filter(
+    (g) =>
+      teamMatches(g) &&
+      inWindow(g) &&
+      !isScoreTwin(g) &&
+      !fromOdds.some((o) => teamNamesMatch(o.homeTeam, g.homeTeam) && teamNamesMatch(o.awayTeam, g.awayTeam))
+  );
+  const listed = [...fromOdds, ...fromSchedule];
+  const listedOnDay = listed.filter((g) => dayOf(g) === target);
+  if (listedOnDay.length > 0) return pickBestScheduleCandidate(listedOnDay, dayReference, gameNumber);
+
+  if (day.namedDay) return noMatch();
+
+  const later = [...teamScores.filter((g) => g.status !== "final"), ...listed]
+    .filter((g) => dayOf(g) > target)
+    .sort((a, b) => Date.parse(a.commenceTime) - Date.parse(b.commenceTime));
+  if (later.length === 0) return noMatch();
+  // The next game's day only, so a doubleheader / same-day pair is still settled by the usual rules.
+  const nextDay = dayOf(later[0]);
+  return pickBestScheduleCandidate(
+    later.filter((g) => dayOf(g) === nextDay),
+    new Date(Date.parse(nextDay + "T17:00:00Z")),
+    gameNumber
+  );
+}
+
 // `nearTermOnly` skips the odds-feed fallback: it answers "does this team have
 // a game in the ~yesterday..tomorrow score feed" rather than "anywhere in the
 // posted schedule". The catalog-import disambiguation schedule check
@@ -2425,6 +2496,9 @@ export type ResolveGameOpts = {
   // now" is "final at the message's time": a pick posted after its game ended is left unmatched, not imported.
   // Live games still match. Manual paste leaves this off and keeps matching a just-finished game.
   excludeFinal?: boolean;
+  // The bot API's day rule (API_TOKEN batches only): matched by resolveTokenDayGameFromFeeds instead of
+  // resolveScheduleGameFromFeeds. Unset everywhere else, so every other caller matches exactly as before.
+  day?: TokenDayMatch;
 };
 
 // upcomingOnly's rule: not final. A score-feed game is live or preview (postponed / cancelled never reach a pool -
@@ -2472,6 +2546,7 @@ async function resolveScheduleGame(
     upcomingOnly = false,
     inProgressOnly = false,
     excludeFinal = false,
+    day,
   }: ResolveGameOpts
 ): Promise<ScheduleCandidateResult> {
   const teamMatches = (g: { homeTeam: string; awayTeam: string }) =>
@@ -2483,6 +2558,22 @@ async function resolveScheduleGame(
 
   // In progress means the score feed: the odds feed is pregame by construction.
   if (nearTermOnly || inProgressOnly) return resolveScheduleGameFromFeeds(scoreGames, [], teamMatches, referenceTime, gameNumber);
+
+  if (day) {
+    // The listings are read only when the score feed has no game for the team on the target day.
+    const target = day.namedDay ?? day.requestDay;
+    const scoreHasDay = scoreGames.some(
+      (g) =>
+        teamMatches(g) &&
+        !isUnplayed(g.status) &&
+        withinResolveWindow(g.commenceTime, referenceTime) &&
+        easternDateKey(new Date(g.commenceTime)) === target
+    );
+    const dayOdds = scoreHasDay ? [] : await fetchFeedOrEmpty("odds", () => getOdds(sportKey));
+    const daySchedule =
+      scoreHasDay || sportKey !== "americanfootball_ncaaf" ? [] : await fetchFeedOrEmpty("schedule", () => getNcaafUpcomingFcsGames());
+    return resolveTokenDayGameFromFeeds(scoreGames, dayOdds, teamMatches, referenceTime, gameNumber, day, daySchedule, sportKey);
+  }
 
   const scoreHasUpcoming = scoreGames.some(
     (g) => teamMatches(g) && g.status !== "final" && !isUnplayed(g.status) && withinResolveWindow(g.commenceTime, referenceTime)
