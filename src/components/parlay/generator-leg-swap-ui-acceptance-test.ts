@@ -90,6 +90,10 @@ stub("../../server/actions/parlay-slip", {
   getSlipPickStatesAction: async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, { status: "PENDING", odds: -110, kickoff: FUTURE, over: false, gameStatus: null }])),
 });
 
+// The generator session's seed for this test (see the crypto pin in main). Overridable to re-pin after an engine
+// change: SWAP_TEST_SEED=<n>; the Regenerate check says when a seed no longer changes some legs and keeps others.
+const SESSION_SEED = Number(process.env.SWAP_TEST_SEED ?? 1) >>> 0;
+
 async function main() {
   const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/parlay" });
   const win = dom.window;
@@ -135,6 +139,19 @@ async function main() {
   };
   const router = { push: () => {}, replace: () => {}, prefetch: () => {}, refresh: () => {}, back: () => {}, forward: () => {} };
   win.localStorage.setItem("parlay-pool:u1", JSON.stringify({ version: 2, picks: [], targets: [], excludedLeagues: [], legacy: { addMode: false, legCount: 3, checkedPicks: [] } }));
+
+  // Determinism: the card's generator session takes its seed from crypto (freshSeed, selection.ts), and every
+  // Generate / Regenerate draw derives from it - so the Regenerate below changed a different number of legs on each
+  // run (none on some, all on others). Pinned to SESSION_SEED, a seed whose Regenerate changes some legs and keeps
+  // others (checked below). Only a one-value Uint32Array request (freshSeed's) is pinned; anything else is real.
+  const realGetRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  globalThis.crypto.getRandomValues = (<T extends ArrayBufferView | null>(a: T): T => {
+    if (a instanceof Uint32Array && a.length === 1) {
+      a[0] = SESSION_SEED;
+      return a;
+    }
+    return realGetRandomValues(a as never) as T;
+  }) as typeof globalThis.crypto.getRandomValues;
 
   const el = win.document.createElement("div");
   win.document.body.appendChild(el);
@@ -279,7 +296,8 @@ async function main() {
   await click(modalButton("Update Leg"));
   check("reduced motion: replaced at once, the modal closed, no overlay", pickOf(0)?.pickId === target && modals() === 0 && el.querySelector("[data-swap-overlay]") === null, legText(0));
   check("the other legs stay exactly as they were", shownPicks().slice(1).map((p) => p.pickId).join() === before.slice(1).map((p) => p.pickId).join());
-  check("a 'Swapped' tag on leg 1 only", Boolean(legRows()[0].querySelector("[data-swapped-tag]")) && legRows().slice(1).every((r) => !r.querySelector("[data-swapped-tag]")));
+  check("the arrival highlight on the swapped leg only", Boolean(legRows()[0].hasAttribute("data-arrive")) && legRows().slice(1).every((r) => !r.hasAttribute("data-arrive")));
+  check("a 'Swapped' tag on leg 1 only",Boolean(legRows()[0].querySelector("[data-swapped-tag]")) && legRows().slice(1).every((r) => !r.querySelector("[data-swapped-tag]")));
   check("banner status: 'Leg 1 swapped · Combined odds updated'", (el.querySelector("[data-swap-status]")?.textContent ?? "").includes(swappedStatus(1)));
   const c1 = combineOdds(shownPicks());
   check("combined price: combineOdds on the current legs", c1.status === "AVAILABLE" && oddsShown() === formatAmericanOdds(c1.american), `${oddsShown()} vs ${c1.status === "AVAILABLE" ? formatAmericanOdds(c1.american) : c1.status}`);
@@ -358,9 +376,26 @@ async function main() {
     await choose(rowIds()[0]);
     await click(modalButton("Update Leg"));
   } else await click(modalButton("Cancel"));
-  await click(button("Regenerate: Another parlay of comparable strength") ?? buttons().find((b) => (b.textContent ?? "").includes("Regenerate")));
+  const beforeRegen = new Set(shownPicks().map((p) => p.pickId));
+  // A bet already on the card from another capper is not new to the user (changed-legs.ts): the same identity here.
+  const { betKeyOf } = await import("@/lib/parlay/selection");
+  const beforeBets = new Set(shownPicks().map((p) => betKeyOf(p)));
+  await click(button("Regenerate:Another parlay of comparable strength") ?? buttons().find((b) => (b.textContent ?? "").includes("Regenerate")));
   await waitUntil(() => text().includes("Your parlay is ready") && !text().includes("Regenerating…"), "the regenerated parlay");
   check("Regenerate: no Swapped tags, no modal, no swap status", el.querySelectorAll("[data-swapped-tag]").length === 0 && modals() === 0 && !text().includes("swapped · Combined odds updated"));
+  {
+    // Only the legs that differ from the parlay shown before the Regenerate land highlighted.
+    const after = shownPicks();
+    const lit = legRows().map((r) => r.hasAttribute("data-arrive"));
+    // Changed = a pick not on the card before AND a bet not on the card before.
+    const expected = after.map((p) => !beforeRegen.has(p.pickId) && !beforeBets.has(betKeyOf(p)));
+    check(
+      `Regenerate (seed ${SESSION_SEED}) changes at least one leg and keeps at least one - else re-pin SWAP_TEST_SEED`,
+      expected.some(Boolean) && expected.some((x) => !x),
+      `changed=${JSON.stringify(expected)}`
+    );
+    check("Regenerate: the arrival highlight on exactly the changed legs", JSON.stringify(lit) === JSON.stringify(expected), `lit=${JSON.stringify(lit)} changed=${JSON.stringify(expected)}`);
+  }
 
   await act(() => root.unmount());
   el.remove();
