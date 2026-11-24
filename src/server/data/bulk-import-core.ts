@@ -1094,9 +1094,9 @@ export async function importPicksForUser(
         continue;
       }
       toInsert.push(row);
-      toInsertItem.push(i);
       if (enteredLive) enteredLiveIdx.add(toInsert.length - 1);
       fallback.push(!resolvable);
+      toInsertItem.push(i);
     } catch (err) {
       const message = err instanceof Error ? err.message : "failed";
       errors.push(item.capperName + " - " + item.description + ": " + message);
