@@ -53,6 +53,9 @@ export type GeneratorGame = {
   // A started game's progress and score when the pool was read (game-progress.ts):
   // what keeps it eligible up to its sport's cutoff. Absent before kickoff.
   liveState?: GameLiveState | null;
+  // The score feed could not be read fresh enough when the pool was built: the game is judged by time since
+  // its scheduled start alone (game-progress.ts poolEligible). Absent otherwise.
+  stateUnavailable?: boolean;
   leagueName: string;
   picks: GeneratorPick[];
   // True when the same two teams play another game the same day. Only the

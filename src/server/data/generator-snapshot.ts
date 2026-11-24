@@ -22,7 +22,7 @@ import { propMarketRecordKey } from "@/lib/record-keys";
 import { gameStatusFor } from "@/server/data/expander-pick";
 import { hasKickedOff, isGameOver } from "@/lib/parlay/game-over";
 import { getOwnedSlipPickRows, loadSlipBoards, offBoardSlipPick, picksOnBoards } from "@/server/data/parlay-slip-picks";
-import { liveStatesForBoards } from "@/server/data/live-state";
+import { freshLiveFeedsForBoards, liveStatesFromFeeds } from "@/server/data/live-state";
 import { withLiveState } from "@/lib/parlay/game-progress";
 import type { PickCategoryKey } from "@/server/data/stats";
 import { autoGenerateWindow } from "@/lib/parlay/auto-generate-window";
@@ -84,7 +84,10 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   const rowById = new Map(rows.map((r) => [r.id, r]));
   // Every live game's progress and score, from the score feed's shared cache (no DB read): what keeps a
   // started game in the pool up to its sport's cutoff, and the "Started · Q2 4:12 · 45-41" line.
-  const liveStates = await liveStatesForBoards(boards);
+  // Read no older than LIVE_STATE_MAX_AGE_MS (fresh-live-scores.ts): the shared cache can serve an entry hours
+  // old. A league that cannot be read fresh is UNAVAILABLE - its started games go by time since start only.
+  const feeds = await freshLiveFeedsForBoards(boards, now);
+  const liveStates = liveStatesFromFeeds(boards, feeds);
   const slipPicks: GeneratorPick[] = scope.slipPickIds.map((id) => {
     const p = onBoard.get(id) ?? offBoardSlipPick(rowById.get(id)!, boards);
     return withLiveState(p, liveStates.get(p.gameId) ?? null);
@@ -108,16 +111,20 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
       // A live game is fine for a target or a slip pick (it is priced as posted);
       // only a game that is over is skipped. The full slate keeps a game under way
       // while it is within its sport's progress cutoff (inWindow, game-progress.ts).
-      const gameStatus = gameStatusFor(board.scores, game, key);
+      // From the fresh read, never the board's own (cached) scores.
+      const feed = feeds.get(key);
+      const stateUnavailable = !feed || feed.kind === "UNAVAILABLE";
+      const gameStatus = feed && feed.kind !== "UNAVAILABLE" ? gameStatusFor(feed.scores, game, key) : null;
       const liveState = liveStates.get(game.id) ?? null;
       // Copies, never the board's own objects (the board can be a cached value); a pick's odds stay as stored.
       const picks = board.expanderPicksByGame[i]
         .filter((p): p is GeneratorPick => p.status === "PENDING" && typeof p.datePosted === "string")
-        .map((p) => withLiveState(p, liveState));
+        // The game's status from the same fresh read, so the card (live badge, price label) agrees with the pool.
+        .map((p) => withLiveState(p.gameStatus === gameStatus ? p : { ...p, gameStatus }, liveState));
       const over = isGameOver({ gameTime: game.commenceTime, gameStatus }, now);
       const wanted =
         !over &&
-        (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime, { gameStatus, liveState })));
+        (targetIds.has(game.id) || slipGameIds.has(game.id) || (fullSlate && scope.leagues.includes(label) && inWindow(game.commenceTime, { gameStatus, liveState, stateUnavailable })));
       if (trace) {
         const matched = board.expanderPicksByGame[i].length;
         stats.matchedPending += picks.length;
@@ -141,6 +148,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
         gameTime: game.commenceTime,
         gameStatus,
         ...(liveState ? { liveState } : {}),
+        ...(stateUnavailable ? { stateUnavailable: true } : {}),
         leagueName: label,
         picks,
         doubleheader: doubleheaders.has(game.id),
@@ -165,7 +173,7 @@ export async function loadGeneratorSnapshot(userId: string, scope: SnapshotScope
   const candidates = games.flatMap((g) => g.picks);
   if (trace) {
     for (const s of leagueStats) s.pickRowsUnmatched = Math.max(0, s.pickRowsFetched - s.pickRowsMatched);
-    trace.extras({ snapshot: { leagues: leagueStats, poolPicks: candidates.length, games: gameStats } });
+    trace.extras({ snapshot: { leagues: leagueStats, poolPicks: candidates.length, games: gameStats, liveFeeds: Object.fromEntries(boards.map((b) => [b.label, feeds.get(b.key)?.kind ?? "UNAVAILABLE"])) } });
   }
   const { leagueRecords, categoryRecords, propMarketRecords } = await getCapperRecordBundle(userId, {
     leagueEntries: [...slipPicks, ...candidates].map((p) => ({ capperId: p.capperId, leagueSport: p.leagueName, category: p.category })),

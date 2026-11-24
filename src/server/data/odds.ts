@@ -113,6 +113,11 @@ export type ScoreGame = {
   // "no live-progress data" to every reader.
   period?: number | null;
   clock?: string | null;
+  // When this row was read from ESPN / MLB Stats API (ISO). Stamped by
+  // fetchLiveScoresUncached, so a value served from the Data Cache still says
+  // how old it really is (unstable_cache returns an expired entry as is - see
+  // fresh-live-scores.ts). Server-only: toClientScores strips it.
+  fetchedAt?: string;
   // MLB only - the MLB Stats API schedule's own doubleheader metadata
   // (already present in the `hydrate=linescore` response getMlbLiveScores
   // fetches, previously read but not captured here). gameNumber is 1 or 2
@@ -1420,7 +1425,7 @@ export function getNcaabLiveScores(): Promise<ScoreGame[]> {
 export function toClientScores(games: ScoreGame[]): ScoreGame[] {
   return games
     .filter((g) => !g.fcsOnly)
-    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, scoreMissing, ...rest }) => rest);
+    .map(({ homeLocation, awayLocation, homeShortName, awayShortName, fcsOnly, scoreMissing, fetchedAt, ...rest }) => rest);
 }
 
 // getLiveScoresForSport for anything that ends up in a response or in client
@@ -1686,16 +1691,29 @@ async function dispatchLiveScoresForSport(sportKey: string): Promise<ScoreGame[]
 // tests) there is no incremental cache and unstable_cache rejects with an
 // invariant - fall back to calling straight through in that case. Real
 // traffic (route handlers, cron routes) always has the context.
+//
+// unstable_cache (Next 14.2) serves an EXPIRED entry as is and only refreshes it
+// in the background; a failed refresh is swallowed and a failed Data Cache
+// write is silent, so the entry can stay hours old. Every row carries fetchedAt
+// for callers that must not act on old state (fresh-live-scores.ts).
 function dataCachedLiveScores(sportKey: string): Promise<ScoreGame[]> {
-  const run = unstable_cache(() => dispatchLiveScoresForSport(sportKey), [cacheKeys.liveScores(sportKey)], {
+  const run = unstable_cache(() => fetchLiveScoresUncached(sportKey), [cacheKeys.liveScores(sportKey)], {
     revalidate: LIVE_SCORES_TTL_SECONDS,
     tags: [cacheKeys.liveScores(sportKey)],
   });
   return run().catch((err: unknown) => {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("incrementalCache")) return dispatchLiveScoresForSport(sportKey);
+    if (msg.includes("incrementalCache")) return fetchLiveScoresUncached(sportKey);
     throw err;
   });
+}
+
+// One straight read of the sport's score feed, no cache layer, every row
+// stamped with the time it was read.
+export async function fetchLiveScoresUncached(sportKey: string): Promise<ScoreGame[]> {
+  const games = await dispatchLiveScoresForSport(sportKey);
+  const fetchedAt = new Date().toISOString();
+  return games.map((g) => ({ ...g, fetchedAt }));
 }
 
 // Public entry point. memoizeWithTtl is the process-local layer in front of

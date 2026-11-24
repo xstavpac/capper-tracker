@@ -19,7 +19,7 @@ import { isWeeklySlateLeague } from "@/lib/live-category-picks";
 import { hasKickedOff, type GameFeedStatus } from "@/lib/parlay/game-over";
 import { poolEligible, type GameLiveState } from "@/lib/parlay/game-progress";
 
-export type WindowLive = { gameStatus?: GameFeedStatus | null; liveState?: GameLiveState | null };
+export type WindowLive = { gameStatus?: GameFeedStatus | null; liveState?: GameLiveState | null; stateUnavailable?: boolean };
 
 // `commenceTimes` is every game the league's board holds - the slate is
 // anchored on the earliest one still to come. Returns the test for one game;
@@ -29,7 +29,7 @@ export function autoGenerateWindow(leagueName: string, commenceTimes: string[], 
   const lastKey = isWeeklySlateLeague(leagueName) ? slateCutoffKey(commenceTimes, todayKey) : todayKey;
   return (commenceTime, live) => {
     if (hasKickedOff(commenceTime, now)) {
-      return poolEligible({ gameTime: commenceTime, leagueName, gameStatus: live?.gameStatus ?? null, liveState: live?.liveState ?? null }, now);
+      return poolEligible({ gameTime: commenceTime, leagueName, gameStatus: live?.gameStatus ?? null, liveState: live?.liveState ?? null, stateUnavailable: live?.stateUnavailable === true }, now);
     }
     const key = easternDateKey(new Date(commenceTime));
     return key >= todayKey && key <= lastKey;

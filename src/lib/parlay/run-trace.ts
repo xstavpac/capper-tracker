@@ -151,6 +151,9 @@ export type SnapshotStats = {
   poolPicks: number;
   // Per game: [league, label, matched picks, pending picks, kept or why not].
   games: [string, string, number, number, string][];
+  // Per league: how its game states were read (server/data/fresh-live-scores.ts) - CACHED (shared cache, fresh
+  // enough), REFETCHED (cache too old, read again) or UNAVAILABLE (judged by time since start only).
+  liveFeeds?: Record<string, "CACHED" | "REFETCHED" | "UNAVAILABLE">;
 };
 
 export type LadderStatus = { eventId: string; gameLabel: string; markets: string[]; status: "ok" | "not-posted" | "pricing-in-progress" | "unavailable" | "not-asked"; cause?: string };
