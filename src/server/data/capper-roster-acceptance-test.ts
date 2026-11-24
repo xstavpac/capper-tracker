@@ -10,9 +10,11 @@
 //    it replaced (the old statement's grouped subquery had no userId filter - asserted gone), a
 //    capper with no picks counts 0, and the one intended difference is pinned: another user's
 //    pick on this user's capper no longer counts.
-// 3. The pick import's capper reads: with three new cappers, ONE roster scan (insertPicksDeduped's
-//    own, inside its transaction) where it used to be five (that one, resolveImportRefs', and one
-//    per new capper in findOrCreateCapper); every pick still lands on the right capper.
+// 3. The pick import's capper reads: with three new cappers, NO whole-roster scan and ONE targeted
+//    read of just the named cappers (insertPicksDeduped's, inside its transaction, since the
+//    2026-11-24 DB Monitor follow-ups). It was one roster scan before that, and five before #297/#312
+//    (insertPicksDeduped's, resolveImportRefs', and one per new capper in findOrCreateCapper);
+//    every pick still lands on the right capper.
 //    findOrCreateCapper scans once on its own and not at all when given the caller's roster.
 // 4. The /live board's picks (getPicksForGames): each pick's capper {name, colorTag, isFavorite}
 //    is the capper's, and no `FROM cappers WHERE id IN (...)` follow-up statement is sent.
@@ -53,6 +55,8 @@ const TAG = `roster-${Date.now()}`;
 // A statement that reads this table's cappers by user: the roster (ORDER BY) or the names scan (none).
 const isRosterRead = (q: string) => /FROM "cappers" WHERE "cappers"\."userId" = \$\d+/.test(q) && /^SELECT "cappers"\."id", "cappers"\."name"/.test(q);
 const isNamesScan = (q: string) => isRosterRead(q) && !/ORDER BY/.test(q) && /^SELECT "cappers"\."id", "cappers"\."name" FROM/.test(q);
+// readCappersByNormalizedNames: only the cappers a pick write names.
+const isTargetedRead = (q: string) => /FROM cappers WHERE "userId" = \$\d+ AND regexp_replace\(lower\(translate\(name, /.test(q);
 const isIdInList = (q: string) => /FROM "cappers" WHERE "cappers"\."id" IN \(/.test(q);
 
 async function main() {
@@ -158,7 +162,8 @@ async function main() {
     await drain();
     const scans = queries.filter(isNamesScan);
     check("3 the import is allowed", imported.allowed === true);
-    check("3 one roster scan for the whole import (was five)", scans.length === 1, String(scans.length));
+    check("3 no whole-roster scan for the import (was one; five before that)", scans.length === 0, String(scans.length));
+    check("3 one targeted read of the named cappers for the whole import", queries.filter(isTargetedRead).length === 1, String(queries.filter(isTargetedRead).length));
     const cappersC = await prisma.capper.findMany({ where: { userId: c.id }, orderBy: { name: "asc" } });
     check("3 one existing capper reused, three created", cappersC.length === 4 && cappersC.filter((x) => x.id === sharp.id).length === 1, cappersC.map((x) => x.name).join("|"));
     const created = imported.allowed ? imported.created : [];
