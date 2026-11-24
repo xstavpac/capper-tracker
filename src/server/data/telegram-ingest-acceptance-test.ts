@@ -304,8 +304,13 @@ async function main() {
 
     // ---------- the allowlist is read from the environment ----------
     process.env.INGEST_ALLOWED_LEAGUES = "NFL";
-    const nflOnly = await (await post(route, { channelId: channelIds[0], messageId: 700, day: "2026-11-02", text: "Delta Capper\nCelticsX\nLakers -4 -110\nChiefs -2 -110" })).json();
+    const nflOnly = await (await post(route, { channelId: channelIds[0], messageId: 700, day: "2026-11-02", text: "Delta Capper\nLakers -4 -110\nChiefs -2 -110" })).json();
     expect("INGEST_ALLOWED_LEAGUES=NFL: NBA line skipped, NFL line imported", [nflOnly.imported], [1]);
+    // A typo line under the header ("CelticsX") reads as a new capper header. It used to create a capper "CelticsX"
+    // and file the pick under it; now that pick waits in review with a one-click "Create capper".
+    const typo = await (await post(route, { channelId: channelIds[0], messageId: 701, day: "2026-11-02", text: "Delta Capper\nCelticsX\nLakers -4 -110\nChiefs -2 -110" })).json();
+    expect("typo header: nothing imported, the NFL pick held for review", [typo.imported, typo.pendingReview], [0, 1]);
+    expect("typo header: no capper CelticsX was created", await prisma.capper.count({ where: { userId: users.main, name: "CelticsX" } }), 0);
     delete process.env.INGEST_ALLOWED_LEAGUES;
 
     // ---------- NCAAB on the default allowlist ----------
