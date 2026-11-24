@@ -104,6 +104,12 @@ export const cacheKeys = {
   // health tab dot and the header's Admin badge. Same TTL and sharing as
   // adminStatus; the tab page itself reads fresh.
   feedHealth: () => "feed-health",
+  // The 7-day schedule store (server/data/schedule-store.ts getStoredSchedule):
+  // one league's stored days from today, keyed by Eastern day, TAGGED with
+  // scheduleTag(sportKey) so the daily pull's revalidateTag drops every day's
+  // entry for that league.
+  schedule: (sportKey: string, day: string) => `schedule:${sportKey}:${day}`,
+  scheduleTag: (sportKey: string) => `schedule:${sportKey}`,
   // Consensus Hybrid's recent swings (server/data/recent-swings.ts): every team in
   // a sport, its last n finished games against their stored lines, as of one
   // Eastern day - shared by every user that day. TTL only: the games it reads

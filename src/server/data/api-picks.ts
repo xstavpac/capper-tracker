@@ -19,7 +19,7 @@ import { namedPickDay, tokenRequestDay, type LineOutcome } from "@/lib/ingest-li
 import { canonicalApiPickResult, isApiPickResult, type ApiPickResult } from "@/lib/api-pick-result";
 import { ingestBatch } from "@/server/data/ingest-batch";
 import { dismissReviewItem } from "@/server/data/ingest-review";
-import { leagueHasGamesOnDay } from "@/server/data/odds";
+import { leagueDaySlateStored } from "@/server/data/odds";
 import { sportKeyForName } from "@/server/data/pick-dedup";
 
 export const API_PICKS_MAX_BODY_BYTES = 64 * 1024;
@@ -62,7 +62,7 @@ export function validateApiPicksBody(raw: unknown): { ok: true; body: ApiPicksBo
 export type SubmitApiPicksOptions = {
   allowedLeagues: Set<string>;
   now?: Date;
-  /** Tests pin this; production reads the stored feeds (odds.ts leagueHasGamesOnDay). */
+  /** Tests pin this; production reads the 7-day schedule store, then the stored feeds (odds.ts leagueDaySlateStored). */
   hasGamesOnDay?: (sportKey: string, dayKey: string) => Promise<boolean>;
 };
 
@@ -70,9 +70,9 @@ type Processed = { result: ApiPickResult; status: "ACCEPTED" | "NEEDS_REVIEW" | 
 
 const lineKey = (s: string) => oneLine(s).toLowerCase();
 
-// no_game_found, split: the pick names a day after the request day and NO game of its league is stored on that day
-// -> that day's slate isn't stored yet (game_not_scheduled_yet: resend closer to game day). A day with games stored,
-// or no day named, stays no_game_found.
+// no_game_found, split: the pick names a day after the request day and that day's slate isn't stored (past the 7-day
+// schedule store, or a day whose pull never landed, with no game in the other feeds either) -> game_not_scheduled_yet:
+// resend closer to game day. A stored day (even one with no games), or no day named, stays no_game_found.
 async function noGameReason(
   text: string,
   league: string | undefined,
@@ -129,7 +129,7 @@ export async function submitApiPicks(
   const { tokenId, userId } = auth;
   const now = opts.now ?? new Date();
   const requestDay = tokenRequestDay(now);
-  const hasGamesOnDay = opts.hasGamesOnDay ?? leagueHasGamesOnDay;
+  const hasGamesOnDay = opts.hasGamesOnDay ?? ((sportKey: string, dayKey: string) => leagueDaySlateStored(sportKey, dayKey));
   const results = new Map<string, ApiPickResult>();
 
   // a. Earlier submissions of these client_ids.

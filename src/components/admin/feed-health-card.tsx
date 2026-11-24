@@ -52,7 +52,7 @@ export function LeagueFeedCard({ h, now }: { h: LeagueFeedHealth; now: Date }) {
         <Count
           label="Posted · next 7 days"
           value={h.next7}
-          hint={h.nextGameAt ? `next in ${formatHoursAgo(h.nextGameAt.getTime() - n)}` : h.postedFetchDate ? "none posted" : "no snapshot today/yesterday"}
+          hint={`${h.nextGameAt ? `next in ${formatHoursAgo(h.nextGameAt.getTime() - n)}` : h.postedSource ? "none posted" : "nothing stored"} · ${h.postedSource === "schedule" ? "schedule" : h.postedSource === "odds" ? "odds" : "no source"}`}
         />
       </dl>
       <dl className="mt-2.5 space-y-1.5">

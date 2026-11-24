@@ -16,6 +16,7 @@ import { runCronLogged } from "@/server/data/cron-runs";
 import { recomputeHeavyConsensusMarkets } from "@/server/data/heavy-consensus";
 import { pruneGeneratorRuns } from "@/server/data/generator-runs";
 import { recomputePlatformCategoryRates } from "@/server/data/platform-category-rates";
+import { refreshScheduleStore, type ScheduleRefreshSummary } from "@/server/data/schedule-store";
 import { cacheKeys } from "@/lib/cache-keys";
 import { revalidateTag } from "next/cache";
 
@@ -182,6 +183,19 @@ async function run(): Promise<Response> {
     console.error("refresh-scores: platform rates recompute failed", err);
   }
 
+  // The 7-day schedule store (server/data/schedule-store.ts): each in-season
+  // league's next 7 Eastern dates from ESPN (one date per request) / the MLB
+  // Stats API (one range request), upserted as one row per league per day, old
+  // days pruned, feed_syncs "schedule" recorded per league. On its own catch: a
+  // failure leaves yesterday's stored days and must not cost the steps above.
+  let schedule: ScheduleRefreshSummary | { error: string };
+  try {
+    schedule = await refreshScheduleStore();
+  } catch (err) {
+    schedule = { error: err instanceof Error ? err.message : String(err) };
+    console.error("refresh-scores: schedule store refresh failed", err);
+  }
+
   // The Parlay Generator's run log retention (server/data/generator-runs.ts): one small chunk per day - per-pick
   // detail cleared after ~30 days, rows deleted after ~180, each by id. On its own catch, last: a failure
   // here is only a log that stays longer and must not cost the steps above their run.
@@ -219,6 +233,7 @@ async function run(): Promise<Response> {
     decayDeltaPredictions,
     heavyConsensus,
     platformRates,
+    schedule,
     generatorRuns,
     tendencyPipeline: pipelineEnabled ? "enabled" : "paused",
   });
