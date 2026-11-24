@@ -46,6 +46,11 @@ export async function loadDbMonitorSnapshot(): Promise<DbMonitorSnapshotResult> 
       top AS (
         SELECT s.* FROM s, re
         WHERE s.query ~ re.pattern
+          -- The monitor's own bookkeeping (isMonitorSelfStatement, lib/db-monitor.ts) never
+          -- takes a top-N slot.
+          AND s.query NOT LIKE '%pg_stat_statements%'
+          AND s.query NOT LIKE '%query_stat_baselines%'
+          AND s.query NOT LIKE '%query_stat_daily%'
         ORDER BY s.rows DESC
         LIMIT ${TOP_STATEMENT_LIMIT}
       )

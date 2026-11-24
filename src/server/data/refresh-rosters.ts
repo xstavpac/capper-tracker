@@ -63,7 +63,6 @@ export function rosterCacheTagsToRevalidate(outcomes: RosterRefreshOutcome[]): s
   for (const o of outcomes) {
     if (o.status !== "committed") continue;
     tags.push(cacheKeys.rosterRows(o.league));
-    if (o.league === "NFL") tags.push(cacheKeys.nflRosterFullNames());
   }
   return tags;
 }

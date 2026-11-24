@@ -10,6 +10,7 @@ same tag**, `cacheKeys.dashboard(userId)` from `src/lib/cache-keys.ts`:
 |---|---|---|---|---|
 | Dashboard summary | `getDashboardSummary(userId)` (`stats.ts`) | `cacheKeys.dashboard(userId)` | `cacheKeys.dashboard(userId)` | 60 s |
 | Dashboard capper panels | `getCapperPanels(userId, filter?)` (`capper-panels.ts`) | `capperPanelsCacheKey(userId, filter)` (per user **and** per filter) | `cacheKeys.dashboard(userId)` | 60 s |
+| /live category panel ranking rows | `queryCategoryPanel` inside `getSportCategoryPanelData(userId, sportName)` (`pick-aggregates-cappers-adapter.ts`) | `cacheKeys.sportCategoryPanel(userId, sportName)` | `cacheKeys.dashboard(userId)` | 600 s (backstop for `scripts/backfill-pick-category.ts` and hand-run SQL, which have no Next context) |
 
 Both compute **only from `prisma.pick` rows** for that user, plus the capper
 roster for `getCapperPanels` (name, colorTag, and `isFavorite`, which orders

@@ -42,7 +42,7 @@ export async function runRosterLoadScript(league: RosterLeague, opts: { fetchRos
     // league) or on their own TTLs, whichever comes first.
     if (result.status === "committed") {
       console.log(`${tag} the app's cached roster (roster-rows:${league.toLowerCase()} cache tag) picks this up at the next daily refresh-rosters run, at most 24 hours (its TTL)`);
-      if (league === "NFL") console.log(`${tag} the bulk-import name list (nfl-roster-full-names cache tag) picks this up within its 1-hour TTL`);
+      if (league === "NFL") console.log(`${tag} the bulk-import name list is served from that same cached roster, so it catches up at the same time`);
     }
   } catch (e) {
     console.error(e);

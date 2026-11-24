@@ -20,7 +20,8 @@
 //      full-row reads did: the matched row in full, the roster ids/names in order.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { findOrCreateCapper, CAPPER_INSERT_COLUMNS } from "@/server/data/capper-find-or-create";
+import { findOrCreateCapper, readCappersByNormalizedNames, CAPPER_INSERT_COLUMNS } from "@/server/data/capper-find-or-create";
+import { normalizeName } from "@/lib/fuzzy-match";
 import { createCapper, getCappersForUser, renameCapper } from "@/server/data/cappers";
 
 let failures = 0;
@@ -228,6 +229,21 @@ async function main() {
       JSON.stringify(narrowRoster)
     );
     check("getCappersForUser: only id, name, colorTag and isFavorite are read", narrowRoster.every((c) => Object.keys(c).join(",") === "id,name,colorTag,isFavorite"));
+
+    // 12. The targeted read (insertPicksDeduped) finds exactly what normalizeName over the whole roster finds.
+    const u5 = await mkUser("u5");
+    for (const name of ["Sharp Sam", "LOCKS by Tommy", "İlker Picks", "King Kong", "Five (Live bet", "💰", "Otto"]) {
+      await createCapper(u5.id, { name, source: "OTHER" });
+    }
+    await createCapper(u2.id, { name: "Sharp Sam", source: "OTHER" }); // another user's: never returned
+    const asked = ["sharp-sam", "SHARPSAM", "ilker picks", "king kong", "FIVE live BET", "💰", "nobody", "lockstommy", ""];
+    const targeted = await readCappersByNormalizedNames(prisma, u5.id, asked);
+    const keys = new Set(asked.map(normalizeName).filter((k) => k !== ""));
+    const viaRoster = (await prisma.capper.findMany({ where: { userId: u5.id }, select: { id: true, name: true } })).filter((c) => keys.has(normalizeName(c.name)));
+    const idList = (rows: { id: string }[]) => rows.map((r) => r.id).sort().join(",");
+    check("targeted capper read == normalizeName over the whole roster (incl. U+0130 / Kelvin sign)", idList(targeted) === idList(viaRoster) && targeted.length === 4, JSON.stringify(targeted.map((c) => c.name)));
+    check("targeted capper read: only id and name", targeted.every((c) => Object.keys(c).sort().join(",") === "id,name"));
+    check("targeted capper read: no usable name -> no query result", (await readCappersByNormalizedNames(prisma, u5.id, ["💰", "!!!", ""])).length === 0);
   } finally {
     savedEnv.NODE_ENV = saved.NODE_ENV;
     savedEnv.DEV_AUTH_BYPASS = saved.DEV_AUTH_BYPASS;
