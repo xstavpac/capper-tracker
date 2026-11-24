@@ -93,6 +93,12 @@ expect("unrelated name: no variant", findCapperVariant("Sharp Shooter", saved), 
 expect("different person sharing a first word: no variant", findCapperVariant("Michael Smith", ["Michael Jones"]), null);
 expect("two saved candidates: ambiguous, no variant", findCapperVariant("Empire", ["Empire Sam", "Empire Picks Joe"]), null);
 expect("long glued tail is not a variant", findCapperVariant("MCBETSCLUB", saved), null);
+// Found by the prod cleanup dry run (2026-11-24): a trailing brand word makes a different capper.
+expect("Sharp investments is not SHARP", findCapperVariant("Sharp investments", ["SHARP"]), null);
+expect("SHARP SHEET is not SHARP", findCapperVariant("SHARP SHEET", ["SHARP"]), null);
+expect("PARLAY SAFARI is a real capper, not bet syntax", junk("PARLAY SAFARI"), null);
+expect("iamparlayp is a real capper", junk("iamparlayp"), null);
+expect("recipient: PARLAY SAFARI is still copied", recipientCapperName("PARLAY SAFARI", []), "PARLAY SAFARI");
 expect(
   "stored DIFFERENT answer wins",
   findCapperVariant("Empire Sam", saved, [{ rawKey: "empiresam", suggestedKey: "empire", decision: "DIFFERENT" }]),

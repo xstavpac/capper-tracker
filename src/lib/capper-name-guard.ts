@@ -55,8 +55,7 @@ export function isPromoLine(line: string): boolean {
 // Bet syntax inside a name. Kept narrow on purpose (no bare "over" / "under" - "Over Achievers" is a real capper).
 const BET_SYNTAX_PATTERNS: RegExp[] = [
   /\bml\b/i, // moneyline
-  /\bmlp\b/i,
-  /\bparlays?\b/i,
+  /\bmlp\b/i, // ("parlay" alone is not here: "PARLAY SAFARI" is a real capper; a parlay line still has MLP or "A + B")
   /\bmoneyline\b/i,
   /(^|\s)[+-]\d{3,4}\b/, // American odds
   /(^|\s)[+-]?\d+\.5\b/, // a half-point line
@@ -105,6 +104,14 @@ const SUFFIX_WORDS = ["vip", "bets", "bet", "picks", "pick", "plays", "sports", 
 const MIN_KEY = 4; // a cleaned / suffix-stripped key must keep at least this many characters
 const MIN_WORD_DROP_KEY = 5; // stricter when a whole word was dropped
 const MAX_GLUED_TAIL = 2; // "MCBETSCS" -> "MCBETS": at most this many extra trailing characters
+// A dropped trailing word must look like a person's name tacked on ("Empire Sam", "Cash It, Baby Carlos"): short, and
+// not a word that makes a different brand ("Sharp investments" and "SHARP SHEET" are not "SHARP").
+const MAX_DROPPED_WORD = 7;
+const BRAND_WORDS = new Set([
+  "sheet", "sheets", "investments", "investment", "money", "sports", "picks", "pick", "bets", "bet", "locks", "lock",
+  "plays", "play", "guy", "guys", "king", "kings", "club", "group", "analytics", "capper", "cappers", "insider", "sharp",
+  "sharps", "office", "labs", "lab", "wins", "win", "winners", "props", "prop", "parlay", "parlays", "dfs", "vip", "live",
+]);
 
 // Lowercase words with decoration, punctuation and any parenthetical (closed or not) removed.
 function nameWords(name: string): string[] {
@@ -136,7 +143,8 @@ function variantKeys(name: string): { full: Set<string>; dropped: Set<string> } 
   const whole = words.join("");
   const full = new Set([whole, stripSuffixes(whole)].filter((k) => k.length >= MIN_KEY));
   const dropped = new Set<string>();
-  if (words.length >= 2) {
+  const last = words[words.length - 1] ?? "";
+  if (words.length >= 2 && last.length <= MAX_DROPPED_WORD && !BRAND_WORDS.has(last)) {
     const rest = words.slice(0, -1).join("");
     for (const k of [rest, stripSuffixes(rest)]) if (k.length >= MIN_WORD_DROP_KEY) dropped.add(k);
   }
