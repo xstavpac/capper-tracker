@@ -185,8 +185,7 @@ export function ParlayPoolProvider({ userId, children }: { userId: string; child
   const patchGeneratorFilters = useCallback((patch: Partial<GeneratorFilters>) => setGeneratorFilters((f) => ({ ...f, ...patch })), []);
   // Fill from follows the slip (combined-fill.ts): the first pick makes Combined the default, an empty slip
   // falls back to Best available. Here, not in the card: picks are added on Live, with the card unmounted.
-  // Adjusted during render (not in an effect), so no child ever sees the new slip with the old Fill from - the
-  // card's Best available floor would otherwise push Total legs up to the slip's size first.
+  // Adjusted during render (not in an effect), so no child ever sees the new slip with the old Fill from.
   const [seenSlipSize, setSeenSlipSize] = useState(0);
   if (seenSlipSize !== pool.length) {
     const prev = seenSlipSize;

@@ -234,25 +234,26 @@ function edges() {
   else check("N = L + 1: fewer than 8 shown, the next tap is a parlay not shown yet", [ninth.variety, history.some((h) => legSetKey(h) === ninth.generatedKey)], ["VARIED", false]);
   check("N = L + 1: Generate + 7 taps show 8 different parlays (never a repeat)", shownAll, 8);
 
-  // 20 picks, max 1 per game: they can make 12 legs. Total legs 14 is past
-  // that - not a subset; the 12 go in, the rest are dropped as today, and the
-  // shortfall is said.
+  // 20 picks, max 1 per game: they can make 12 legs. More picks than legs is still a pool (the
+  // conflicts and the per-game cap are either/or): Total legs 14 builds the 12 that fit, says the
+  // shortfall, and the rest are not_selected - another build may use them.
   const over = buildGeneratedParlay(SNAPSHOT, settingsOf(14, 1), null, NOW);
   check("cap shrinks the slip below L (12 usable, 14 asked): 12 legs, capacity 12, shortfall said", [over.legs.length, over.capacity, over.shortfall.length > 0, invalid(over.legs.map((l) => l.pick), 1)], [12, 12, true, false]);
-  check("...its unused picks are dropped as today (opposes / left out), never not_selected", over.dropped.some((d) => d.reason === "not_selected"), false);
-  // Exactly the slip's capacity: every usable pick in, nothing to vary.
-  const exact = buildGeneratedParlay(SNAPSHOT, settingsOf(12, 1), { seed: 3, history: [[]] }, NOW);
-  check("L = capacity (12): every usable pick in, Regenerate: ALL_PICKS_USED", [exact.legs.length, exact.noAlternativeReason], [12, "ALL_PICKS_USED"]);
+  check("...its unused picks are not_selected (either/or), never a loss", over.dropped.filter((d) => d.reason !== "over").every((d) => d.reason === "not_selected") && over.dropped.length === 8, true);
+  // Exactly the slip's capacity: Regenerate rotates the either/or picks in - another parlay, not "No other parlays".
+  const exactGen = buildGeneratedParlay(SNAPSHOT, settingsOf(12, 1), null, NOW);
+  const exact = buildGeneratedParlay(SNAPSHOT, settingsOf(12, 1), { seed: 3, history: [exactGen.historyIds] }, NOW);
+  check("L = capacity (12): Regenerate gives another 12 from the slip, VARIED", [exact.legs.length, exact.variety, exact.noAlternativeReason, exact.generatedKey !== exactGen.generatedKey, invalid(exact.legs.map((l) => l.pick), 1)], [12, "VARIED", null, true, false]);
   const eleven = buildGeneratedParlay(SNAPSHOT, settingsOf(11, 1), null, NOW);
   check("L = capacity - 1 (11): a subset, 11 legs", [eleven.legs.length, eleven.slipUsed, eleven.dropped.filter((d) => d.reason === "not_selected").length], [11, 11, 9]);
 }
 
 // ============================================================================
-// Best available is not a subset, whatever the slip holds.
+// Best available never reads the slip, whatever it holds: Total legs is the parlay.
 // ============================================================================
 function bestAvailable() {
   const r = buildGeneratedParlay(SNAPSHOT, { ...settingsOf(7, 2), fillFrom: "BEST_AVAILABLE" }, null, NOW);
-  check("Best available, 20 slip picks, Total legs 7: every usable slip pick is in, as before", [r.legs.length, r.dropped.some((d) => d.reason === "not_selected")], [17, false]);
+  check("Best available, 20 slip picks, Total legs 7: 7 legs, none from the slip, nothing dropped", [r.legs.length, r.fromSlip, r.legs.some((l) => l.source === "SLIP"), r.dropped.length, r.slipTotal], [7, 0, false, 0, 0]);
 }
 
 (async () => {

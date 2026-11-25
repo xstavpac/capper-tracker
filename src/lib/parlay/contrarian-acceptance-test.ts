@@ -119,7 +119,7 @@ const crowd: Spec[] = [
 // ---- Swap setting ------------------------------------------------------------------------
 {
   const specs = [bulls, pacers, s({ id: "over", game: 1, category: "OVER", betType: "TOTAL", detail: "Over 220.5", line: 220.5, odds: -110, lg: [40, 20] }), s({ id: "under", game: 1, category: "UNDER", betType: "TOTAL", detail: "Under 221", line: 221, odds: -110, lg: [30, 18] })];
-  const p = buildGeneratedParlay(snap(specs, ["bulls-ml"]), { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, null, NOW);
+  const p = buildGeneratedParlay(snap(specs, ["bulls-ml"]), { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25, scoreModel: "EDGE" }, null, NOW);
   const view = (e: EngineSwap) => e.legs.map((l) => [l.original.pick.pickId, l.original.source, l.swap?.pick.pickId ?? l.unchangedReason]);
   check("the Primary: the slip ML and a generated total", p.legs.map((l) => [l.pick.pickId, l.source]), [["bulls-ml", "SLIP"], ["over", "GENERATED"]]);
   check("Swap = Suggested: only the generated leg", view(p.contrarian.SUGGESTED), [["bulls-ml", "SLIP", "OUT_OF_SCOPE"], ["over", "GENERATED", "under"]]);
@@ -137,11 +137,11 @@ const crowd: Spec[] = [
     s({ id: "over", game: 1, category: "OVER", betType: "TOTAL", detail: "Over 220.5", line: 220.5, odds: -110, lg: [40, 20] }),
     s({ id: "under", game: 1, category: "UNDER", betType: "TOTAL", detail: "Under 221", line: 221, odds: -110, lg: [30, 18] }),
   ];
-  const props = buildGeneratedParlay(snap(specs), { legCount: 2, maxLegsPerGame: 1, include: ["PROPS"], mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, null, NOW);
+  const props = buildGeneratedParlay(snap(specs), { legCount: 2, maxLegsPerGame: 1, include: ["PROPS"], mix: null, fillFrom: "COMBINED", manualSlots: 25, scoreModel: "EDGE" }, null, NOW);
   const swaps = props.contrarian.ALL.legs.flatMap((l) => (l.swap ? [l.swap.pick] : []));
   check("Props only: the parlay is props", props.legs.map((l) => betCategory(l.pick)), ["PROPS"]);
   check("Props only: only prop contrarians", [swaps.length > 0, swaps.every((p) => betCategory(p) === "PROPS")], [true, true]);
-  const slipMl = buildGeneratedParlay(snap(specs, ["bulls-ml"]), { legCount: 1, maxLegsPerGame: 1, include: ["PROPS"], mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" }, null, NOW);
+  const slipMl = buildGeneratedParlay(snap(specs, ["bulls-ml"]), { legCount: 1, maxLegsPerGame: 1, include: ["PROPS"], mix: null, fillFrom: "COMBINED", manualSlots: 25, scoreModel: "EDGE" }, null, NOW);
   check("Props only: a slip ML finds no ML contrarian (the filter holds)", slipMl.contrarian.ALL.legs.find((l) => l.original.pick.pickId === "bulls-ml")?.unchangedReason, "NO_QUALIFYING_CONTRARIAN");
 }
 
@@ -168,7 +168,7 @@ const crowd: Spec[] = [
     s({ id: "c-prop-u-2", game: 3, category: "PASS_YDS_PROP", betType: "PLAYER_PROP", detail: "Patrick Mahomes Under 252.5 Passing Yards", line: 252.5, odds: -110, lg: [31, 18], propMarket: "PASS_YDS" }),
   ];
   const sn = snap(big, ["b-ml", "b-over"]);
-  const settings: GeneratorSettings = { legCount: 5, maxLegsPerGame: 3, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 0, scoreModel: "EDGE" };
+  const settings: GeneratorSettings = { legCount: 5, maxLegsPerGame: 3, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25, minWinPct: 0, scoreModel: "EDGE" };
   const gen = buildGeneratedParlay(sn, settings, null, NOW);
   check("the conflict slate: 5 legs, 3 on the NFL game", [gen.legs.length, gen.legs.filter((l) => l.gameId === "g3").length], [5, 3]);
   check("...and Contrarian swaps on it", gen.contrarian.ALL.swapCount > 0, true);

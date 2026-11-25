@@ -96,14 +96,14 @@ function fixture(): { snapshot: GeneratorSnapshot; slip: GeneratorPick[] } {
   return { snapshot: { builtAt: NOW.toISOString(), games, slipPicks: [], targets: [], leagueRecords, categoryRecords }, slip };
 }
 
-const BASE: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const BASE: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 type Scenario = { name: string; settings: GeneratorSettings; targets?: string[]; slip?: boolean; slipIds?: string[]; variation?: Variation };
 const SCENARIOS: Scenario[] = [
   { name: "Generate, 3 legs, 1 per game", settings: BASE },
   { name: "targets g0+g1, game lines, 3 per game", settings: { ...BASE, legCount: 2, maxLegsPerGame: 3, include: ["MONEYLINE", "SPREAD", "TOTALS"] }, targets: ["g0", "g1"] },
   { name: "Totals only, 60% gate", settings: { ...BASE, legCount: 2, include: ["TOTALS"], minWinPct: 60 } },
   { name: "Pick Mix ML 50 / Totals 50, 2 per game", settings: { ...BASE, legCount: 2, maxLegsPerGame: 2, include: ["MONEYLINE", "TOTALS"], mix: { MONEYLINE: 50, TOTALS: 50 } } },
-  { name: "slip with every conflict", settings: { ...BASE, legCount: 5 }, slip: true },
+  { name: "slip with every conflict", settings: { ...BASE, legCount: 5, fillFrom: "YOUR_PICKS_ONLY" }, slip: true },
   { name: "Your picks only, more picks than legs", settings: { ...BASE, legCount: 2, fillFrom: "YOUR_PICKS_ONLY" }, slip: true, slipIds: ["s-fav", "s-g3a", "s-g3b", "p4-over"] },
   { name: "Regenerate (seed 7, history)", settings: BASE, variation: { seed: 7, history: [["p0-fav", "p1-over", "p2-spread"]] } },
 ];

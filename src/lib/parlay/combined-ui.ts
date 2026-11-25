@@ -27,7 +27,7 @@ export const slipSubtitle = (slipSize: number): string => (slipSize === 0 ? "No 
 export function yourPicksSub(fillFrom: FillFrom, slipSize: number, manualSlots: number): string {
   if (slipSize === 0) return "add picks from Live";
   if (fillFrom === "COMBINED") return `${manualSlots} used per parlay · rotates`;
-  if (fillFrom === "YOUR_PICKS_ONLY") return "all eligible go in";
+  if (fillFrom === "YOUR_PICKS_ONLY") return "Total legs drawn from these";
   return "not used in Best available";
 }
 

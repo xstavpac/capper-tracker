@@ -55,7 +55,7 @@ function makeSnapshot(specs: Spec[], slip: string[]): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: slip.map((id) => all.find((p) => p.pickId === id)!), targets: [], leagueRecords, categoryRecords };
 }
 
-const SETTINGS: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 2, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 const view = (s: EngineSwap) => s.legs.map((l) => [l.original.pick.pickId, l.swap ? l.swap.pick.pickId : l.unchangedReason]);
 
 // ============================================================================
@@ -108,7 +108,7 @@ check(
   // for the ML can't take it, and Hedge for it takes the Over.
   const withUnder = makeSnapshot([...specs, { id: "slipUnder", game: 0, bet: "UNDER", wl: [90, 10] }], ["slipMl"]);
   withUnder.slipPicks.push(withUnder.games[0].picks.find((p) => p.pickId === "slipUnder")!);
-  const u = buildGeneratedParlay(withUnder, { ...SETTINGS, maxLegsPerGame: 1 }, null, NOW);
+  const u = buildGeneratedParlay(withUnder, { ...SETTINGS, maxLegsPerGame: 1, fillFrom: "YOUR_PICKS_ONLY" }, null, NOW);
   check("the second slip pick on G0 is left out (max 1 per game)", u.dropped.map((d) => [d.pickId, d.reason]), [["slipMl", "left_out"]]);
   check("...and no swap ever lands on a slip pick", [...Object.values(u.hedge), ...Object.values(u.contrarian)].flatMap((s) => s.legs).some((l) => l.swap && ["slipMl", "slipUnder"].includes(l.swap.pick.pickId)), false);
 }

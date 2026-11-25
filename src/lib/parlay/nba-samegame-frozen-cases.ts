@@ -44,8 +44,8 @@ const NBA_CASES: NbaCase[] = [
   { slate: "NBA", label: "NBA · 6 legs, 3 per game", settings: { ...base, maxLegsPerGame: 3 }, slip: [] },
   { slate: "NBA", label: "NBA · 10 legs, 5 per game, no gate", settings: { ...base, legCount: 10, maxLegsPerGame: 5, minWinPct: 0 }, slip: [] },
   { slate: "NBA", label: "NBA · Props only, 6 legs, 4 per game", settings: { ...base, include: ["PROPS"], maxLegsPerGame: 4 }, slip: [] },
-  { slate: "NBA", label: "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)", settings: { ...base, legCount: 3, maxLegsPerGame: 3 }, slip: ["c-tatum-pts", "c-tatum-pts-285"] },
-  { slate: "NBA", label: "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game", settings: { ...base, legCount: 4, maxLegsPerGame: 3 }, slip: ["c-under", "c-tatum-reb"] },
+  { slate: "NBA", label: "NBA · slip: Tatum Over 27.5 and Over 28.5 (one bet, two lines)", settings: { ...base, legCount: 3, maxLegsPerGame: 3, fillFrom: "COMBINED", manualSlots: 25 }, slip: ["c-tatum-pts", "c-tatum-pts-285"] },
+  { slate: "NBA", label: "NBA · slip: game Under + Tatum Rebounds Over, 4 legs, 3 per game", settings: { ...base, legCount: 4, maxLegsPerGame: 3, fillFrom: "COMBINED", manualSlots: 25 }, slip: ["c-under", "c-tatum-reb"] },
   { slate: "NBA", label: "NBA · Your picks: 3 of 6", settings: { ...base, legCount: 3, maxLegsPerGame: 3, fillFrom: "YOUR_PICKS_ONLY" }, slip: ["c-spread", "c-tatum-pts", "c-brunson-pts", "l-ml", "l-curry-3s", "l-davis-blk"] },
 ];
 

@@ -94,7 +94,7 @@ function snapOf(specs: Spec[], slip: string[] = []): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: slip.map((id) => picks.get(id)!), targets: [], leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords, propMarketRecords };
 }
 
-const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 const run = (s: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}) => buildGeneratedParlay(s, { ...BASE, ...over }, null, NOW);
 const cats = (p: GeneratedParlay) => Array.from(new Set(p.legs.map((l) => betCategory(l.pick)))).sort();
 const perGameMax = (p: GeneratedParlay) => Math.max(0, ...Array.from(p.legs.reduce((m, l) => m.set(l.gameId, (m.get(l.gameId) ?? 0) + 1), new Map<string, number>()).values()));
@@ -161,15 +161,16 @@ const full = snapOf(FULL);
   check("Max 2: the parlay says it is short", two.legs.length < 6 && two.shortfall.length > 0, true);
 
   const slip = snapOf([...FULL.filter((s) => s.game === 0)], ["g0ML", "g0TOTAL", "g0PROP"]);
-  const s1 = run(slip, { legCount: 4, maxLegsPerGame: 1 });
+  // The per-game notes (left out, who stayed) are the all-in path: Your picks only with no more picks than legs.
+  const s1 = run(slip, { legCount: 4, maxLegsPerGame: 1, fillFrom: "YOUR_PICKS_ONLY" });
   check("a slip over Max legs: the best pick on the game stays, no generated leg on that game", [s1.fromSlip, s1.generated], [1, 0]);
   const left = s1.dropped.filter((d) => d.reason === "left_out");
   check("...the other two are named as left out, with why and who stayed", [left.length, left.every((d) => d.note.includes("max legs per game is 1") && d.against?.pickId === s1.legs[0].pick.pickId)], [2, true]);
   check("...left out + kept = the three the slip holds", [...left.map((d) => d.pickId), s1.legs[0].pick.pickId].sort(), ["g0ML", "g0PROP", "g0TOTAL"]);
-  const s2 = run(slip, { legCount: 4, maxLegsPerGame: 2 });
+  const s2 = run(slip, { legCount: 4, maxLegsPerGame: 2, fillFrom: "YOUR_PICKS_ONLY" });
   check("Max 2 on three slip picks of one game: two stay, one left out", [s2.fromSlip, s2.dropped.filter((d) => d.reason === "left_out").length], [2, 1]);
   check("the kept picks are the best two by the slip ranking (the left-out one is the one that stayed out at Max 1's order)", s2.legs.map((l) => l.pick.pickId).includes(s1.legs[0].pick.pickId), true);
-  const s3 = run(slip, { legCount: 4, maxLegsPerGame: 3 });
+  const s3 = run(slip, { legCount: 4, maxLegsPerGame: 3, fillFrom: "YOUR_PICKS_ONLY" });
   check("Max 3: all three stay, nothing left out", [s3.fromSlip, s3.dropped.length], [3, 0]);
   const leftOutGames = new Set(s1.legs.map((l) => l.gameId));
   check("a game with picks left out is full: no generated leg on it, so Hedge and Contrarian have nothing to swap there",

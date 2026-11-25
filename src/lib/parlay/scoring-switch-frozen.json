@@ -4827,7 +4827,7 @@
       "gamesUsed": 4,
       "sameGameGames": 0,
       "capacity": 6,
-      "capacityText": "6 max from 5 games with qualified picks",
+      "capacityText": "6 max from your picks and 5 games with qualified picks",
       "shortfall": [],
       "limited": null,
       "mixNotes": [],
@@ -4836,12 +4836,9 @@
         {
           "pickId": "g2-heavy-fav",
           "label": "Capper g2-heavy-fav — Eagles ML",
-          "reason": "left_out",
-          "against": {
-            "pickId": "g2-mid-under",
-            "label": "Capper g2-mid-under — Under 47.5"
-          },
-          "note": "left out — max legs per game is 1; Capper g2-mid-under — Under 47.5 ranks higher on this game — not used"
+          "reason": "not_selected",
+          "against": null,
+          "note": "not in this parlay — Regenerate rotates your picks"
         }
       ],
       "hedge": {
@@ -5371,16 +5368,33 @@
       "variety": "BEST",
       "noAlternativeReason": null,
       "historyIds": [
+        "g2-mid-under",
         "g0-small-over",
         "g4-other-leagues",
         "g5-home"
       ],
-      "generatedKey": "g0-small-over,g4-other-leagues,g5-home",
+      "generatedKey": "g0-small-over,g2-mid-under,g4-other-leagues,g5-home",
       "historyBetKeys": [
         "g0|TOTAL|FULL_GAME|GAME|OVER||45.5",
         "g4|TOTAL|FULL_GAME|GAME|OVER||221.5",
         "g5|SPREAD|FULL_GAME||Denver Nuggets||-5"
-      ]
+      ],
+      "combined": {
+        "manualSlots": 2,
+        "autoSlots": 2,
+        "manual": 1,
+        "auto": 3,
+        "backfillNote": "Your picks filled 1 of 2 — added 1 generated",
+        "rotation": {
+          "build": 1,
+          "used": [
+            "g2-mid-under"
+          ],
+          "slipSize": 2,
+          "unusedLeft": 1,
+          "nextUses": 1
+        }
+      }
     }
   },
   "Your picks only, 2 of 5": {

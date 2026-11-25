@@ -101,7 +101,8 @@ function generate() {
   const all = base.games.flatMap((g) => g.picks);
   const slip = [all.find((p) => p.gameId === "G0")!, all.find((p) => p.gameId === "G5")!];
   const snap: GeneratorSnapshot = { ...base, slipPicks: slip };
-  const settings: GeneratorSettings = { ...settingsFor(spec), maxLegsPerGame: 2 };
+  // Slip picks plus generated legs is Combined (every slip pick manual); Best available never reads the slip.
+  const settings: GeneratorSettings = { ...settingsFor(spec), maxLegsPerGame: 2, fillFrom: "COMBINED", manualSlots: 25 };
   const top = buildGeneratedParlay(snap, settings, null, NOW);
   const slipEvery: boolean[] = [];
   const lengths = new Set<number>();
@@ -158,7 +159,8 @@ async function exposure() {
   const traces: RunTrace[] = [];
   const s = createGeneratorSession({ generate, now: () => NOW, firstSeed: 9, onTrace: (t) => void traces.push(t) });
   const inputs = { leagues: ["MLB"], slipPickIds: [slipPick.pickId], targets: [] };
-  const settings: GeneratorSettings = { ...settingsFor(spec), maxLegsPerGame: 2 };
+  // Slip picks plus generated legs is Combined (every slip pick manual); Best available never reads the slip.
+  const settings: GeneratorSettings = { ...settingsFor(spec), maxLegsPerGame: 2, fillFrom: "COMBINED", manualSlots: 25 };
   const shown = [] as Awaited<ReturnType<typeof s.generate>>[];
   shown.push(await s.generate(inputs, settings, { reseed: true }));
   for (let i = 0; i < 8; i++) shown.push(await s.regenerate(inputs, settings, "EXPLORE"));

@@ -131,7 +131,8 @@ const snap = (slate: ReturnType<typeof makeSlate>, slip: string[] = [], targets:
   categoryRecords: slate.categoryRecords,
   propMarketRecords: slate.propMarketRecords,
 });
-const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+// Slip picks plus generated legs is Combined with every slip pick manual (Best available never reads the slip).
+const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 const run = (s: GeneratorSnapshot, over: Partial<GeneratorSettings> = {}, variation: { seed: number; history: string[][] } | null = null) =>
   buildGeneratedParlay(s, { ...SETTINGS, ...over }, variation, NOW);
 const ids = (p: GeneratedParlay) => p.legs.map((l) => l.pick.pickId);
@@ -199,7 +200,8 @@ const slate = makeSlate(BASE);
     { id: "under95", game: 7, bet: "UNDER", wl: [11, 9], line: 9.5 },
     { id: "over95b", game: 7, bet: "OVER", wl: [20, 10], line: 9.5 },
   ]);
-  const r = run(snap(s, ["slipWeak", "over95", "over85b", "under95", "over95b"]), { legCount: 6 });
+  // The per-pick notes (duplicates / opposes) are the all-in path: Your picks only with no more picks than legs.
+  const r = run(snap(s, ["slipWeak", "over95", "over85b", "under95", "over95b"]), { legCount: 6, fillFrom: "YOUR_PICKS_ONLY" });
   check("a 40% slip pick is in", ids(r).includes("slipWeak"), true);
   check("duplicate line: the better record stays", [ids(r).includes("over95"), ids(r).includes("over85b")], [true, false]);
   check("opposing: the better record stays", [ids(r).includes("over95b"), ids(r).includes("under95")], [true, false]);
@@ -207,8 +209,10 @@ const slate = makeSlate(BASE);
     ["over85b", "duplicates Capper over95 — Over 9.5 — not used"],
     ["under95", "opposes Capper over95b — Over 9.5 — not used"],
   ]);
-  check("slip legs are SLIP, the rest GENERATED", [r.fromSlip, r.generated], [3, 3]);
-  check("a generated leg never opposes or duplicates a slip pick on its game", r.legs.filter((l) => l.gameId === "G5").map((l) => l.pick.pickId), ["slipWeak"]);
+  // The same slip with generated legs (Combined, every slip pick manual): the conflicts are resolved the same way.
+  const rc = run(snap(s, ["slipWeak", "over95", "over85b", "under95", "over95b"]), { legCount: 6 });
+  check("slip legs are SLIP, the rest GENERATED", [rc.fromSlip, rc.generated, ids(rc).includes("over95"), ids(rc).includes("over95b"), ids(rc).includes("slipWeak")], [3, 3, true, true, true]);
+  check("a generated leg never opposes or duplicates a slip pick on its game", rc.legs.filter((l) => l.gameId === "G5").map((l) => l.pick.pickId), ["slipWeak"]);
 }
 
 // ============================================================================
@@ -233,8 +237,9 @@ const slate = makeSlate(BASE);
   const r = run(snap(s, ["g0h"], ["G5", "G6", "G7", "G99"]), { legCount: 5, maxLegsPerGame: 2 });
   check("targeted: generated legs come only from G5/G6 (G7 has none) plus the slip's G0", Array.from(new Set(r.legs.map((l) => l.gameId))).sort(), ["G0", "G5", "G6"]);
   check("targeted: the stronger untargeted games are never used", r.legs.some((l) => ["G1", "G2", "G3", "G4"].includes(l.gameId)), false);
-  check("targeted: capacity text", r.capacityText, "4 max with 4 games targeted");
-  check("targeted: a target with no qualified picks is named", r.shortfall, ["4 of 5 legs: the targeted games have no more picks that clear your bar and fit.", "New York Mets @ Atlanta Braves: no qualified picks — 3 of 4 games used"]);
+  // Combined's own wording (a slip pick plus generated legs is Combined now).
+  check("targeted: capacity text", r.capacityText, "4 max from your picks and 3 games with qualified picks");
+  check("targeted: a target with no qualified picks is named", r.shortfall, ["Built 4 of 5 — no other eligible picks", "New York Mets @ Atlanta Braves: no qualified picks — 3 of 4 games used"]);
   check("targeted: a target not in the pool is reported", r.unavailableTargets, ["G99"]);
 }
 
@@ -260,7 +265,8 @@ const slate = makeSlate(BASE);
 {
   const s = snap(slate, ["g7h"], []);
   const primary = run(s, { legCount: 4 });
-  const history: string[][] = [generatedIds(primary)];
+  // What the card remembers (historyIds): under Combined, the whole parlay.
+  const history: string[][] = [primary.historyIds];
   const seen = new Set([primary.generatedKey]);
   let allVaried = true;
   let allQualified = true;
@@ -269,7 +275,7 @@ const slate = makeSlate(BASE);
     const r = run(s, { legCount: 4 }, { seed: i * 101, history: [...history].reverse() });
     if (r.variety !== "VARIED" || seen.has(r.generatedKey)) allVaried = false;
     seen.add(r.generatedKey);
-    history.push(generatedIds(r));
+    history.push(r.historyIds);
     if (!r.legs.every((l) => l.source === "SLIP" || l.record!.winPct >= 55)) allQualified = false;
     if (!ids(r).includes("g7h")) slipEvery = false;
   }

@@ -68,22 +68,21 @@ const build = (slip: GeneratorPick[], legCount: number, fillFrom: GeneratorSetti
   eq("engine: 7 of 20 picks, 13 not_selected", [subset.legs.length, subset.slipUsed, subset.slipTotal, unusedPicks(subset).length, subset.capacity], [7, 7, 20, 13, 20]);
 
   // Total legs range
-  eq("range · Your picks only, 20 picks, built (capacity 20): 1 to 20", legRange({ yourPicksOnly: true, slipFloor: 20, capacity: subset.capacity }), { min: 1, max: 20 });
-  eq("range · Your picks only, not built yet: 1 to the cap", legRange({ yourPicksOnly: true, slipFloor: 20, capacity: MAX_PARLAY_LEGS }), { min: 1, max: MAX_PARLAY_LEGS });
-  eq("range · Your picks only, 6 picks: 1 to 6", legRange({ yourPicksOnly: true, slipFloor: 6, capacity: allIn.capacity }), { min: 1, max: 6 });
-  eq("range · Best available, 20 picks: never fewer than the 20 (the old rule)", legRange({ yourPicksOnly: false, slipFloor: 20, capacity: MAX_PARLAY_LEGS }), { min: 20, max: MAX_PARLAY_LEGS });
-  eq("range · Best available, 6 picks, built: 6 to the engine's capacity", legRange({ yourPicksOnly: false, slipFloor: 6, capacity: best.capacity }), { min: 6, max: best.capacity });
-  eq("range · Best available, no picks: from 1", legRange({ yourPicksOnly: false, slipFloor: 0, capacity: MAX_PARLAY_LEGS }), { min: 1, max: MAX_PARLAY_LEGS });
+  eq("range · Your picks only, 20 picks, built (capacity 20): 1 to 20", legRange({ capacity: subset.capacity }), { min: 1, max: 20 });
+  eq("range · not built yet: 1 to the cap", legRange({ capacity: MAX_PARLAY_LEGS }), { min: 1, max: MAX_PARLAY_LEGS });
+  eq("range · Your picks only, 6 picks: 1 to 6", legRange({ capacity: allIn.capacity }), { min: 1, max: 6 });
+  eq("range · Best available, built: 1 to the engine's capacity (the slip is no floor)", legRange({ capacity: best.capacity }), { min: 1, max: best.capacity });
 
   // Total legs note
-  eq("note · subset: 7 of your 20 picks", legsNote({ yourPicksOnly: true, legCount: 7, slipFloor: 20, generatedLegs: 0, usable: 20, total: 20 }), "Up to 25 · 7 of your 20 picks.");
-  eq("note · Your picks only, legs reach the picks: all of them", legsNote({ yourPicksOnly: true, legCount: 9, slipFloor: 6, generatedLegs: 3, usable: 6, total: 6 }), "Up to 25 · all 6 of your picks.");
-  eq("note · Best available: as before", legsNote({ yourPicksOnly: false, legCount: 8, slipFloor: 6, generatedLegs: 2, usable: 6, total: 6 }), "Up to 25 · 6 from your picks, 2 from your cappers.");
+  eq("note · subset: 7 of your 20 picks", legsNote({ yourPicksOnly: true, legCount: 7, usable: 20, total: 20 }), "Up to 25 · 7 of your 20 picks.");
+  eq("note · Your picks only, legs reach the picks: all of them", legsNote({ yourPicksOnly: true, legCount: 9, usable: 6, total: 6 }), "Up to 25 · all 6 of your picks.");
+  eq("note · Best available: every leg from the cappers", legsNote({ yourPicksOnly: false, legCount: 8, usable: 6, total: 6 }), "Up to 25 · all 8 from your cappers.");
 
   // Summary
   eq("summary · subset", pickSummary(subset), "7 of your 20 picks used");
   eq("summary · every pick in", pickSummary(allIn), "6 from your picks, 0 generated");
-  eq("summary · Best available with generated legs", pickSummary(best), "6 from your picks, 2 generated");
+  // Best available never reads the slip: every leg generated (the pinned picks only as ordinary candidates).
+  eq("summary · Best available: every leg generated", pickSummary(best), "0 from your picks, 8 generated");
 
   // Unused line
   eq("unused line", [unusedLine(13), unusedLine(1)], ["13 picks not used this time", "1 pick not used this time"]);
@@ -188,11 +187,13 @@ async function main() {
   check("Combined · the Total legs note is the split (2 of 3 from your picks)", text().includes("Up to 25 · 2 from your picks, 1 from your cappers."));
   await click(fillFrom("Best available"));
 
-  // ---- Best available, 20 picks: the old rule - never fewer legs than picks ----
-  check("Best available · 20 picks: Total legs is pushed up to 20", ctx.legCount === 20, `legs=${ctx.legCount}`);
+  // ---- Best available, 20 picks: no floor - the slip is ignored, Total legs stays 3 ----
+  check("Best available · 20 picks: Total legs is not pushed up (stays 3)", ctx.legCount === 3, `legs=${ctx.legCount}`);
   await click(button("Fewer legs"));
-  check("Best available · Fewer legs can't go under the 20 picks", ctx.legCount === 20, `legs=${ctx.legCount}`);
-  check("Best available · the note is the pick/capper split", text().includes("Up to 25 · 20 from your picks, 0 from your cappers."));
+  check("Best available · Fewer legs goes under the 20 picks", ctx.legCount === 2, `legs=${ctx.legCount}`);
+  check("Best available · the note is every leg from the cappers", text().includes("Up to 25 · all 2 from your cappers."));
+  check("Best available · the slip is kept (20 picks)", ctx.pool.length === 20, `pool=${ctx.pool.length}`);
+  await act(() => ctx.setLegCount(20));
 
   // ---- Your picks only: down to 7 and to 1, nothing pushes it back ----
   await click(fillFrom("Your picks only"));
@@ -255,10 +256,14 @@ async function main() {
   await click(fillFrom("Best available"));
   await act(() => ctx.setLegCount(8));
   await generate();
-  check("Best available · 8 legs: 6 from your picks, 2 generated (unchanged text)", readyWith(text(), 8) && text().includes("6 from your picks, 2 generated") && !text().includes("picks used"), text().slice(-300));
+  check("Best available · 8 legs: 0 from your picks, 8 generated (the slip is ignored)", readyWith(text(), 8) && text().includes("0 from your picks, 8 generated") && !text().includes("picks used"), text().slice(-300));
   const regenBest = buttons().find((b) => (b.getAttribute("aria-label") ?? "").startsWith("Regenerate"));
   check("Best available · Regenerate enabled, the usual tooltip", Boolean(regenBest) && !regenBest!.disabled && regenBest!.getAttribute("title") === "Another parlay of comparable strength");
   check("Best available · no unused line", unusedButton() === undefined);
+  // The slip is untouched by a Best available build: switching back still has every pin.
+  check("Best available · after the build the slip still holds its 6 picks", ctx.pool.length === 6, `pool=${ctx.pool.length}`);
+  await click(fillFrom("Your picks only"));
+  check("...and Your picks only is back on all 6", ctx.pool.length === 6 && fillFrom("Your picks only")?.getAttribute("aria-checked") === "true");
   await act(() => root.unmount());
 
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
