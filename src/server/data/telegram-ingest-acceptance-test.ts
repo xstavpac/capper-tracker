@@ -355,6 +355,17 @@ async function main() {
       );
     }
 
+    // ---------- owner-set names: a stored SAME answer files a name under the saved capper (decided 2026-11-24) ----------
+    {
+      await prisma.capper.create({ data: { userId: users.main, name: "Caruso", source: "OTHER" } });
+      await prisma.capperNameDecision.create({ data: { userId: users.main, rawKey: "alexcaruso", suggestedKey: "caruso", decision: "SAME" } });
+      const cappersNow = await prisma.capper.count({ where: { userId: users.main } });
+      const al = await (await post(route, { channelId: channelIds[0], messageId: 950, day: "2026-11-02", text: "Alex Caruso\nLakers -4 -110" })).json();
+      expect("alias: imported straight away, nothing held for review", [al.imported, al.pendingReview], [1, 0]);
+      expect("alias: the pick is on Caruso", (await picksOf(users.main)).filter((p) => p.capper.name === "Caruso").length, 1);
+      expect("alias: no capper named Alex Caruso was created", [await prisma.capper.count({ where: { userId: users.main, name: "Alex Caruso" } }), await prisma.capper.count({ where: { userId: users.main } })], [0, cappersNow]);
+    }
+
     // ---------- error classification ----------
     expect("isInfraError: connection failure", isInfraError(new Prisma.PrismaClientKnownRequestError("x", { code: "P1001", clientVersion: "5" })), true);
     expect("isInfraError: unique violation is not infra", isInfraError(new Prisma.PrismaClientKnownRequestError("x", { code: "P2002", clientVersion: "5" })), false);
