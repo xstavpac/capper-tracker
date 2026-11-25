@@ -11,6 +11,7 @@
 //   npx tsx src/lib/parlay/longshot-gate-frozen-diff-acceptance-test.ts --capture-before  rewrite the before JSON (base commit only)
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { fillModeAnnotationsDiffer, withFrozenAnnotations } from "@/lib/parlay/frozen-fill-mode";
 import { join } from "node:path";
 import { buildGeneratedParlay, type GeneratedParlay } from "@/lib/parlay/generator";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf, type NbaCase } from "@/lib/parlay/nba-samegame-frozen-cases";
@@ -87,6 +88,13 @@ function check(label: string, actual: unknown, expected: unknown) {
 
 const before = JSON.parse(readFileSync(BEFORE, "utf8")) as Capture;
 const now = capture("now");
+// The slip cases now build as Combined (frozen-fill-mode.ts): compared on legs, Hedge and Contrarian only.
+for (const c of NBA_SAMEGAME_CASES)
+  if (fillModeAnnotationsDiffer(c.settings))
+    for (const gate of LONGSHOT_GATES) {
+      const k = caseKey(c, gate);
+      now.cases[k] = withFrozenAnnotations(now.cases[k], before.cases[k], ["dropped", "shortfall", "limited", "coreSha", "coreShaNoRecord"]);
+    }
 
 const list = (ids: string[]) => ids.join(", ") || "(none)";
 const swaps = (rows: Row[]) => rows.map(([a, b]) => `${a}->${b}`).join(", ") || "(none)";

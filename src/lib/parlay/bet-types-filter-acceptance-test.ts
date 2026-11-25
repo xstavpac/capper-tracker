@@ -110,7 +110,7 @@ function makeSnapshot(slipIds: string[] = []): GeneratorSnapshot {
   return { builtAt: NOW.toISOString(), games, slipPicks: slipIds.map((id) => all.find((p) => p.pickId === id)!), targets: [], leagueRecords, categoryRecords, propMarketRecords };
 }
 const SLATE = makeSnapshot();
-const settingsOf = (include: IncludeSelection, legCount: number, maxLegsPerGame: number, fillFrom: GeneratorSettings["fillFrom"] = "BEST_AVAILABLE"): GeneratorSettings => ({ legCount, maxLegsPerGame, include, mix: null, fillFrom });
+const settingsOf = (include: IncludeSelection, legCount: number, maxLegsPerGame: number, fillFrom: GeneratorSettings["fillFrom"] = "COMBINED"): GeneratorSettings => ({ legCount, maxLegsPerGame, include, mix: null, fillFrom, ...(fillFrom === "COMBINED" ? { manualSlots: 25 } : {}) });
 
 // Every bet-type violation in one build: legs, Hedge and Contrarian alternates under every Swap setting.
 function violations(p: GeneratedParlay, allowed: readonly BetCategory[], where: { slipToo: boolean }): string[] {

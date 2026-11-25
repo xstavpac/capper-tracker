@@ -3,7 +3,6 @@
 // filter) and Auto Picks (Best available's own candidates). This file holds the pure parts the
 // engine and the card share: the split (manualSlots), the Fill from defaults, and the rotation
 // that walks Regenerate through every slip pick before any repeats. No engine logic here.
-import { MAX_PARLAY_LEGS } from "@/lib/parlay/leg-cap";
 import type { FillFrom } from "@/lib/parlay/generator";
 
 // Where the slider starts: half the legs from your picks.
@@ -33,19 +32,16 @@ export function rescaleManualSlots(oldTotal: number, newTotal: number, manual: n
 // ---------------------------------------------------------------------------
 // Fill from
 // ---------------------------------------------------------------------------
-// The options that can't be chosen: no picks - only Best available; more picks than the parlay
-// cap - not Best available (it would put every pick in).
+// The options that can't be chosen: no picks - only Best available. Best available never reads the
+// slip (generator.ts snapshotForFill), so any slip size leaves all three open.
 export function disabledFillFrom(slipSize: number): FillFrom[] {
   if (slipSize === 0) return ["COMBINED", "YOUR_PICKS_ONLY"];
-  if (slipSize > MAX_PARLAY_LEGS) return ["BEST_AVAILABLE"];
   return [];
 }
 
-// What a choice becomes for this slip: an empty slip is Best available; over the cap, Best
-// available becomes Your picks only.
+// What a choice becomes for this slip: an empty slip is Best available; otherwise the choice stands.
 export function effectiveFillFrom(slipSize: number, choice: FillFrom): FillFrom {
   if (slipSize === 0) return "BEST_AVAILABLE";
-  if (slipSize > MAX_PARLAY_LEGS && choice === "BEST_AVAILABLE") return "YOUR_PICKS_ONLY";
   return choice;
 }
 

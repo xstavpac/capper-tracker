@@ -14,44 +14,31 @@ export const ANOTHER_PARLAY = "Another parlay of comparable strength";
 
 const plural = (n: number) => (n === 1 ? "" : "s");
 
-// The Total legs stepper. Best available: never fewer than the slip's floor (every pick goes in).
-// Your picks only: from 1 - the parlay is that many of the picks. Either way never more than the
-// engine says the pool can supply (`capacity`, the cap itself before a build has said).
-export function legRange({ yourPicksOnly, slipFloor, capacity }: { yourPicksOnly: boolean; slipFloor: number; capacity: number }) {
-  const min = yourPicksOnly ? 1 : Math.min(MAX_PARLAY_LEGS, Math.max(1, slipFloor));
+// The Total legs stepper: 1 to the cap in every Fill from, whatever the slip holds - the slip is a
+// pool, never a must-include list. Never more than the engine says the pool can supply
+// (`capacity`, the cap itself before a build has said).
+export function legRange({ capacity }: { capacity: number }) {
+  const min = 1;
   const max = Math.max(min, Math.min(MAX_PARLAY_LEGS, capacity));
   return { min, max };
 }
 
-// Fill from (combined-fill.ts): a pool above MAX_PARLAY_LEGS can't be Best available (it would put
-// every pick in) - Your picks only or Combined; no picks can only be Best available.
+// Fill from (combined-fill.ts): no picks can only be Best available.
 export { effectiveFillFrom } from "@/lib/parlay/combined-fill";
 
 export const POOL_OVER_CAP_NOTE = `More than ${MAX_PARLAY_LEGS} picks — the generator picks the best ${MAX_PARLAY_LEGS} from your pool.`;
 
-// Best available never builds fewer legs than the picks sent, so "-" stops at that
-// floor. Said rather than left a silent no-op; null when not at the floor. Your picks
-// only has no floor but 1.
-export function floorHint({ yourPicksOnly, slipFloor, legCount, minLegs }: { yourPicksOnly: boolean; slipFloor: number; legCount: number; minLegs: number }): string | null {
-  if (yourPicksOnly || slipFloor < 2 || legCount > minLegs) return null;
-  return `Your ${slipFloor} sent picks are all included — switch to Your picks only to use fewer.`;
-}
-
 // The note under Total legs. Your picks only: "7 of your 20 picks" (all of them when the legs
-// reach the picks). Best available: the split between the picks and the cappers.
+// reach the picks). Best available: every leg from the cappers (it never uses the slip).
 export function legsNote({
   yourPicksOnly,
   legCount,
-  slipFloor,
-  generatedLegs,
   usable,
   total,
   favoritesOnly = false,
 }: {
   yourPicksOnly: boolean;
   legCount: number;
-  slipFloor: number;
-  generatedLegs: number;
   // Picks that can all be legs (engine capacity once built) and picks on the slip.
   usable: number;
   total: number;
@@ -59,7 +46,7 @@ export function legsNote({
   favoritesOnly?: boolean;
 }): string {
   const head = `Up to ${MAX_PARLAY_LEGS} · `;
-  if (!yourPicksOnly) return `${head}${slipFloor} from your picks, ${generatedLegs} from your ${favoritesOnly ? "favorite cappers" : "cappers"}.`;
+  if (!yourPicksOnly) return `${head}all ${legCount} from your ${favoritesOnly ? "favorite cappers" : "cappers"}.`;
   const used = Math.min(legCount, usable);
   return used >= total ? `${head}all ${total} of your pick${plural(total)}.` : `${head}${used} of your ${total} picks.`;
 }

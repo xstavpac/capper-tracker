@@ -65,7 +65,7 @@ function snap(slip: string[] = []): GeneratorSnapshot {
     propMarketRecords: {},
   };
 }
-const base: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", minWinPct: 55 };
+const base: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25, minWinPct: 55 };
 const ids = (ls: { pick: { pickId: string } }[]) => ls.map((l) => l.pick.pickId);
 const everyRow = (o: LegSwapOptions) => SWAP_TAB_KEYS.flatMap((t) => ids(o[t]));
 const CAPPED = ["g0-fav300", "g0-under400", "g1-fav251"];

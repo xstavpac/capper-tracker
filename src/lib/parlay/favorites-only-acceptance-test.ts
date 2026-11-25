@@ -95,7 +95,7 @@ function makeSnapshot(opts: { slipIds?: string[]; favorite?: (g: number, k: Kind
   return { builtAt: NOW.toISOString(), games, slipPicks: (opts.slipIds ?? []).map((id) => all.find((p) => p.pickId === id)!), targets: [], leagueRecords, categoryRecords, propMarketRecords: {} };
 }
 const SLATE = makeSnapshot();
-const base = (legCount: number, maxLegsPerGame = 2): GeneratorSettings => ({ legCount, maxLegsPerGame, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" });
+const base = (legCount: number, maxLegsPerGame = 2): GeneratorSettings => ({ legCount, maxLegsPerGame, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 });
 const on = (s: GeneratorSettings): GeneratorSettings => ({ ...s, favoritesOnly: true });
 const build = (snap: GeneratorSnapshot, s: GeneratorSettings, v: Variation | null = null, trace?: TraceCollector) => buildGeneratedParlay(snap, s, v, NOW, trace);
 const variations = (gen: GeneratedParlay): Variation[] =>
@@ -225,8 +225,8 @@ check("normalizeFavoritesOnly: only a literal true is on", [undefined, null, fal
 check("keepsFavorite: off keeps everyone, on keeps favorites only", [keepsFavorite(false, { capperIsFavorite: false }), keepsFavorite(true, { capperIsFavorite: false }), keepsFavorite(true, { capperIsFavorite: true })], [true, false, true]);
 check(
   "Total legs helper: '... from your favorite cappers.' with the star on, unchanged off",
-  [legsNote({ yourPicksOnly: false, legCount: 5, slipFloor: 2, generatedLegs: 3, usable: 2, total: 2, favoritesOnly: true }), legsNote({ yourPicksOnly: false, legCount: 5, slipFloor: 2, generatedLegs: 3, usable: 2, total: 2 })],
-  ["Up to 25 · 2 from your picks, 3 from your favorite cappers.", "Up to 25 · 2 from your picks, 3 from your cappers."]
+  [legsNote({ yourPicksOnly: false, legCount: 5, usable: 2, total: 2, favoritesOnly: true }), legsNote({ yourPicksOnly: false, legCount: 5, usable: 2, total: 2 })],
+  ["Up to 25 · all 5 from your favorite cappers.", "Up to 25 · all 5 from your cappers."]
 );
 {
   const store = new Map<string, string>();

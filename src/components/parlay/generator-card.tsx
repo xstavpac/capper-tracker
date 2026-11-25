@@ -43,8 +43,7 @@ import { clampManualSlots, disabledFillFrom, effectiveManualSlots, maxManualSlot
 import { combinedLegsNote, FILL_FROM_LABELS, FILL_FROM_ORDER, fillFromHelp, NEEDS_PICKS_TITLE, slipSubtitle } from "@/lib/parlay/combined-ui";
 import { CombinedMixBox } from "@/components/parlay/combined-mix-box";
 import { bestAvailableRecord } from "@/lib/parlay/pick-record";
-import { slipLegFloor } from "@/lib/parlay/leg-cap";
-import { effectiveFillFrom, floorHint, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
+import { effectiveFillFrom, legRange, legsNote, POOL_OVER_CAP_NOTE, type NoAlternativeReason } from "@/lib/parlay/subset-ui";
 import { readStoredMode, writeStoredMode } from "@/lib/parlay/selection-mode-store";
 import { DEFAULT_SELECTION_MODE, type SelectionMode } from "@/lib/parlay/selection";
 import { createGeneratorSession, poolKey, type PoolInputs } from "@/lib/parlay/generator-session";
@@ -375,23 +374,14 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
     setNoAlternative(null);
   }
 
-  // The leg count. Best available: never fewer than the picks (every one goes in). Your picks only:
-  // from 1 - the parlay is that many of them. Either way, once a build has said what the pool holds,
-  // never more than it can supply.
+  // The leg count: 1 to the cap in every Fill from - the slip is a pool, never a floor. Once a build
+  // has said what the pool holds, never more than it can supply.
   const yourPicksOnly = fillFrom === "YOUR_PICKS_ONLY";
-  // Combined and Your picks only both build from part of the slip: Total legs goes down to 1.
-  const pickSubset = fillFrom !== "BEST_AVAILABLE";
   const built = parlay && builtFor === key ? parlay : null;
-  const slipFloor = slipLegFloor(pool, maxPerGame);
   // Recomputed from the current settings: a parlay built under other settings (Fill from, Bet types, ...) says nothing
   // about what these can supply, so until the rebuild lands the ceiling is the cap, never a stale capacity.
   const capacity = built && builtCapKey === capKey ? built.capacity : MAX_PARLAY_LEGS;
-  const { min: minLegs, max: maxLegs } = legRange({ yourPicksOnly: pickSubset, slipFloor, capacity });
-  useEffect(() => {
-    if (!pickSubset && legCount < minLegs) setLegCount(minLegs);
-  }, [pickSubset, legCount, minLegs, setLegCount]);
-  const generatedLegs = Math.max(0, legCount - slipFloor);
-  const legsFloorHint = floorHint({ yourPicksOnly: pickSubset, slipFloor, legCount, minLegs });
+  const { min: minLegs, max: maxLegs } = legRange({ capacity });
 
   // Your picks, by game, in the order they were added.
   const byGame = useMemo(() => {
@@ -516,7 +506,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                   </div>
                   <p className="mt-2 text-xs font-medium text-muted-foreground">
                     {fillFrom === "BEST_AVAILABLE"
-                      ? "Every pick here goes in the parlay. Remove one with ×."
+                      ? "Best available doesn't use these — they stay here for Combined and Your picks only."
                       : combined
                         ? "Regenerate rotates through these. Remove one with ×."
                         : "The parlay is drawn from these. Remove one with ×."}
@@ -640,12 +630,9 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 icon={<LayersIcon className="h-5 w-5" />}
                 label="Total legs"
                 note={
-                  <>
-                    {combined
-                      ? combinedLegsNote(manualSlots, legCount - manualSlots, favoritesOnly)
-                      : legsNote({ yourPicksOnly, legCount, slipFloor, generatedLegs, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })}
-                    {legsFloorHint && <span className="mt-0.5 block font-semibold text-amber-700 dark:text-amber-400">{legsFloorHint}</span>}
-                  </>
+                  combined
+                    ? combinedLegsNote(manualSlots, legCount - manualSlots, favoritesOnly)
+                    : legsNote({ yourPicksOnly, legCount, usable: built ? built.capacity : pool.length, total: built ? built.slipTotal : pool.length, favoritesOnly })
                 }
               >
                 <LegStepper value={legCount} max={maxLegs} min={minLegs} onChange={(n) => setLegCount(Math.max(minLegs, Math.min(n, maxLegs)))} />
@@ -668,7 +655,7 @@ export function GeneratorCard({ leagues, hasFavorites = true, onSummary }: { lea
                 <SettingRow
                   icon={<DatabaseIcon className="h-5 w-5" />}
                   label="Fill from"
-                  note={pool.length > MAX_PARLAY_LEGS ? POOL_OVER_CAP_NOTE : (fillFromHelp(fillFrom, pool.length) ?? undefined)}
+                  note={pool.length > MAX_PARLAY_LEGS && fillFrom !== "BEST_AVAILABLE" ? POOL_OVER_CAP_NOTE : (fillFromHelp(fillFrom, pool.length) ?? undefined)}
                 >
                   <TextSegments
                     label="Fill from"

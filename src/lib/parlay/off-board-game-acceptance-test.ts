@@ -44,7 +44,7 @@ const DRIFT = 6 * H;
   const g: GeneratorGame = { gameId: "a", gameLabel: "Yankees @ Red Sox", gameTime: iso(T0), leagueName: "MLB", picks: [cand] };
   const rec = { key: "OVER", label: "", wins: 70, losses: 30, pushes: 0, winPct: 70, count: 100 };
   const snap = (slip: GeneratorPick): GeneratorSnapshot => ({ builtAt: iso(T0 - H), games: [g], slipPicks: [slip], targets: [], leagueRecords: { records: {}, streaks: {}, last20: {} }, categoryRecords: { "k1|OVER": rec } as never });
-  const S = { legCount: 2, maxLegsPerGame: 1, include: "ALL" as const, mix: null, fillFrom: "BEST_AVAILABLE" as const };
+  const S = { legCount: 2, maxLegsPerGame: 1, include: "ALL" as const, mix: null, fillFrom: "COMBINED" as const, manualSlots: 25 };
   const now = new Date(T0 - 12 * H);
   const unkeyed = buildGeneratedParlay(snap(mk("slip", "s1", "pick:slip")), S, null, now);
   check("unkeyed (own game id): the cap can't see it, 2 legs on one matchup", unkeyed.legs.length, 2);

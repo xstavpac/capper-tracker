@@ -36,7 +36,7 @@ eq("section 1 subtitle", [slipSubtitle(0), slipSubtitle(1), slipSubtitle(20)], [
 eq(
   "Your picks tile",
   [yourPicksSub("COMBINED", 20, 3), yourPicksSub("YOUR_PICKS_ONLY", 20, 0), yourPicksSub("BEST_AVAILABLE", 20, 0), yourPicksSub("BEST_AVAILABLE", 0, 0)],
-  ["3 used per parlay · rotates", "all eligible go in", "not used in Best available", "add picks from Live"]
+  ["3 used per parlay · rotates", "Total legs drawn from these", "not used in Best available", "add picks from Live"]
 );
 eq("Legs tile and Total legs note", [legsSplitSub(3, 7), combinedLegsNote(3, 7)], ["3 from your picks · 7 generated", "Up to 25 · 3 from your picks, 7 from your cappers."]);
 eq("split pill", [splitPercents(3, 10).text, splitPercents(0, 10).text, splitPercents(10, 10).text], ["30% manual · 70% auto", "0% manual · 100% auto", "100% manual · 0% auto"]);
@@ -219,7 +219,7 @@ async function main() {
   await click(fillFrom("Best available"));
   check("Best available · mix box gone, its helper, the tile says not used", el.querySelector("[data-mix-box]") === null && text().includes("Generator picks every leg from your cappers.") && text().includes("not used in Best available"));
   await click(fillFrom("Your picks only"));
-  check("Your picks only · its helper and tile", text().includes("Builds only from your picks.") && text().includes("all eligible go in"));
+  check("Your picks only · its helper and tile", text().includes("Builds only from your picks.") && text().includes("Total legs drawn from these"));
   await click(fillFrom("Combined"));
 
   // ---- Clearing the slip in Combined falls back to Best available ----

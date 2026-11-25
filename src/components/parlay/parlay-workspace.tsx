@@ -22,7 +22,8 @@ function ParlayStatCards({ summary }: { summary: GeneratorSummary }) {
   const manualSlots = fillFrom === "COMBINED" ? effectiveManualSlots(generatorFilters.manualSplit, legCount, pool.length) : 0;
   const legs = summary?.legs ?? legCount;
   // Before a build: what these settings ask for.
-  const plannedSlip = fillFrom === "COMBINED" ? manualSlots : Math.min(pool.length, legCount);
+  // Best available never uses the slip.
+  const plannedSlip = fillFrom === "COMBINED" ? manualSlots : fillFrom === "YOUR_PICKS_ONLY" ? Math.min(pool.length, legCount) : 0;
   const fromSlip = summary?.fromSlip ?? plannedSlip;
   const generated = summary?.generated ?? (fillFrom === "YOUR_PICKS_ONLY" ? 0 : Math.max(0, legCount - plannedSlip));
   return (

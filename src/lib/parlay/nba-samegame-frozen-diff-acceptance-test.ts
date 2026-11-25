@@ -12,6 +12,7 @@ import { buildGeneratedParlay } from "@/lib/parlay/generator";
 import { betKeyOf } from "@/lib/parlay/selection";
 import { NBA_SAMEGAME_CASES, nowOf, snapshotOf } from "@/lib/parlay/nba-samegame-frozen-cases";
 import { shaNoRecord } from "@/lib/parlay/frozen-shown-record";
+import { fillModeAnnotationsDiffer, withFrozenAnnotations } from "@/lib/parlay/frozen-fill-mode";
 
 type Row = [string, string | null];
 // coreShaNoRecord (step 1 and now only): coreSha without the shown-record fields (frozen-shown-record.ts, PR C).
@@ -37,6 +38,8 @@ for (const c of NBA_SAMEGAME_CASES) {
   const { historyBetKeys, ...core } = p;
   const row = (s: typeof p.hedge.ALL): Row[] => s.legs.map((l) => [l.original.pick.pickId, l.swap?.pick.pickId ?? l.unchangedReason]);
   now.cases[c.label] = { legs: p.legs.map((l) => l.pick.pickId), dropped: p.dropped.map((d) => [d.pickId, d.reason]), hedge: row(p.hedge.ALL), contrarian: row(p.contrarian.ALL), historyBetKeys: historyBetKeys ?? null, coreSha: sha(core), coreShaNoRecord: shaNoRecord(core) };
+  // The slip cases now build as Combined (frozen-fill-mode.ts): compared on legs, Hedge and Contrarian only.
+  if (fillModeAnnotationsDiffer(c.settings)) now.cases[c.label] = withFrozenAnnotations(now.cases[c.label], frozen.step1.cases[c.label], ["dropped", "coreSha", "coreShaNoRecord"]);
 }
 
 const list = (ids: string[]) => ids.join(", ") || "(none)";

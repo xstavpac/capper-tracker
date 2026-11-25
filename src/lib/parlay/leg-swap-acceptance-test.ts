@@ -137,17 +137,28 @@ async function main() {
   check("swap options: every same-game tab row is a This-game alternative", ["PRIMARY", "HEDGE", "CONTRARIAN"].every((t) => o0[t as "PRIMARY"].filter((x) => !x.current).every((x) => a0.thisGame.some((l) => l.pick.pickId === x.pick.pickId))));
   check("swap options: the opposing ML is Contrarian, the totals Hedge (an ML leg), the below-gate total last", ids(o0.CONTRARIAN).join() === "g" + g0 + "a" && o0.HEDGE.length === 3 && o0.HEDGE[2].pick.pickId === `g${g0}low` && o0.HEDGE[2].belowGate !== undefined, JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(o0[t])]))));
 
-  // ---- Best available: your unused slip picks, ungated, after the gated ones ----
+  // ---- Best available is pure auto: the slip is never offered (it is as if there were none) ----
   const slipSnap = snapshotOf(["g0low", "g4low"]);
-  const sba = legAlternatives(slipSnap, base, p0.legs, 0, NOW);
-  const sbo = legSwapOptions(slipSnap, base, p0.legs, 0, NOW);
   const slipOf = (ls: EngineLeg[]) => ls.filter((l) => l.source === "SLIP");
-  check("Best available: a below-gate slip pick is offered (This game and Other games)", ids(slipOf(sba.thisGame)).join() === "g0low" && ids(slipOf(sba.otherGames)).join() === "g4low", ids(all(sba)).join(","));
-  check("Best available: slip picks come after every gate-qualifying pick, before any below-gate one", [sba.thisGame, sba.otherGames].every((ls) => { const c = ls.filter((l) => !l.belowGate); return c.findIndex((l) => l.source === "SLIP") === c.length - slipOf(c).length && ls.slice(c.length).every((l) => l.belowGate); }));
-  check("Best available: the gated rows are exactly what they were with no slip", ids(sba.thisGame.filter((l) => l.source !== "SLIP" && !l.belowGate)).join() === ids(a0.thisGame.filter((l) => !l.belowGate)).join() && ids(sba.otherGames.filter((l) => l.source !== "SLIP")).join() === ids(a0.otherGames).join());
-  check("Best available: the slip total classifies Hedge against the ML leg, last in the tab", sbo.HEDGE.length > 0 && sbo.HEDGE[sbo.HEDGE.length - 1].pick.pickId === "g0low" && !sbo.PRIMARY.some((l) => l.pick.pickId === "g0low") && !sbo.CONTRARIAN.some((l) => l.pick.pickId === "g0low"), JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(sbo[t])]))));
-  check("Best available: the slip pick carries no marker (no note)", sbo.HEDGE.every((l) => l.pick.pickId !== "g0low" || l.note === undefined));
-  check("Best available: a slip pick already in the parlay is not offered twice", !all(legAlternatives(snapshotOf(ids(p0.legs)), base, p0.legs, 0, NOW)).some((l) => ids(p0.legs).includes(l.pick.pickId)));
+  const baSlip = legAlternatives(slipSnap, base, p0.legs, 0, NOW);
+  check("Best available, slip of 2: zero slip-sourced Swap options", slipOf(all(baSlip)).length === 0, ids(slipOf(all(baSlip))).join(","));
+  check("Best available, slip of 2: exactly the options with no slip at all", JSON.stringify(baSlip) === JSON.stringify(a0), ids(all(baSlip)).join(","));
+  const baOpts = legSwapOptions(slipSnap, base, p0.legs, 0, NOW);
+  check("Best available, slip of 2: no tab holds a slip-sourced row", SWAP_TAB_KEYS.every((t) => baOpts[t].every((l) => l.source !== "SLIP")));
+
+  // ---- Combined (every slip pick manual): your unused slip picks, ungated, after the gated ones ----
+  // (Best available did this until 2026-11-24; it belongs to Combined and Your picks only now.)
+  const cset: GeneratorSettings = { ...base, fillFrom: "COMBINED", manualSlots: 25 };
+  const sba = legAlternatives(slipSnap, cset, p0.legs, 0, NOW);
+  const sbo = legSwapOptions(slipSnap, cset, p0.legs, 0, NOW);
+  check("Combined: a below-gate slip pick is offered (This game and Other games)", ids(slipOf(sba.thisGame)).join() === "g0low" && ids(slipOf(sba.otherGames)).join() === "g4low", ids(all(sba)).join(","));
+  check("Combined: slip picks come after every gate-qualifying pick, before any below-gate one", [sba.thisGame, sba.otherGames].every((ls) => { const c = ls.filter((l) => !l.belowGate); return c.findIndex((l) => l.source === "SLIP") === c.length - slipOf(c).length && ls.slice(c.length).every((l) => l.belowGate); }));
+  // Combined never offers a generated bet identical to a slip pick (rule 7): the Overs on G0 / G4 at other lines go.
+  const sameBetAsSlip = new Set(["g0o", "g4o"]);
+  check("Combined: the gated rows are what they were with no slip, less the slip picks' own bets", ids(sba.thisGame.filter((l) => l.source !== "SLIP" && !l.belowGate)).join() === ids(a0.thisGame.filter((l) => !l.belowGate && !sameBetAsSlip.has(l.pick.pickId))).join() && ids(sba.otherGames.filter((l) => l.source !== "SLIP")).join() === ids(a0.otherGames.filter((l) => !sameBetAsSlip.has(l.pick.pickId))).join(), JSON.stringify([ids(sba.thisGame), ids(a0.thisGame), ids(sba.otherGames), ids(a0.otherGames)]));
+  check("Combined: the slip total classifies Hedge against the ML leg, last in the tab", sbo.HEDGE.length > 0 && sbo.HEDGE[sbo.HEDGE.length - 1].pick.pickId === "g0low" && !sbo.PRIMARY.some((l) => l.pick.pickId === "g0low") && !sbo.CONTRARIAN.some((l) => l.pick.pickId === "g0low"), JSON.stringify(Object.fromEntries(SWAP_TAB_KEYS.map((t) => [t, ids(sbo[t])]))));
+  check("Combined: the slip pick carries no marker (no note)", sbo.HEDGE.every((l) => l.pick.pickId !== "g0low" || l.note === undefined));
+  check("Combined: a slip pick already in the parlay is not offered twice", !all(legAlternatives(snapshotOf(ids(p0.legs)), cset, p0.legs, 0, NOW)).some((l) => ids(p0.legs).includes(l.pick.pickId)));
   const ya = legAlternatives(snapshotOf(["g0low", "g4low"]), { ...base, fillFrom: "YOUR_PICKS_ONLY" }, p0.legs, 0, NOW);
   check("Your picks only: unchanged (slip picks only, in slip order)", ids(all(ya)).join() === "g0low,g4low", ids(all(ya)).join(","));
 
@@ -202,7 +213,8 @@ async function main() {
   const manual = (p: GeneratedParlay) => p.legs.reduce((d, l) => d * (l.pick.odds > 0 ? 1 + l.pick.odds / 100 : 1 + 100 / -l.pick.odds), 1);
   const c3 = price(s3);
   check("combined price: combineOdds on the current legs", c3.status === "AVAILABLE" && Math.abs(c3.decimal - manual(s3)) < 1e-9, JSON.stringify(c3));
-  const sgp4: GeneratorSettings = { ...base, legCount: 4, maxLegsPerGame: 2 };
+  // A slip pair plus generated legs is Combined (Best available never reads the slip).
+  const sgp4: GeneratorSettings = { ...base, legCount: 4, maxLegsPerGame: 2, fillFrom: "COMBINED", manualSlots: 25 };
   const pairSnap = snapshotOf(["g0h", "g0o"]);
   const pp = buildGeneratedParlay(pairSnap, sgp4, null, NOW);
   const pi = pp.legs.findIndex((l) => l.pick.pickId === "g0o");
@@ -254,11 +266,13 @@ async function main() {
   const peT = buildGeneratedParlay(seT, base, null, new Date("2099-06-01T10:00:00.000Z"));
   const aeT = legAlternatives(seT, base, peT.legs, 0, NOW);
   check("started since the snapshot but targeted: offered", all(aeT).some((l) => l.gameId === "G5"), ids(all(aeT)).join(","));
+  // A slip pick's game counts only where the slip does (Combined / Your picks only), never in Best available.
   const seS = { ...snapshotOf(["g5u"], [], early), builtAt: se.builtAt };
-  const peS = buildGeneratedParlay(seS, { ...base, maxLegsPerGame: 2 }, null, new Date("2099-06-01T10:00:00.000Z"));
+  const cS: GeneratorSettings = { ...base, maxLegsPerGame: 2, fillFrom: "COMBINED", manualSlots: 25 };
+  const peS = buildGeneratedParlay(seS, cS, null, new Date("2099-06-01T10:00:00.000Z"));
   const g5Index = peS.legs.findIndex((l) => l.gameId === "G5");
-  const aeS = legAlternatives(seS, { ...base, maxLegsPerGame: 2 }, peS.legs, g5Index, NOW);
-  check("started since the snapshot, a slip pick's game: its picks are offered", aeS.thisGame.length > 0, ids(aeS.thisGame).join(","));
+  const aeS = legAlternatives(seS, cS, peS.legs, g5Index, NOW);
+  check("Combined: started since the snapshot, a slip pick's game: its picks are offered", aeS.thisGame.length > 0, ids(aeS.thisGame).join(","));
   // The leg's OWN game started since the build: the modal is told (gameStarted), its same-game tabs hold only the leg.
   const ownEarly = PICKS.map((p) => (p.gameId === "G0" ? { ...p, gameTime: started } : p));
   const so = { ...snapshotOf([], [], ownEarly), builtAt: se.builtAt };

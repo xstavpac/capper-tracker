@@ -17,7 +17,7 @@ import type { GeneratorGame, GeneratorPick } from "@/lib/parlay/auto-generate";
 import { buildGeneratedParlay, type GeneratorSnapshot } from "@/lib/parlay/generator";
 import { legCapRejection, MAX_PARLAY_LEGS, MAX_POOL_PICKS, MAX_POOL_REQUEST_PICKS } from "@/lib/parlay/leg-cap";
 import { EMPTY_SLIP_STATE, leagueRemovedText, restoreLeague, switchLeagueOff, togglePick, type SlipStateV2 } from "@/lib/parlay/slip-state";
-import { effectiveFillFrom, floorHint, legRange, POOL_OVER_CAP_NOTE } from "@/lib/parlay/subset-ui";
+import { effectiveFillFrom, legRange, POOL_OVER_CAP_NOTE } from "@/lib/parlay/subset-ui";
 import type { CapperLeagueRecords } from "@/server/data/picks";
 import type { GenerateRequest } from "@/server/actions/parlay-generate";
 
@@ -67,30 +67,21 @@ const snapshotOf = (slip: GeneratorPick[]): GeneratorSnapshot => ({ builtAt: NOW
 
   eq("fill from · 0 picks: Best available", effectiveFillFrom(0, "YOUR_PICKS_ONLY"), "BEST_AVAILABLE");
   eq("fill from · 25 picks: the choice stands (both ways)", [effectiveFillFrom(25, "BEST_AVAILABLE"), effectiveFillFrom(25, "YOUR_PICKS_ONLY")], ["BEST_AVAILABLE", "YOUR_PICKS_ONLY"]);
-  eq("fill from · 26+ picks: Your picks only whatever was chosen", [effectiveFillFrom(26, "BEST_AVAILABLE"), effectiveFillFrom(60, "BEST_AVAILABLE")], ["YOUR_PICKS_ONLY", "YOUR_PICKS_ONLY"]);
+  // Best available never reads the slip, so a big slip no longer forces Your picks only.
+  eq("fill from · 26+ picks: the choice stands (Best available ignores the slip)", [effectiveFillFrom(26, "BEST_AVAILABLE"), effectiveFillFrom(60, "BEST_AVAILABLE")], ["BEST_AVAILABLE", "BEST_AVAILABLE"]);
 
   // The engine, unchanged: 60 picks, Your picks only, 25 legs -> 25 legs, never more.
   const settings = { legCount: 25, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "YOUR_PICKS_ONLY" } as const;
   const parlay = buildGeneratedParlay(snapshotOf(PICKS), settings, null, NOW);
   eq("engine · 60-pick pool at 25 legs builds 25 legs from it", [parlay.legs.length, parlay.slipTotal], [25, 60]);
 
-  // The stepper range: min never above max, max never above the parlay cap, whatever the inputs.
+  // The stepper range: always from 1 (the slip is never a floor), max never above the parlay cap.
   let bad = 0;
-  for (const yourPicksOnly of [true, false])
-    for (let floor = 0; floor <= 60; floor++)
-      for (let capacity = 0; capacity <= 60; capacity++) {
-        const { min, max } = legRange({ yourPicksOnly, slipFloor: floor, capacity });
-        if (min > max || max > MAX_PARLAY_LEGS || min < 1) bad++;
-      }
-  eq("range · min never exceeds max (and max never exceeds 25), every floor x capacity x mode", bad, 0);
-
-  // The floor hint.
-  eq("hint · Best available, at the floor of 7: says why", floorHint({ yourPicksOnly: false, slipFloor: 7, legCount: 7, minLegs: 7 }), "Your 7 sent picks are all included — switch to Your picks only to use fewer.");
-  eq("hint · above the floor, in Your picks only, or with one pick: none", [
-    floorHint({ yourPicksOnly: false, slipFloor: 7, legCount: 8, minLegs: 7 }),
-    floorHint({ yourPicksOnly: true, slipFloor: 7, legCount: 1, minLegs: 1 }),
-    floorHint({ yourPicksOnly: false, slipFloor: 1, legCount: 1, minLegs: 1 }),
-  ], [null, null, null]);
+  for (let capacity = 0; capacity <= 60; capacity++) {
+    const { min, max } = legRange({ capacity });
+    if (min !== 1 || min > max || max > MAX_PARLAY_LEGS) bad++;
+  }
+  eq("range · min is 1 and never exceeds max (max never exceeds 25), every capacity", bad, 0);
 
   // League switch-off.
   const slip: SlipStateV2 = { ...EMPTY_SLIP_STATE, picks: [PICKS[0], NFL_PICKS[0], NFL_PICKS[1]] as unknown as ExpanderPick[] };
@@ -195,13 +186,14 @@ async function main() {
   store("u1", PICKS);
   await mount("u1");
   check("#2 · the pool holds 60 picks", ctx.pool.length === 60, `pool=${ctx.pool.length}`);
-  // Over the cap: Combined (the default with picks) or Your picks only - never Best available (every pick in).
-  check("#2 · Fill from is Combined (the default), Best available is disabled", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && fillFrom("Best available")?.disabled === true);
+  // Over the cap: Combined is the default with picks; Best available stays open (it never reads the slip).
+  check("#2 · Fill from is Combined (the default), Best available is enabled", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && fillFrom("Best available")?.disabled === false);
   await click(fillFrom("Your picks only"));
   check("#2 · Your picks only can be chosen", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true");
   check("#2 · the note says the generator picks the best 25", text().includes(POOL_OVER_CAP_NOTE), POOL_OVER_CAP_NOTE);
   await click(fillFrom("Best available"));
-  check("#2 · tapping Best available changes nothing", fillFrom("Your picks only")?.getAttribute("aria-checked") === "true" && ctx.generatorFilters.fillFrom !== "BEST_AVAILABLE" || ctx.generatorFilters.fillFrom === "BEST_AVAILABLE" && fillFrom("Your picks only")?.getAttribute("aria-checked") === "true");
+  check("#2 · Best available can be chosen with 60 picks, no over-cap note, the slip kept", fillFrom("Best available")?.getAttribute("aria-checked") === "true" && !text().includes(POOL_OVER_CAP_NOTE) && ctx.pool.length === 60);
+  await click(fillFrom("Your picks only"));
   for (let i = 0; i < 40; i++) await click(button("More legs"));
   check("#2 · the stepper stops at 25 (the parlay cap), not 60", ctx.legCount === MAX_PARLAY_LEGS, `legs=${ctx.legCount}`);
   await generate();
@@ -218,23 +210,17 @@ async function main() {
   for (const p of PICKS.slice(0, 5)) await act(() => ctx.togglePick(p as unknown as ExpanderPick));
   await act(() => ctx.sendToGenerator());
   await settle();
-  // The first picks make Combined the default (combined-fill.ts); this check is Best available's floor.
+  // The first picks make Combined the default (combined-fill.ts).
   check("#7 · the first picks make Combined the default", fillFrom("Combined")?.getAttribute("aria-checked") === "true" && ctx.legCount === 3, `legs=${ctx.legCount}`);
   await click(fillFrom("Best available"));
-  const floor = ctx.legCount;
-  check("#7 · Best available: the 5 sent picks set the floor", floor === 5 && legsShown() === "5", `legs=${ctx.legCount} shown=${legsShown()}`);
+  check("#7 · Best available: the 5 sent picks set no floor - Total legs stays 3", ctx.legCount === 3 && legsShown() === "3", `legs=${ctx.legCount} shown=${legsShown()}`);
   check("#7 · Best available: More legs is usable right away", button("More legs")?.disabled === false);
   await click(button("More legs"));
-  check("#7 · ...and raises the count", ctx.legCount === 6 && legsShown() === "6", `legs=${ctx.legCount}`);
-  await click(button("Fewer legs"));
-  check("#7 · at the floor: Fewer legs is disabled, not a silent no-op", ctx.legCount === 5 && button("Fewer legs")?.disabled === true);
-  check("#7 · ...and the hint says why", text().includes("Your 5 sent picks are all included — switch to Your picks only to use fewer."));
-  await click(button("More legs"));
-  check("#7 · above the floor the hint is gone", !text().includes("sent picks are all included"));
-  await click(fillFrom("Your picks only"));
-  check("#7 · Your picks only: Fewer legs works right away, no hint", button("Fewer legs")?.disabled === false && !text().includes("sent picks are all included"));
+  check("#7 · ...and raises the count", ctx.legCount === 4 && legsShown() === "4", `legs=${ctx.legCount}`);
   for (let i = 0; i < 8; i++) await click(button("Fewer legs"));
-  check("#7 · Your picks only: down to 1", ctx.legCount === 1 && button("Fewer legs")?.disabled === true, `legs=${ctx.legCount}`);
+  check("#7 · Best available: down to 1, no floor hint", ctx.legCount === 1 && button("Fewer legs")?.disabled === true && !text().includes("sent picks are all included"), `legs=${ctx.legCount}`);
+  await click(fillFrom("Your picks only"));
+  check("#7 · Your picks only: stays at 1", ctx.legCount === 1 && button("Fewer legs")?.disabled === true, `legs=${ctx.legCount}`);
 
   // Not a stale built capacity: build under Your picks only (capacity = the 5 picks), then Best available.
   for (let i = 0; i < 4; i++) await click(button("More legs"));

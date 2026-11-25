@@ -6,6 +6,7 @@
 // `--write` rewrites contrarian-diff.txt.
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
+import { fillModeAnnotationsDiffer, withFrozenAnnotations } from "@/lib/parlay/frozen-fill-mode";
 import { join } from "node:path";
 import { buildGeneratedParlay } from "@/lib/parlay/generator";
 import { SWAP_SCOPES, type SwapScope } from "@/lib/parlay/swap-scope";
@@ -67,7 +68,8 @@ for (const c of CONTRARIAN_CASES) {
   const now = buildGeneratedParlay(snap, c.settings, null, nowOf(c), trace);
   const { contrarian, ...rest } = now;
   check(`${c.label} · Primary unchanged`, now.legs.map((l) => l.pick.pickId), was.legs);
-  check(`${c.label} · Primary, Hedge and notes byte-identical (shown record aside)`, shaNoRecord(rest), was.restShaNoRecord);
+  // The slip cases now build as Combined (frozen-fill-mode.ts): its notes differ by design; legs and Contrarian are compared.
+  if (!fillModeAnnotationsDiffer(c.settings)) check(`${c.label} · Primary, Hedge and notes byte-identical (shown record aside)`, shaNoRecord(rest), was.restShaNoRecord);
   // The Swap setting decides which legs are searched exactly as before.
   for (const scope of SWAP_SCOPES) {
     const outNow = contrarian[scope].legs.map((l) => l.unchangedReason === "OUT_OF_SCOPE");

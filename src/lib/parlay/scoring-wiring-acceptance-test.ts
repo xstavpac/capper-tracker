@@ -19,7 +19,7 @@ const check = (label: string, actual: unknown, expected: unknown) => {
   console.log(`${pass ? "PASS" : "FAIL"}: ${label}${pass ? "" : ` -> actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`}`);
   if (!pass) failures++;
 };
-const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE", scoreModel: "EDGE" };
+const BASE: GeneratorSettings = { legCount: 6, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25, scoreModel: "EDGE" };
 const ids = (legs: { pick: { pickId: string } }[]) => legs.map((l) => l.pick.pickId);
 const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   leagueRecords: snap.leagueRecords,
@@ -102,7 +102,7 @@ const ctxOf = (snap = buildSnapshot(), minWinPct = 55): ScoringContext => ({
   const heavy = { id: "s-heavy", game: 0, category: "FAV_ML" as const, betType: "MONEYLINE", detail: "Chiefs ML", odds: -2000, source: "MARKET" as const, lg: [9, 1] as [number, number], hist: -110 };
   const fair = { id: "s-fair", game: 0, category: "DOG_ML" as const, betType: "MONEYLINE", detail: "Chargers ML", odds: -110, source: "STATED" as const, lg: [13, 7] as [number, number], hist: -110 };
   const snap = buildSnapshot([heavy, fair], ["s-heavy", "s-fair"]);
-  const scored = buildGeneratedParlay(snap, { ...BASE, legCount: 2, maxLegsPerGame: 2 }, null, NOW);
+  const scored = buildGeneratedParlay(snap, { ...BASE, legCount: 2, maxLegsPerGame: 2, fillFrom: "YOUR_PICKS_ONLY" }, null, NOW);
   check("opposing slip picks: scoring keeps the better edge", ids(scored.legs), ["s-fair"]);
   check("the loser is named in dropped", scored.dropped.map((d) => [d.pickId, d.reason, d.against?.pickId]), [["s-heavy", "opposes", "s-fair"]]);
   const noRec = { ...fair, id: "s-none", lg: [0, 0] as [number, number], hist: null };

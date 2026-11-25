@@ -224,9 +224,10 @@ async function main() {
   check("Max legs per game: a −/+ stepper that stops at 10", more().disabled && shown() === "10", `shown=${shown()} disabled=${more().disabled}`);
   for (let i = 0; i < 4; i++) await click(button("Fewer: Max legs per game"));
 
-  // The rest of this suite is Best available's (every pick in the parlay).
   await click(button("Best available"));
   check("Best available: chosen, the mix box gone, its helper shown", button("Best available")?.getAttribute("aria-checked") === "true" && el.querySelector("[data-mix-box]") === null && text().includes("Generator picks every leg from your cappers."));
+  // Best available never reads the slip; the rest of this suite is Combined at its default (2 of 3 legs from the two picks).
+  await click(button("Combined"));
 
   // ---- Generate: one request ----
   await generate();
@@ -264,7 +265,7 @@ async function main() {
   for (let i = 0; i < 5; i++) await click(button("More legs"));
   check("8 legs over 4 games at max 2: same-game legs tagged SGP, combined odds left to FanDuel", text().includes("SGP") && text().includes("Priced at FanDuel"), text().slice(-600));
   for (let i = 0; i < 3; i++) await click(button("More legs"));
-  check("at what the pool holds: the stepper stops and says why", ctx.legCount === 8 && text().includes("8 max from 4 games with qualified picks"), `legs=${ctx.legCount}`);
+  check("at what the pool holds: the stepper stops and says why", ctx.legCount === 8 && text().includes("8 max from your picks and 4 games with qualified picks"), `legs=${ctx.legCount}`);
 
   // ---- Send to FanDuel clears the slip ----
   await click(button("Send to FanDuel"));

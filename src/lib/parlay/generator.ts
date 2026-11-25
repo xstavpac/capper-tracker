@@ -10,8 +10,11 @@
 // due instead).
 //
 // Rules, in order:
-//   1. Slip picks are always in the parlay, whatever the filters or the leg
-//      count. Two slip picks that can't both be legs (opposing, or the same bet,
+//   0. Fill from = Best available is 100% auto: it never reads the slip
+//      (snapshotForFill) - not for building, not for the Swap modal. The slip
+//      is a pool for Your picks only (rule 6) and Combined (rule 7) alone.
+//   1. Your picks only with no more live slip picks than the leg count: every
+//      slip pick is in, whatever the filters. Two slip picks that can't both be legs (opposing, or the same bet,
 //      at any line - blocks(), build-my-picks.ts) compete: the better record
 //      stays, then the better line. The other is listed in `dropped`. A slip
 //      pick whose game is over is dropped too (a live game's picks stay). When "max legs per game" is
@@ -622,6 +625,13 @@ function qualifyPick(pick: GeneratorPick, game: GeneratorGame, ctx: QualifyConte
 }
 
 // Picks in the snapshot carrying a live price (slip picks included), for the run trace.
+// Fill from = Best available is 100% auto: the slip doesn't exist for it - no slip pick is put in,
+// ranked, or offered in the Swap modal, and the slip's games carry no special standing. The slip
+// itself is untouched (Combined and Your picks only still read it).
+export function snapshotForFill(snapshot: GeneratorSnapshot, fillFrom: FillFrom): GeneratorSnapshot {
+  return fillFrom === "BEST_AVAILABLE" && snapshot.slipPicks.length > 0 ? { ...snapshot, slipPicks: [] } : snapshot;
+}
+
 const countLivePriced = (s: GeneratorSnapshot) => [...s.slipPicks, ...s.games.flatMap((g) => g.picks)].filter((p) => p.liveOdds != null).length;
 
 // ---------------------------------------------------------------------------
@@ -635,6 +645,7 @@ export function buildGeneratedParlay(
   // Diagnostics only (run-trace.ts): written to, never read from - the parlay is the same with or without one.
   trace?: TraceCollector
 ): GeneratedParlay {
+  snapshot = snapshotForFill(snapshot, settings.fillFrom);
   const gate = effectiveGate(settings);
   const scoreOf = scorerFor(snapshot, gate, settings.scoreModel);
   // A trace step that throws (even while building its arguments) is reported on the trace, never into the build.
@@ -704,7 +715,9 @@ export function buildGeneratedParlay(
   // the leg count, the leg count of them are drawn instead, and every live
   // slip pick not drawn is not_selected (the conflicts and per-game cap above
   // are only either/or here, not a loss).
-  const subset = settings.fillFrom === "YOUR_PICKS_ONLY" && allInLegs.length > legCount;
+  // More live picks than legs is a subset even when conflicts or the per-game cap leave fewer that fit
+  // one parlay: those are either/or here, so Regenerate rotates through them.
+  const subset = settings.fillFrom === "YOUR_PICKS_ONLY" && (allInLegs.length > legCount || liveSlip.length > legCount);
   let slipLegs = allInLegs;
   let subsetVariety: GeneratedParlay["variety"] = "BEST";
   // What selection did, for the run log (filled in below).
@@ -1195,8 +1208,9 @@ function rotationAfter(build: number, slipIds: readonly string[], used: Readonly
 //                swapped leg's game out (unless another leg is on it).
 // Best available: the build's own candidates (qualifyPick - Include Picks, the
 // star, a record, the win-rate gate), never a pick already in the parlay or in
-// the slip, ordered by the build's ranking (byRank); then the slip picks not in
-// the parlay, ungated as in Your picks only, after them. Your picks only: the slip
+// the slip, ordered by the build's ranking (byRank). Best available is pure auto: it
+// never offers a slip pick as one (snapshotForFill). Combined adds the slip picks not
+// in the parlay, ungated as in Your picks only. Your picks only: the slip
 // picks not in the parlay (game not over), ungated like every slip pick, in the
 // slip's order (rankSlip), either/or by blocks() as rule 6 has it. Pick Mix
 // doesn't shape a hand swap. Live games follow the build's rule with no
@@ -1220,6 +1234,7 @@ export function legAlternatives(
   legIndex: number,
   now: Date
 ): LegAlternatives {
+  snapshot = snapshotForFill(snapshot, settings.fillFrom);
   const out: LegAlternatives = { thisGame: [], otherGames: [] };
   const swapped = legs[legIndex];
   if (!swapped) return out;
@@ -1392,6 +1407,7 @@ export function applyLegSwap(
   pickId: string,
   now: Date
 ): GeneratedParlay | null {
+  snapshot = snapshotForFill(snapshot, settings.fillFrom);
   const options = legSwapOptions(snapshot, settings, parlay.legs, legIndex, now);
   const chosen = SWAP_TAB_KEYS.flatMap((t) => options[t]).find((l) => !l.current && l.pick.pickId === pickId);
   if (!chosen) return null;

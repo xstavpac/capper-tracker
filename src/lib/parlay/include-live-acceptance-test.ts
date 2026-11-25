@@ -123,7 +123,7 @@ function makeSnapshot(opts: { slip?: string[]; targets?: string[]; feedLiveButFu
   };
 }
 
-const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 const OFF: GeneratorSettings = { ...SETTINGS, includeLive: false };
 const build = (s: GeneratorSnapshot, settings: GeneratorSettings, v: Variation | null = null) => buildGeneratedParlay(s, settings, v, NOW);
 const gameOf = (id: string) => id.split("-")[0];

@@ -127,7 +127,7 @@ function listingFor(league: "NBA" | "NHL"): LiveListingGame[] {
     });
 }
 
-const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+const SETTINGS: GeneratorSettings = { legCount: 4, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
 const priced = (s: GeneratorSnapshot) => {
   const r = withLivePrices(s.games, s.slipPicks, new Map([["NBA", listingFor("NBA")], ["NHL", listingFor("NHL")]]), NOW);
   return { ...s, games: r.games, slipPicks: r.slipPicks, livePricing: { asked: true, leagues: { NBA: "FETCHED" as const, NHL: "FETCHED" as const } } };
