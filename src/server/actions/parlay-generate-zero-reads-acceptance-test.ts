@@ -164,7 +164,8 @@ async function main() {
   let clock = NOW;
   const session = createGeneratorSession({ generate: (r) => generateParlayAction(r), now: () => new Date(clock), firstSeed: 1 });
   const inputs = { leagues: ["NFL"], slipPickIds: [slipId], targets: [] as { gameId: string; leagueName: string }[] };
-  const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "BEST_AVAILABLE" };
+  // A slip pick plus generated legs is Combined (Best available never reads the slip).
+  const settings: GeneratorSettings = { legCount: 3, maxLegsPerGame: 1, include: "ALL", mix: null, fillFrom: "COMBINED", manualSlots: 25 };
   const bundleCalls = () => queries.filter((q) => q.includes('"cardReq"')).length;
 
   await drain();
