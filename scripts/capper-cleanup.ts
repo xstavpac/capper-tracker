@@ -4,9 +4,11 @@
 // THIS SCRIPT NEVER WRITES TO THE DATABASE. Modes:
 //   --dry-run (default)   print the report: proposed MERGES, proposed DELETES, and NEEDS YOUR DECISION.
 //   --emit-sql <file>     also write the cleanup as ONE BEGIN/COMMIT SQL script for a person to review and run in the
-//                         Supabase SQL editor: backup tables first, then re-point rows by capper id, then guarded
-//                         deletes by id (a delete only happens if the capper has no picks and no parlays left).
-//                         Only MERGES and DELETES are emitted; NEEDS YOUR DECISION is never touched.
+//                         Supabase SQL editor: backups first (own schema, RLS on), then moves, then guarded deletes by
+//                         id. Needs real capper ids: --lookup-sql prints a read-only query that returns them, and
+//                         --ids-json <file> takes its result. --preview-sql / --missing-sql print read-only SELECTs
+//                         (per-account counts / copies with no target capper); --verify-sql prints the after-check.
+//                         Decisions baked in (account owner, 2026-11-24): see APPROVED_ALIASES and the PURGE rule below.
 //   --print-sql           print the two read-only queries (snapshot, then junk cappers' picks) and exit.
 //
 // Input, read-only either way:
@@ -99,14 +101,44 @@ export type PickRow = {
 
 export type Merge = { userId: string; stray: CapperRow; target: CapperRow; why: string };
 export type Junk = { row: CapperRow; reason: CapperJunkReason };
-export type AccountPlan = { userId: string; email: string; isSource: boolean; cappers: number; merges: Merge[]; deletes: Junk[]; decide: Junk[] };
+export type AccountPlan = {
+  userId: string;
+  email: string;
+  isSource: boolean;
+  cappers: number;
+  merges: Merge[];
+  deletes: Junk[];
+  decide: Junk[];
+  // An approved alias whose target capper does not exist in this account (nothing is created; listed for a person).
+  missingTargets: string[];
+};
+
+// Decisions given by the account owner on 2026-11-24 (not guesses): a name that IS a real capper although it looks like
+// a roster player. Normalized stray name -> the saved capper it files under. Never created: a missing target is listed.
+const APPROVED_ALIASES: Record<string, string> = { [normalizeName("Alex Caruso")]: "Caruso" };
+// A different person who must never be merged into, or out of, anything (e.g. "Prop Bet Guy Doug" is NOT "Doug").
+const PROTECTED_NAMES = new Set([normalizeName("Doug")]);
 
 const activity = (c: CapperRow) => c.picks + c.parlays;
 
-export function planAccount(rows: CapperRow[]): AccountPlan {
-  const first = rows[0];
+export function planAccount(allRows: CapperRow[]): AccountPlan {
+  const first = allRows[0];
   const junk: Junk[] = [];
   const keep: CapperRow[] = [];
+  const aliasMerges: Merge[] = [];
+  const missingTargets: string[] = [];
+  // Approved aliases first: they are merges, not junk, and their target is whatever saved capper has the target name.
+  const rows: CapperRow[] = [];
+  for (const r of allRows) {
+    const targetName = APPROVED_ALIASES[normalizeName(r.name)];
+    if (!targetName) {
+      rows.push(r);
+      continue;
+    }
+    const target = allRows.find((x) => x.id !== r.id && normalizeName(x.name) === normalizeName(targetName));
+    if (target) aliasMerges.push({ userId: r.userId, stray: r, target, why: "approved alias (" + r.name + " is " + target.name + ")" });
+    else missingTargets.push(r.name + " -> " + targetName);
+  }
   for (const r of rows) {
     const reason = r.rosterPlayer ? "player" : capperNameJunkReason(r.name);
     if (reason) junk.push({ row: r, reason });
@@ -144,12 +176,17 @@ export function planAccount(rows: CapperRow[]): AccountPlan {
       merges.push({ userId: s.userId, stray: s, target, why: why.get(s.id) ?? `variant of "${target.name}"` });
     }
   }
+  merges.push(...aliasMerges);
   merges.sort((a, b) => a.target.name.localeCompare(b.target.name) || a.stray.name.localeCompare(b.stray.name));
+  const touchesProtected = (r: CapperRow) => PROTECTED_NAMES.has(normalizeName(r.name));
+  const bad = [...merges.flatMap((m) => [m.stray, m.target]), ...junk.map((j) => j.row)].filter(touchesProtected);
+  if (bad.length) throw new Error("A protected capper would be touched: " + bad.map((b) => b.name).join(", "));
   return {
     userId: first.userId,
     email: first.email,
     isSource: first.isSource,
-    cappers: rows.length,
+    cappers: allRows.length,
+    missingTargets,
     merges,
     deletes: junk.filter((j) => activity(j.row) === 0).sort((a, b) => a.row.name.localeCompare(b.row.name)),
     decide: junk.filter((j) => activity(j.row) > 0).sort((a, b) => activity(b.row) - activity(a.row)),
@@ -214,55 +251,250 @@ export function renderReport(plans: AccountPlan[], picks: PickRow[] | null): str
 }
 
 // ---- the write SQL (emitted only, never run here) ----
+//
+// Decisions behind it (account owner, 2026-11-24):
+//   MERGE    a stray capper into a saved one: its picks and parlays move, then the stray is deleted.
+//   PURGE    (source account) a junk capper WITH picks: its picks/parlays are deleted, then the capper.
+//   DELETE0  (source account) a junk capper with no picks and no parlays: deleted.
+//   RJUNK    (recipient accounts) a junk capper. Its copies follow their source pick (below); it is deleted if that leaves it empty.
+// Recipient copies follow their source pick (picks."sourcePickId", no FK):
+//   - the source pick is being deleted (PURGE), or is already gone and the copy sits under an RJUNK capper -> the copy is deleted;
+//   - otherwise the copy is filed under the recipient's capper with the same (normalized) name as the capper the source pick
+//     ends up under. No such capper (or two): the copy is left and listed - a capper is never created here.
 
 const lit = (s: string) => "'" + s.replace(/'/g, "''") + "'";
-const inList = (ids: string[]) => "(" + ids.map(lit).join(", ") + ")";
+
+export type PlanKind = "MERGE" | "PURGE" | "DELETE0" | "RJUNK";
+export type PlanRow = { kind: PlanKind; userId: string; id: string; name: string; targetId: string | null; targetName: string | null };
+
+export function planRows(plans: AccountPlan[]): PlanRow[] {
+  const out: PlanRow[] = [];
+  for (const a of plans) {
+    for (const m of a.merges) out.push({ kind: "MERGE", userId: a.userId, id: m.stray.id, name: m.stray.name, targetId: m.target.id, targetName: m.target.name });
+    for (const d of a.deletes) out.push({ kind: a.isSource ? "DELETE0" : "RJUNK", userId: a.userId, id: d.row.id, name: d.row.name, targetId: null, targetName: null });
+    for (const d of a.decide) out.push({ kind: a.isSource ? "PURGE" : "RJUNK", userId: a.userId, id: d.row.id, name: d.row.name, targetId: null, targetName: null });
+  }
+  return out;
+}
+
+const KEY = (col: string) => `regexp_replace(lower(${col}), '[^a-z0-9]', '', 'g')`;
+const ASCII = (col: string) => `regexp_replace(lower(btrim(${col})), '[^ -~]', '', 'g')`;
+const JUNK_KINDS = `('PURGE', 'DELETE0', 'RJUNK')`;
+
+// `t` prefixes the set tables ("" for a read-only preview that defines them as CTEs, "<schema>." in the transaction).
+function copyDeleteSelect(t: string): string {
+  return `SELECT c.id, c."userId", c."capperId" AS "fromCapperId",
+       CASE WHEN s.id IS NULL THEN 'source pick already deleted' ELSE 'source pick is being deleted' END AS why
+FROM picks c LEFT JOIN picks s ON s.id = c."sourcePickId"
+WHERE c."isRecipientCopy" AND c."userId" IN (SELECT "userId" FROM ${t}acct WHERE role = 'RECIPIENT')
+  AND ((s.id IS NOT NULL AND s."capperId" IN (SELECT id FROM ${t}plan WHERE kind = 'PURGE'))
+    OR (s.id IS NULL AND c."capperId" IN (SELECT id FROM ${t}plan WHERE kind = 'RJUNK')))`;
+}
+
+// The capper a copy's source pick ends up under: its own capper, or the target when that capper is merged away.
+function sourceFinalFrom(t: string): string {
+  return `FROM picks c
+JOIN picks s ON s.id = c."sourcePickId"
+JOIN cappers sc ON sc.id = s."capperId"
+LEFT JOIN ${t}plan sm ON sm.kind = 'MERGE' AND sm.id = sc.id
+JOIN cappers fc ON fc.id = COALESCE(sm."targetId", sc.id)`;
+}
+
+function copyRefileSelect(t: string): string {
+  return `SELECT c.id, c."userId", c."capperId" AS "fromCapperId", COALESCE(rm."targetId", rc.id) AS "toCapperId", fc.name AS "fileAs"
+${sourceFinalFrom(t)}
+JOIN cappers rc ON rc."userId" = c."userId" AND ${KEY("rc.name")} = ${KEY("fc.name")} AND ${KEY("fc.name")} <> ''
+LEFT JOIN ${t}plan rm ON rm.kind = 'MERGE' AND rm.id = rc.id
+WHERE c."isRecipientCopy" AND c."userId" IN (SELECT "userId" FROM ${t}acct WHERE role = 'RECIPIENT')
+  AND c.id NOT IN (SELECT id FROM ${t}copy_delete)
+  AND rc.id NOT IN (SELECT id FROM ${t}plan WHERE kind IN ${JUNK_KINDS})
+  AND COALESCE(rm."targetId", rc.id) <> c."capperId"
+  AND (SELECT count(*) FROM cappers x WHERE x."userId" = c."userId" AND x.id NOT IN (SELECT id FROM ${t}plan WHERE kind IN ${JUNK_KINDS})
+         AND ${KEY("x.name")} = ${KEY("fc.name")}) = 1`;
+}
+
+function valuesSql(rows: (string | null)[][]): string {
+  return rows.map((r) => "(" + r.map((v) => (v === null ? "NULL::text" : lit(v))).join(", ") + ")").join(",\n  ");
+}
+const planValues = (rows: PlanRow[]) => valuesSql(rows.map((r) => [r.kind, r.userId, r.id, r.name, r.targetId, r.targetName]));
+const acctValues = (plans: AccountPlan[]) => valuesSql(plans.map((a) => [a.userId, a.isSource ? "SOURCE" : "RECIPIENT", a.email]));
+
+function assertRealIds(rows: PlanRow[]) {
+  const bad = rows.flatMap((r) => [r.id, r.targetId ?? ""]).filter((id) => id !== "" && /^\(id/.test(id));
+  if (bad.length) throw new Error("capper ids not looked up yet (--lookup-sql, then --ids-json): " + bad.slice(0, 3).join(", "));
+}
+
+// Read-only: what the transaction would do, per account. Only SELECTs; safe to run anywhere.
+export function renderPreviewSql(plans: AccountPlan[]): string {
+  const rows = planRows(plans);
+  assertRealIds(rows);
+  return `WITH plan(kind, "userId", id, name, "targetId", "targetName") AS (VALUES
+  ${planValues(rows)}),
+acct("userId", role, email) AS (VALUES
+  ${acctValues(plans)}),
+copy_delete AS (${copyDeleteSelect("")}),
+copy_refile AS (${copyRefileSelect("")}),
+purge_picks AS (SELECT p.id, p."userId" FROM picks p WHERE p."capperId" IN (SELECT id FROM plan WHERE kind = 'PURGE'))
+SELECT a.email, a.role,
+  (SELECT count(*) FROM plan WHERE kind = 'MERGE' AND "userId" = a."userId") AS merges,
+  (SELECT count(*) FROM picks p JOIN plan m ON m.kind = 'MERGE' AND m.id = p."capperId" WHERE p."userId" = a."userId"
+     AND p.id NOT IN (SELECT id FROM copy_delete) AND p.id NOT IN (SELECT id FROM copy_refile)) AS picks_moved_by_merge,
+  (SELECT count(*) FROM copy_refile r WHERE r."userId" = a."userId") AS copies_refiled,
+  (SELECT count(*) FROM purge_picks x WHERE x."userId" = a."userId") AS source_picks_deleted,
+  (SELECT count(*) FROM copy_delete d WHERE d."userId" = a."userId") AS copies_deleted,
+  (SELECT count(*) FROM plan WHERE kind = 'MERGE' AND "userId" = a."userId") AS strays_deleted,
+  (SELECT count(*) FROM plan WHERE kind IN ${JUNK_KINDS} AND "userId" = a."userId") AS junk_cappers_listed,
+  (SELECT count(*) FROM plan pl WHERE pl.kind IN ${JUNK_KINDS} AND pl."userId" = a."userId"
+     AND EXISTS (SELECT 1 FROM picks p WHERE p."capperId" = pl.id AND p.id NOT IN (SELECT id FROM copy_delete) AND p.id NOT IN (SELECT id FROM copy_refile) AND p.id NOT IN (SELECT id FROM purge_picks))) AS junk_cappers_left_with_picks,
+  (SELECT count(*) FROM picks c WHERE c."userId" = a."userId" AND a.role = 'RECIPIENT' AND c."isRecipientCopy" AND c.id NOT IN (SELECT id FROM copy_delete)
+     AND NOT EXISTS (SELECT 1 FROM picks s WHERE s.id = c."sourcePickId")) AS copies_with_missing_source_left
+FROM acct a ORDER BY a.role DESC, a.email`;
+}
+
+// Read-only: copies that should move but have no (or two) matching capper on the recipient. Nothing is created for them.
+export function renderMissingTargetsSql(plans: AccountPlan[]): string {
+  const rows = planRows(plans);
+  assertRealIds(rows);
+  return `WITH plan(kind, "userId", id, name, "targetId", "targetName") AS (VALUES
+  ${planValues(rows)}),
+acct("userId", role, email) AS (VALUES
+  ${acctValues(plans)}),
+copy_delete AS (${copyDeleteSelect("")})
+SELECT a.email, fc.name AS source_capper, count(*) AS copies,
+  (SELECT count(*) FROM cappers x WHERE x."userId" = c."userId" AND x.id NOT IN (SELECT id FROM plan WHERE kind IN ${JUNK_KINDS}) AND ${KEY("x.name")} = ${KEY("fc.name")}) AS matching_cappers
+${sourceFinalFrom("")}
+JOIN acct a ON a."userId" = c."userId" AND a.role = 'RECIPIENT'
+WHERE c."isRecipientCopy" AND c.id NOT IN (SELECT id FROM copy_delete)
+  AND (SELECT count(*) FROM cappers x WHERE x."userId" = c."userId" AND x.id NOT IN (SELECT id FROM plan WHERE kind IN ${JUNK_KINDS}) AND ${KEY("x.name")} = ${KEY("fc.name")}) <> 1
+GROUP BY a.email, fc.name, c."userId" ORDER BY 1, 3 DESC`;
+}
+
+// Read-only: the lookup that gives every capper in the plan its real id (ASCII names; the emoji names are given by hand).
+export function renderLookupSql(plans: AccountPlan[], emailOf: (userId: string) => string): string {
+  const seen = new Set<string>();
+  const vals: string[][] = [];
+  for (const r of planRows(plans)) {
+    for (const name of [r.name, r.targetName]) {
+      if (!name || /[^ -~]/.test(name)) continue;
+      const k = emailOf(r.userId) + "\u0000" + name;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      vals.push([emailOf(r.userId), name]);
+    }
+  }
+  return `SELECT json_agg(json_build_array(v.email, v.name, c.id) ORDER BY v.email, v.name) AS ids
+FROM (VALUES
+  ${valuesSql(vals)}) v(email, name)
+JOIN users u ON lower(u.email) = lower(v.email)
+LEFT JOIN cappers c ON c."userId" = u.id AND lower(btrim(c.name)) = lower(btrim(v.name))`;
+}
 
 export function renderWriteSql(plans: AccountPlan[], stamp: string): string {
-  const merges = plans.flatMap((a) => a.merges);
-  const deletes = plans.flatMap((a) => a.deletes);
-  const strayIds = merges.map((m) => m.stray.id);
-  const capperIds = [...strayIds, ...merges.map((m) => m.target.id), ...deletes.map((d) => d.row.id)];
-  const t = (name: string) => `capper_cleanup_${stamp}_${name}`;
-  const s: string[] = [
-    `-- Capper cleanup, generated ${new Date().toISOString()} by scripts/capper-cleanup.ts. Review before running.`,
-    `-- ${merges.length} merges, ${deletes.length} deletes. Run as ONE transaction; any error rolls everything back.`,
-    "BEGIN;",
-    "",
-    "-- 1. Backups of every row this script can change (kept after COMMIT; drop them once you're happy).",
-    `CREATE TABLE ${t("cappers")} AS SELECT * FROM cappers WHERE id IN ${inList(capperIds.length ? capperIds : ["-"])};`,
-    `CREATE TABLE ${t("picks")} AS SELECT * FROM picks WHERE "capperId" IN ${inList(strayIds.length ? strayIds : ["-"])};`,
-    `CREATE TABLE ${t("parlay_bets")} AS SELECT * FROM parlay_bets WHERE "capperId" IN ${inList(strayIds.length ? strayIds : ["-"])};`,
-    `CREATE TABLE ${t("dismissed_pairs")} AS SELECT * FROM dismissed_duplicate_pairs WHERE "capperAId" IN ${inList(capperIds.length ? capperIds : ["-"])} OR "capperBId" IN ${inList(capperIds.length ? capperIds : ["-"])};`,
-    "",
-    "-- 2. Merges: re-point picks and parlays to the target (same user only), carry the favorite flag, drop the stray's",
-    "--    dismissed-duplicate pairs (moot once merged), then delete the stray only if nothing points at it any more.",
-  ];
-  for (const m of merges) {
-    const [sid, tid, uid] = [lit(m.stray.id), lit(m.target.id), lit(m.userId)];
-    s.push(
-      `-- ${q(m.stray.name)} -> ${q(m.target.name)} (${m.stray.picks} picks, ${m.stray.parlays} parlays)`,
-      `UPDATE picks SET "capperId" = ${tid} WHERE "capperId" = ${sid} AND "userId" = ${uid};`,
-      `UPDATE parlay_bets SET "capperId" = ${tid} WHERE "capperId" = ${sid} AND "userId" = ${uid};`,
-      ...(m.stray.isFavorite ? [`UPDATE cappers SET "isFavorite" = true WHERE id = ${tid} AND "userId" = ${uid};`] : []),
-      `DELETE FROM dismissed_duplicate_pairs WHERE id IN (SELECT id FROM ${t("dismissed_pairs")} WHERE "capperAId" = ${sid} OR "capperBId" = ${sid});`,
-      `DELETE FROM cappers WHERE id = ${sid} AND "userId" = ${uid} AND NOT EXISTS (SELECT 1 FROM picks WHERE "capperId" = ${sid}) AND NOT EXISTS (SELECT 1 FROM parlay_bets WHERE "capperId" = ${sid});`
-    );
-  }
-  s.push("", "-- 3. Deletes: junk cappers with no picks and no parlays (re-checked here).");
-  for (const d of deletes) {
-    const [id, uid] = [lit(d.row.id), lit(d.row.userId)];
-    s.push(
-      `DELETE FROM cappers WHERE id = ${id} AND "userId" = ${uid} AND NOT EXISTS (SELECT 1 FROM picks WHERE "capperId" = ${id}) AND NOT EXISTS (SELECT 1 FROM parlay_bets WHERE "capperId" = ${id}); -- ${q(d.row.name)}`
-    );
-  }
-  s.push(
-    "",
-    "-- 4. Check before COMMIT: every stray / junk id should be gone (expect 0).",
-    `SELECT count(*) AS remaining FROM cappers WHERE id IN ${inList([...strayIds, ...deletes.map((d) => d.row.id)].length ? [...strayIds, ...deletes.map((d) => d.row.id)] : ["-"])};`,
-    "COMMIT;"
-  );
-  return s.join("\n") + "\n";
+  const rows = planRows(plans);
+  assertRealIds(rows);
+  const S = `cc_${stamp}`;
+  const t = `${S}.`;
+  const backups = ["plan", "acct", "copy_delete", "copy_refile", "purge_picks", "b_cappers", "b_picks", "b_parlay_bets", "b_legs", "b_pairs"];
+  const merges = rows.filter((r) => r.kind === "MERGE").length;
+  const count = (k: PlanKind) => rows.filter((r) => r.kind === k).length;
+  return `-- Capper cleanup, generated ${new Date().toISOString()} by scripts/capper-cleanup.ts.
+-- ONE transaction: any error (including a failed safety check) rolls everything back and changes nothing.
+-- It backs up every row it can change into schema ${S} first (kept after COMMIT, RLS on, readable only by the DB owner),
+-- moves rows before deleting anything, and every delete filters by id (ids captured into ${S}.* tables first).
+-- ${merges} merges, ${count("PURGE")} purged cappers, ${count("DELETE0")} zero-pick deletes, ${count("RJUNK")} recipient junk cappers.
+BEGIN;
+SET LOCAL lock_timeout = '15s';
+SET LOCAL statement_timeout = '300s';
+CREATE SCHEMA ${S};
+
+-- 0. The plan. The ids were looked up read-only; the checks below abort if any id / user / name does not match the database.
+CREATE TABLE ${t}acct ("userId" text PRIMARY KEY, role text NOT NULL, email text NOT NULL);
+INSERT INTO ${t}acct VALUES
+  ${acctValues(plans)};
+CREATE TABLE ${t}plan (kind text NOT NULL, "userId" text NOT NULL, id text PRIMARY KEY, name text NOT NULL, "targetId" text, "targetName" text);
+INSERT INTO ${t}plan VALUES
+  ${planValues(rows)};
+DO $$
+DECLARE bad int;
+BEGIN
+  SELECT count(*) INTO bad FROM ${t}plan p LEFT JOIN cappers c ON c.id = p.id AND c."userId" = p."userId" AND ${ASCII("c.name")} = ${ASCII("p.name")} WHERE c.id IS NULL;
+  IF bad > 0 THEN RAISE EXCEPTION 'plan: % capper rows do not match the database (id / user / name)', bad; END IF;
+  SELECT count(*) INTO bad FROM ${t}plan p LEFT JOIN cappers c ON c.id = p."targetId" AND c."userId" = p."userId" AND ${ASCII("c.name")} = ${ASCII('p."targetName"')} WHERE p."targetId" IS NOT NULL AND c.id IS NULL;
+  IF bad > 0 THEN RAISE EXCEPTION 'plan: % merge targets do not match the database (id / user / name)', bad; END IF;
+  SELECT count(*) INTO bad FROM ${t}plan p JOIN ${t}acct a ON a."userId" = p."userId" WHERE (p.kind IN ('PURGE', 'DELETE0') AND a.role <> 'SOURCE') OR (p.kind = 'RJUNK' AND a.role <> 'RECIPIENT');
+  IF bad > 0 THEN RAISE EXCEPTION 'plan: % rows are in the wrong kind of account', bad; END IF;
+  SELECT count(*) INTO bad FROM ${t}plan p WHERE ${KEY("p.name")} = 'doug' OR ${KEY("coalesce(p.\"targetName\", '')")} = 'doug';
+  IF bad > 0 THEN RAISE EXCEPTION 'plan: the separate Doug capper must not be touched'; END IF;
+END $$;
+
+-- 1. What will change, with ids captured NOW (every write below uses these tables, not names).
+CREATE TABLE ${t}copy_delete AS
+${copyDeleteSelect(t)};
+CREATE TABLE ${t}copy_refile AS
+${copyRefileSelect(t)};
+CREATE TABLE ${t}purge_picks AS SELECT p.id, p."userId", p."capperId" FROM picks p WHERE p."capperId" IN (SELECT id FROM ${t}plan WHERE kind = 'PURGE');
+
+-- 2. Backups of every row that can change.
+CREATE TABLE ${t}b_cappers AS SELECT * FROM cappers WHERE id IN (SELECT id FROM ${t}plan UNION SELECT "targetId" FROM ${t}plan WHERE "targetId" IS NOT NULL);
+CREATE TABLE ${t}b_picks AS SELECT * FROM picks WHERE id IN (SELECT id FROM ${t}copy_delete UNION SELECT id FROM ${t}copy_refile UNION SELECT id FROM ${t}purge_picks)
+  OR "capperId" IN (SELECT id FROM ${t}plan WHERE kind = 'MERGE');
+CREATE TABLE ${t}b_parlay_bets AS SELECT * FROM parlay_bets WHERE "capperId" IN (SELECT id FROM ${t}plan);
+CREATE TABLE ${t}b_legs AS SELECT * FROM legs WHERE "parlayBetId" IN (SELECT id FROM ${t}b_parlay_bets);
+CREATE TABLE ${t}b_pairs AS SELECT * FROM dismissed_duplicate_pairs WHERE "capperAId" IN (SELECT id FROM ${t}plan) OR "capperBId" IN (SELECT id FROM ${t}plan);
+${backups.map((b) => `ALTER TABLE ${t}${b} ENABLE ROW LEVEL SECURITY;`).join("\n")}
+
+-- 3. Recipient copies follow their source pick.
+DELETE FROM picks p USING ${t}copy_delete d WHERE p.id = d.id AND p."userId" = d."userId" AND p."isRecipientCopy";
+UPDATE picks p SET "capperId" = r."toCapperId" FROM ${t}copy_refile r WHERE p.id = r.id AND p."userId" = r."userId" AND p."isRecipientCopy";
+
+-- 4. Source account: the picks and parlays of the junk cappers you decided to purge (legs go with their parlay).
+DELETE FROM picks p USING ${t}purge_picks x WHERE p.id = x.id AND p."userId" = x."userId";
+DELETE FROM parlay_bets b USING ${t}b_parlay_bets x, ${t}plan pl WHERE b.id = x.id AND x."capperId" = pl.id AND pl.kind = 'PURGE';
+
+-- 5. Merges, all accounts: move what is left on each stray to its target; a favorite stray makes the target a favorite.
+UPDATE picks p SET "capperId" = m."targetId" FROM ${t}plan m WHERE m.kind = 'MERGE' AND p."capperId" = m.id AND p."userId" = m."userId";
+UPDATE parlay_bets b SET "capperId" = m."targetId" FROM ${t}plan m WHERE m.kind = 'MERGE' AND b."capperId" = m.id AND b."userId" = m."userId";
+UPDATE cappers t SET "isFavorite" = true FROM ${t}plan m JOIN cappers s ON s.id = m.id
+  WHERE m.kind = 'MERGE' AND t.id = m."targetId" AND t."userId" = m."userId" AND s."isFavorite" AND NOT t."isFavorite";
+
+-- 6. Delete the cappers, only those left with no picks and no parlays (dismissed-duplicate pairs cascade; backed up above).
+DELETE FROM cappers c USING ${t}plan p
+  WHERE c.id = p.id AND c."userId" = p."userId"
+    AND NOT EXISTS (SELECT 1 FROM picks x WHERE x."capperId" = c.id)
+    AND NOT EXISTS (SELECT 1 FROM parlay_bets x WHERE x."capperId" = c.id);
+
+-- 7. Safety check: no merged-away, purged or zero-pick capper may remain (recipient junk that still holds its own picks may).
+DO $$
+DECLARE bad int;
+BEGIN
+  SELECT count(*) INTO bad FROM ${t}plan p JOIN cappers c ON c.id = p.id WHERE p.kind IN ('MERGE', 'PURGE', 'DELETE0');
+  IF bad > 0 THEN RAISE EXCEPTION 'check failed: % merged/purged/zero-pick cappers still exist', bad; END IF;
+END $$;
+COMMIT;
+`;
+}
+
+// Read-only, run AFTER the script: every line says what it wants.
+export function renderVerifySql(stamp: string): string {
+  const S = `cc_${stamp}.`;
+  return `SELECT check_name, n FROM (
+  SELECT 1 AS o, 'merged-away cappers still present (want 0)' AS check_name, count(*) AS n FROM ${S}plan p JOIN cappers c ON c.id = p.id WHERE p.kind = 'MERGE'
+  UNION ALL SELECT 2, 'purged + zero-pick source cappers still present (want 0)', count(*) FROM ${S}plan p JOIN cappers c ON c.id = p.id WHERE p.kind IN ('PURGE', 'DELETE0')
+  UNION ALL SELECT 3, 'recipient junk cappers still present (want 0; any left still hold their own non-copy picks)', count(*) FROM ${S}plan p JOIN cappers c ON c.id = p.id WHERE p.kind = 'RJUNK'
+  UNION ALL SELECT 4, 'picks still on a merged-away or junk capper id (want 0)', count(*) FROM picks p WHERE p."capperId" IN (SELECT id FROM ${S}plan)
+  UNION ALL SELECT 5, 'deleted copies still present (want 0)', count(*) FROM ${S}copy_delete d JOIN picks p ON p.id = d.id
+  UNION ALL SELECT 6, 'purged source picks still present (want 0)', count(*) FROM ${S}purge_picks x JOIN picks p ON p.id = x.id
+  UNION ALL SELECT 7, 'refiled copies not on their target capper (want 0)', count(*) FROM ${S}copy_refile r JOIN picks p ON p.id = r.id WHERE p."capperId" <> r."toCapperId"
+  UNION ALL SELECT 8, 'Doug cappers across the 3 accounts (want 3, untouched)', count(*) FROM cappers c WHERE c."userId" IN (SELECT "userId" FROM ${S}acct) AND lower(btrim(c.name)) = 'doug'
+  UNION ALL SELECT 9, 'copies filed under a capper whose name differs from their source pick capper (informational)', count(*)
+    FROM picks c JOIN picks s ON s.id = c."sourcePickId" JOIN cappers sc ON sc.id = s."capperId" JOIN cappers rc ON rc.id = c."capperId"
+    WHERE c."isRecipientCopy" AND c."userId" IN (SELECT "userId" FROM ${S}acct WHERE role = 'RECIPIENT')
+      AND ${KEY("rc.name")} <> ${KEY("sc.name")}
+  UNION ALL SELECT 10, 'recipient cappers with 0 picks and 0 parlays (informational; emptied by moving copies)', count(*)
+    FROM cappers c WHERE c."userId" IN (SELECT "userId" FROM ${S}acct WHERE role = 'RECIPIENT')
+      AND NOT EXISTS (SELECT 1 FROM picks x WHERE x."capperId" = c.id) AND NOT EXISTS (SELECT 1 FROM parlay_bets x WHERE x."capperId" = c.id)
+  UNION ALL SELECT 11, 'pick rows backed up in ${S}b_picks', count(*) FROM ${S}b_picks
+) r ORDER BY o`;
 }
 
 // ---- CLI ----
@@ -280,8 +512,13 @@ async function main() {
     console.log("-- snapshot ($1 = the source account's email)\n" + SNAPSHOT_SQL + ";\n\n-- junk cappers' picks ($1 = text[] of capper ids)\n" + PICKS_SQL + ";");
     return;
   }
+  if (process.argv.includes("--verify-sql")) {
+    console.log(renderVerifySql(arg("--stamp") ?? new Date().toISOString().slice(0, 10).replace(/-/g, "")));
+    return;
+  }
   const email = arg("--email");
   const fromJson = arg("--from-json");
+  const idsJson = arg("--ids-json");
   const picksJson = arg("--picks-json");
   let rows: CapperRow[];
   let picks: PickRow[] | null = null;
@@ -302,11 +539,27 @@ async function main() {
   }
   if (rows.length === 0) throw new Error("No cappers found for that account.");
   rows = rows.map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), decisions: r.decisions ?? [] }));
+  // Real capper ids from the read-only lookup: [[email, name, id], ...]. Any row not in it keeps its placeholder id.
+  if (idsJson) {
+    const found = new Map((JSON.parse(readFileSync(idsJson, "utf8")) as [string, string, string | null][]).map(([e, n, id]) => [e.toLowerCase() + "\u0000" + n.toLowerCase().trim(), id]));
+    rows = rows.map((r) => ({ ...r, id: found.get(r.email.toLowerCase() + "\u0000" + r.name.toLowerCase().trim()) ?? r.id }));
+  }
   const plans = planAll(rows);
+  const emailOf = (userId: string) => rows.find((r) => r.userId === userId)!.email;
+  const stamp = arg("--stamp") ?? new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const only = (flag: string, render: () => string) => {
+    if (!process.argv.includes(flag)) return false;
+    console.log(render());
+    return true;
+  };
+  if (only("--lookup-sql", () => renderLookupSql(plans, emailOf))) return;
+  if (only("--preview-sql", () => renderPreviewSql(plans))) return;
+  if (only("--missing-sql", () => renderMissingTargetsSql(plans))) return;
   console.log(renderReport(plans, picks));
+  for (const a of plans) if (a.missingTargets.length) console.log(`\nMISSING TARGET in ${a.email}: ${a.missingTargets.join("; ")}`);
   const sqlOut = arg("--emit-sql");
   if (sqlOut) {
-    writeFileSync(sqlOut, renderWriteSql(plans, new Date().toISOString().slice(0, 10).replace(/-/g, "")));
+    writeFileSync(sqlOut, renderWriteSql(plans, stamp));
     console.log(`\nWrote the cleanup SQL (NOT run) to ${sqlOut}`);
   }
 }

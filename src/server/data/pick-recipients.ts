@@ -14,6 +14,7 @@ import { revalidateTag } from "next/cache";
 import { cacheKeys } from "@/lib/cache-keys";
 import { prisma } from "@/lib/prisma";
 import { getCapperRoster, revalidateCapperRoster } from "@/server/data/capper-roster";
+import { getCapperNameDecisions } from "@/server/data/capper-name-decisions";
 import { recipientCapperName } from "@/lib/capper-name-guard";
 import { insertPicksDeduped, type DedupPickRow } from "@/server/data/pick-dedup";
 
@@ -41,9 +42,11 @@ export async function fanOutImportedPicks(sourceUserId: string, copies: Recipien
       try {
         // The capper-name guard (lib/capper-name-guard.ts): an obvious variant of one of the recipient's saved cappers
         // is filed there; a junk name is not copied. The roster is the per-user cached read.
-        const saved = (await getCapperRoster(recipientId)).map((c) => c.name);
+        // (one small read of the recipient's stored name answers: a SAME answer wins over every other rule)
+        const [roster, decisions] = await Promise.all([getCapperRoster(recipientId), getCapperNameDecisions(recipientId).catch(() => [])]);
+        const saved = roster.map((c) => c.name);
         const named = copies.flatMap((c) => {
-          const capperName = recipientCapperName(c.row.capperName, saved);
+          const capperName = recipientCapperName(c.row.capperName, saved, decisions);
           return capperName === null ? [] : [{ ...c, row: { ...c.row, capperName } }];
         });
         if (named.length < copies.length) console.warn("[pick-recipients] junk capper name, copy skipped", { recipientId, skipped: copies.length - named.length });

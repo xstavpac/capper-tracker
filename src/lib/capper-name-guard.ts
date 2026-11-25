@@ -174,19 +174,75 @@ export function findCapperVariant(
 ): string | null {
   const own = normalizeName(name);
   if (own !== "" && saved.some((s) => normalizeName(s) === own)) return null;
+  const differentFrom = (s: string) => {
+    const { rawKey, suggestedKey } = capperPairKeys(name, s);
+    return decisions.some((d) => d.rawKey === rawKey && d.suggestedKey === suggestedKey && d.decision === "DIFFERENT");
+  };
+  // "[name] VIP" always files under the base capper - checked first, because it also reaches short names ("AFS VIP")
+  // that the general rules below keep exact-only. Two saved cappers match the base: ambiguous, left alone.
+  const base = vipBase(name);
+  if (base !== null) {
+    const core = stripSuffixes(base);
+    const matches = saved.filter((s) => {
+      const k = normalizeName(s);
+      return k !== "" && (k === base || stripSuffixes(k) === base || stripSuffixes(k) === core);
+    });
+    const distinct = Array.from(new Map(matches.map((m) => [normalizeName(m), m])).values());
+    if (distinct.length > 1) return null;
+    if (distinct.length === 1) return differentFrom(distinct[0]) ? null : distinct[0];
+  }
   const hits = saved.filter((s) => normalizeName(s) !== "" && isVariantPair(name, s));
   const unique = Array.from(new Map(hits.map((h) => [normalizeName(h), h])).values());
   if (unique.length !== 1) return null;
-  const { rawKey, suggestedKey } = capperPairKeys(name, unique[0]);
-  if (decisions.some((d) => d.rawKey === rawKey && d.suggestedKey === suggestedKey && d.decision === "DIFFERENT")) return null;
-  return unique[0];
+  return differentFrom(unique[0]) ? null : unique[0];
+}
+
+// "KimsVIP", "Kims VIP", "KIMS-VIP": the cleaned name ends in "vip" and something real is left of it.
+const MIN_VIP_BASE = 2;
+function vipBase(name: string): string | null {
+  const key = nameWords(name).join("");
+  if (!key.endsWith("vip")) return null;
+  const base = key.slice(0, -3);
+  return base.length >= MIN_VIP_BASE ? base : null;
+}
+
+// The saved capper a name has been SET to by the account owner: a stored capper_name_decisions SAME answer for exactly
+// this name (rawKey) whose suggestedKey is a saved capper. It does not depend on how alike the two names look, so it
+// reaches "Alex Caruso" -> "Caruso", and it overrides the roster-player / team rules (the owner said it is a capper).
+// null: no answer, the answer points at nothing saved, or several saved cappers (left alone).
+export function savedAliasOf(name: string, saved: readonly string[], decisions: readonly StoredCapperNameDecision[]): string | null {
+  const raw = normalizeName(name);
+  if (raw === "") return null;
+  if (saved.some((s) => normalizeName(s) === raw)) return null; // already a saved capper: nothing to rewrite
+  const keys = new Set(decisions.filter((d) => d.decision === "SAME" && d.rawKey === raw).map((d) => d.suggestedKey));
+  if (keys.size === 0) return null;
+  const hits = Array.from(new Map(saved.filter((s) => keys.has(normalizeName(s))).map((s) => [normalizeName(s), s])).values());
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// Can this NEW header line (not an exact saved capper) be a capper? Yes when the account owner has set it to a saved
+// capper, or when it is not junk.
+export function isCapperHeader(
+  name: string,
+  saved: readonly string[],
+  decisions: readonly StoredCapperNameDecision[],
+  ctx: JunkCheckContext = {}
+): boolean {
+  return savedAliasOf(name, saved, decisions) !== null || capperNameJunkReason(name, ctx) === null;
 }
 
 // Pick-recipient copies: the capper each source capper name is filed under on the recipient's account. null = the
 // copy is not delivered (the name is junk - normally impossible, since the source import is guarded, but a source's
 // older junk capper must not spread). A name with no saved match keeps its own name: the source user's capper was
 // created on purpose (by hand or from the review queue), so the recipient gets it too, as before.
-export function recipientCapperName(sourceName: string, recipientSaved: readonly string[]): string | null {
+export function recipientCapperName(
+  sourceName: string,
+  recipientSaved: readonly string[],
+  // The recipient's own stored answers: a SAME answer files the name under that saved capper before any other rule.
+  decisions: readonly StoredCapperNameDecision[] = []
+): string | null {
+  const alias = savedAliasOf(sourceName, recipientSaved, decisions);
+  if (alias !== null) return alias;
   if (capperNameJunkReason(sourceName) !== null) return null;
-  return findCapperVariant(sourceName, recipientSaved) ?? sourceName;
+  return findCapperVariant(sourceName, recipientSaved, decisions) ?? sourceName;
 }

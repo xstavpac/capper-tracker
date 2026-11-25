@@ -18,7 +18,7 @@ import {
 } from "@/lib/parse-catalog";
 import { runAmbiguousHierarchy, type AutoResolveResult } from "@/lib/ambiguous-hierarchy";
 import { normalizeName, resolveCapperNameSuggestion } from "@/lib/fuzzy-match";
-import { capperNameJunkReason, findCapperVariant } from "@/lib/capper-name-guard";
+import { capperNameJunkReason, findCapperVariant, isCapperHeader, savedAliasOf } from "@/lib/capper-name-guard";
 import { getCachedNbaRoster } from "@/server/data/nba-roster-cache";
 import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
 import { getCachedMlbRoster } from "@/server/data/mlb-roster-cache";
@@ -285,7 +285,9 @@ export async function runCatalogImportForUser(
   const savedKeys = new Set(existingCapperNames.map(normalizeName).filter((k) => k !== ""));
   const isSaved = (name: string) => savedKeys.has(normalizeName(name)) && normalizeName(name) !== "";
   const playerKeys = guard ? new Set([...(rosterFullNames ?? []), ...otherPlayerNames].map(normalizeName).filter((k) => k !== "")) : undefined;
-  const acceptNewHeader = (name: string): boolean => capperNameJunkReason(name, { feedTeams, playerKeys }) === null;
+  // A name the account owner has set to a saved capper (capper_name_decisions SAME) is always a capper header, even when
+  // it is also a roster player ("Alex Caruso" is the saved capper "Caruso"); it is filed under that capper below.
+  const acceptNewHeader = (name: string): boolean => isCapperHeader(name, existingCapperNames, nameDecisions, { feedTeams, playerKeys });
 
   const { picks: parsedPicks, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders, rejectedHeaders } = parseCatalog(
     parseText,
@@ -334,6 +336,8 @@ export async function runCatalogImportForUser(
     const variantOf = new Map<string, string | null>();
     const canonical = (name: string): string => {
       if (!name || isSaved(name)) return name;
+      const alias = savedAliasOf(name, existingCapperNames, nameDecisions);
+      if (alias !== null) return alias;
       if (!variantOf.has(name)) {
         // A pair the user already answered SAME wins; then the variant rules.
         const remembered = resolveCapperNameSuggestion(name, existingCapperNames, nameDecisions);
