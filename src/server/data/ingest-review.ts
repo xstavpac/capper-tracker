@@ -63,7 +63,9 @@ export async function buildReviewDrafts(
               { id: "use-suggestion", name: q.capperSuggestion, label: ` - as ${q.capperSuggestion}` },
               { id: "new-capper", name: q.pick.capperName, label: ` - as new capper "${q.pick.capperName}"` },
             ]
-          : [{ id: "", name: q.pick.capperName, label: "" }];
+          : q.newCapper
+            ? [{ id: "", name: q.pick.capperName, label: ` - as new capper "${q.pick.capperName}"` }]
+            : [{ id: "", name: q.pick.capperName, label: "" }];
         for (const c of cappers) {
           // An answer the line's "1P"/"2P"/"3P" can't belong to has no pick to store: the choice
           // shows why, and answering it inserts nothing (resolveReviewItem's no-pick path).
@@ -114,6 +116,17 @@ export async function buildReviewDrafts(
             },
           ],
         },
+      });
+    } else if (q.type === "NEW_CAPPER") {
+      // An automated import met a capper name that is not saved and close to none: one click creates the capper (the
+      // insert's findOrCreateCapper) and logs the pick. Stored as CAPPER_FUZZY with only the "new-capper" choice, so
+      // resolveReviewItem records no name-pair decision (there is no suggestion) and nothing new is needed in the schema.
+      const r = await resolve(toItem(q.pick, q.rawName));
+      drafts.push({
+        capperName,
+        lineText,
+        questionType: "CAPPER_FUZZY",
+        options: { choices: [choiceFrom({ id: "new-capper", label: `Create capper "${q.rawName}"`, capperName: q.rawName }, r)] },
       });
     } else {
       // CAPPER_FUZZY: the pick is fully resolved, only the capper is open.

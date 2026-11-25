@@ -177,6 +177,9 @@ async function main() {
 
   try {
     for (const id of ids) await prisma.user.create({ data: { id, supabaseId: id + "-sb", email: id + "@example.invalid" } });
+    // The ingest never creates a capper from an unknown name (lib/capper-name-guard.ts): the cappers this test posts as
+    // are saved first, as they would be in a real account.
+    for (const name of ["Bot Capper","Route Capper","Zeta Sharp"]) await prisma.capper.create({ data: { userId: users.main, name, source: "OTHER" } });
     await prisma.pickRecipient.create({ data: { sourceUserId: users.main, recipientUserId: users.recipient, status: "ACTIVE" } });
     const created = await createApiTokenForUser(users.main, "test bot");
     if (!created.ok) throw new Error("token fixture failed");

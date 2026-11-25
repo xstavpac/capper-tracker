@@ -133,6 +133,9 @@ async function main() {
 
   try {
     for (const id of ids) await prisma.user.create({ data: { id, supabaseId: id + "-sb", email: id + "@example.invalid" } });
+    // The ingest never creates a capper from an unknown name (lib/capper-name-guard.ts): the cappers this test posts as
+    // are saved first, as they would be in a real account.
+    for (const name of ["Sharp Capper"]) await prisma.capper.create({ data: { userId: users.tg, name, source: "OTHER" } });
 
     // ---- 1. Manual paste ----
     const parsed = parseCatalog(TEXT, ["Sharp Capper"]).picks;

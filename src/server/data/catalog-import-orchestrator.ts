@@ -17,7 +17,11 @@ import {
   type ParsedPick,
 } from "@/lib/parse-catalog";
 import { runAmbiguousHierarchy, type AutoResolveResult } from "@/lib/ambiguous-hierarchy";
-import { resolveCapperNameSuggestion } from "@/lib/fuzzy-match";
+import { normalizeName, resolveCapperNameSuggestion } from "@/lib/fuzzy-match";
+import { capperNameJunkReason, findCapperVariant } from "@/lib/capper-name-guard";
+import { getCachedNbaRoster } from "@/server/data/nba-roster-cache";
+import { getCachedNhlRoster } from "@/server/data/nhl-roster-cache";
+import { getCachedMlbRoster } from "@/server/data/mlb-roster-cache";
 import { getCapperNameDecisions } from "@/server/data/capper-name-decisions";
 import { splitByCapper } from "@/lib/bulk-import-summary";
 import {
@@ -48,13 +52,17 @@ export type CatalogQuestion =
   // "Cardinals - which league?" The form shows `options` (label / sport / nickname) as buttons.
   // `capperSuggestion` is set when the pick's capper name is a near-miss of a saved capper: whoever answers must
   // also settle the capper, because nothing here creates a capper from a near-miss.
-  | { type: "AMBIGUOUS_TEAM"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string }
+  // `newCapper` (guardCapperNames only): the capper is not saved yet, so answering also creates it - the choices say so.
+  | { type: "AMBIGUOUS_TEAM"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string; newCapper?: boolean }
   // "Which player?" - same shape, key built by playerAmbiguityKey.
-  | { type: "PLAYER_AMBIGUITY"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string }
+  | { type: "PLAYER_AMBIGUITY"; key: string; options: AmbiguousOption[]; pick: ParsedPick; capperSuggestion?: string; newCapper?: boolean }
   // "No number in this total - use the market line?" The form shows the proposed line.
   | { type: "MISSING_TOTAL_LINE"; pick: ParsedPick; inferredLine: number; reason: "missing" | "garbled" }
   // "Did you mean <existing capper>?" Answers: use the suggestion, or "no, genuinely new".
   | { type: "CAPPER_FUZZY"; rawName: string; suggestion: string; pick: ParsedPick }
+  // "<name> is not a saved capper - create it?" (guardCapperNames only). One answer: create the capper and log the
+  // pick. Stored as a CAPPER_FUZZY review item with only the "new-capper" choice, so no schema change.
+  | { type: "NEW_CAPPER"; rawName: string; pick: ParsedPick }
   // "Game is 3 days away - is this the right game?" Fully matched and priced (row): a yes saves it as is. Raised only
   // by the import itself (importPicksForUser's holdFarFuture).
   | { type: "FAR_FUTURE_GAME"; pick: ParsedPick; row: DedupPickRow };
@@ -84,6 +92,11 @@ export type CatalogImportHooks = {
   // rejectRepeatedLines, every repeat is reported after the first copy's outcome), so a caller can match outcomes to
   // its lines by (capperName, raw) in order.
   onLineOutcome?: LineOutcomeListener;
+  // The automated paths' capper-name guard (lib/capper-name-guard.ts): a header that is clearly not a capper (a
+  // number, bet syntax, a team, a roster player, promo text) is skipped and the header above it stays active; an
+  // obvious variant of one saved capper is filed under it; and a name that is still unknown is never created here:
+  // its picks go to the review queue with a one-click "create capper". Unset (the form): exactly as before.
+  guardCapperNames?: boolean;
 };
 
 export type CatalogImportResult = {
@@ -144,6 +157,13 @@ function reviewOutcome(q: CatalogQuestion, questionIndex: number): LineOutcome {
           { label: `New capper "${q.rawName}"`, league: q.pick.sportName, game: null },
         ],
       };
+    case "NEW_CAPPER":
+      return {
+        ...base,
+        capperName: q.pick.capperName,
+        reason: "capper_name",
+        candidates: [{ label: `New capper "${q.rawName}"`, league: q.pick.sportName, game: null }],
+      };
     case "FAR_FUTURE_GAME":
       return {
         ...base,
@@ -175,6 +195,17 @@ function itemOutcome(p: ParsedPick, o: ImportItemOutcome): LineOutcome {
     odds: row.odds,
     pickId: o.pickId,
   };
+}
+
+// Roster players' full names for the capper-name guard (NBA, NHL, MLB; NFL comes from the import's own read). A
+// roster that fails to load only narrows the check.
+async function loadGuardPlayerNames(): Promise<string[]> {
+  const lists = await Promise.all([
+    getCachedNbaRoster().catch(() => []),
+    getCachedNhlRoster().catch(() => []),
+    getCachedMlbRoster().catch(() => []),
+  ]);
+  return lists.flat().map((p) => p.playerName);
 }
 
 // The key two lines must share to be "the same line" (rejectRepeatedLines): capper and text, case and spacing aside.
@@ -241,20 +272,36 @@ export async function runCatalogImportForUser(
     rejectEntries(pre.skipped);
   }
 
-  const [rosterFullNames, feedTeams, roster, nameDecisions] = await Promise.all([
+  const guard = hooks.guardCapperNames === true;
+  const [rosterFullNames, feedTeams, roster, nameDecisions, otherPlayerNames] = await Promise.all([
     getCachedNflRosterFullNames().catch(() => undefined),
     getImportFeedTeams().catch(() => undefined),
     getCapperRoster(userId),
     getCapperNameDecisions(userId),
+    // The guard's player check. Each is the shared day-long roster cache (no per-call DB read on a warm cache).
+    guard ? loadGuardPlayerNames() : Promise.resolve([] as string[]),
   ]);
   const existingCapperNames = roster.map((c) => c.name);
+  const savedKeys = new Set(existingCapperNames.map(normalizeName).filter((k) => k !== ""));
+  const isSaved = (name: string) => savedKeys.has(normalizeName(name)) && normalizeName(name) !== "";
+  const playerKeys = guard ? new Set([...(rosterFullNames ?? []), ...otherPlayerNames].map(normalizeName).filter((k) => k !== "")) : undefined;
+  const acceptNewHeader = (name: string): boolean => capperNameJunkReason(name, { feedTeams, playerKeys }) === null;
 
-  const { picks: parsedPicks, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders } = parseCatalog(
+  const { picks: parsedPicks, parlays, unresolved, unresolvedCapperNames, droppedAsHeaders, rejectedHeaders } = parseCatalog(
     parseText,
     existingCapperNames,
     rosterFullNames,
-    feedTeams
+    feedTeams,
+    guard ? { acceptNewHeader } : undefined
   );
+  for (const h of rejectedHeaders) {
+    hookSkippedLog.push({
+      stage: "PARSE_SILENT",
+      capperName: h.capperName,
+      rawText: h.text,
+      reason: `Not a capper name (${capperNameJunkReason(h.text, { feedTeams, playerKeys }) ?? "not a person or brand"}); kept the capper above it`,
+    });
+  }
 
   // Recovery pass, as the form runs it.
   let effective = parsedPicks;
@@ -281,6 +328,25 @@ export async function runCatalogImportForUser(
     recoveryRan,
   });
   rejectEntries(parseLog);
+
+  // An obvious variant of exactly one saved capper is filed under it ("DIRTY BUBBLE" -> DirtyBubbleBets).
+  if (guard) {
+    const variantOf = new Map<string, string | null>();
+    const canonical = (name: string): string => {
+      if (!name || isSaved(name)) return name;
+      if (!variantOf.has(name)) {
+        // A pair the user already answered SAME wins; then the variant rules.
+        const remembered = resolveCapperNameSuggestion(name, existingCapperNames, nameDecisions);
+        const same = remembered.suggestion && remembered.remembered === "SAME" ? remembered.suggestion : null;
+        variantOf.set(name, same ?? findCapperVariant(name, existingCapperNames, nameDecisions));
+      }
+      return variantOf.get(name) ?? name;
+    };
+    effective = effective.map((p) => {
+      const c = canonical(p.capperName);
+      return c === p.capperName ? p : { ...p, capperName: c };
+    });
+  }
 
   const parlaySplit = splitByCapper(parlays);
   const pickSplit = splitByCapper(effective);
@@ -345,6 +411,7 @@ export async function runCatalogImportForUser(
         options: p.ambiguous,
         pick: p,
         capperSuggestion: fuzzySuggestion(p.capperName),
+        ...(guard && !isSaved(p.capperName) ? { newCapper: true } : {}),
       });
     } else candidates.push(p);
   }
@@ -365,6 +432,11 @@ export async function runCatalogImportForUser(
     const suggestion = fuzzySuggestion(p.capperName);
     if (suggestion) {
       ask({ type: "CAPPER_FUZZY", rawName: p.capperName, suggestion, pick: p });
+      continue;
+    }
+    // Still not a saved capper: an automated import never creates one on its own.
+    if (guard && !isSaved(p.capperName)) {
+      ask({ type: "NEW_CAPPER", rawName: p.capperName, pick: p });
       continue;
     }
     afterFuzzy.push(p);

@@ -10,7 +10,7 @@
 // per-source rules of its own beyond the batch key.
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { dropCombinedBetLines, filterPicksByLeague, narrowAmbiguousByLeague } from "@/lib/ingest-filters";
+import { preFilterIngestText, filterPicksByLeague, narrowAmbiguousByLeague } from "@/lib/ingest-filters";
 import type { LineOutcome, LineOutcomeListener, TokenDayRule } from "@/lib/ingest-line-outcome";
 import { runCatalogImportForUser } from "@/server/data/catalog-import-orchestrator";
 import { buildReviewDrafts, reviewDraftsToRows, type ReviewItemDraft } from "@/server/data/ingest-review";
@@ -107,7 +107,9 @@ export async function ingestBatch(source: IngestBatchSource, content: IngestBatc
   const outcomes: { raw: string; outcome: LineOutcome }[] = [];
   try {
     const result = await runCatalogImportForUser(userId, text, day, {
-      preFilterText: dropCombinedBetLines,
+      preFilterText: preFilterIngestText,
+      // Telegram and the bot API alike: no capper is ever created from an unknown name here (see the hook).
+      guardCapperNames: true,
       prepareAmbiguous: (picks) => narrowAmbiguousByLeague(options.allowedLeagues, picks),
       filterPicks: (picks) => filterPicksByLeague(options.allowedLeagues, picks),
       realTimeIngest: options.realTimeIngest,

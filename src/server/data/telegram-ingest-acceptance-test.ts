@@ -137,6 +137,9 @@ async function main() {
     for (const id of [users.main, users.other]) {
       await prisma.user.create({ data: { id, supabaseId: id + "-sb", email: id + "@example.invalid" } });
     }
+    // The ingest never creates a capper from an unknown name (lib/capper-name-guard.ts): the cappers this test posts as
+    // are saved first, as they would be in a real account.
+    for (const name of ["Alpha Capper","Beta Capper","Delta Capper","Epsilon Capper"]) await prisma.capper.create({ data: { userId: users.main, name, source: "OTHER" } });
     process.env.INGEST_USER_ID = users.main;
     delete process.env.INGEST_ALLOWED_LEAGUES; // the default allowlist (NCAAB included)
 
@@ -301,8 +304,13 @@ async function main() {
 
     // ---------- the allowlist is read from the environment ----------
     process.env.INGEST_ALLOWED_LEAGUES = "NFL";
-    const nflOnly = await (await post(route, { channelId: channelIds[0], messageId: 700, day: "2026-11-02", text: "Delta Capper\nCelticsX\nLakers -4 -110\nChiefs -2 -110" })).json();
+    const nflOnly = await (await post(route, { channelId: channelIds[0], messageId: 700, day: "2026-11-02", text: "Delta Capper\nLakers -4 -110\nChiefs -2 -110" })).json();
     expect("INGEST_ALLOWED_LEAGUES=NFL: NBA line skipped, NFL line imported", [nflOnly.imported], [1]);
+    // A typo line under the header ("CelticsX") reads as a new capper header. It used to create a capper "CelticsX"
+    // and file the pick under it; now that pick waits in review with a one-click "Create capper".
+    const typo = await (await post(route, { channelId: channelIds[0], messageId: 701, day: "2026-11-02", text: "Delta Capper\nCelticsX\nLakers -4 -110\nChiefs -2 -110" })).json();
+    expect("typo header: nothing imported, the NFL pick held for review", [typo.imported, typo.pendingReview], [0, 1]);
+    expect("typo header: no capper CelticsX was created", await prisma.capper.count({ where: { userId: users.main, name: "CelticsX" } }), 0);
     delete process.env.INGEST_ALLOWED_LEAGUES;
 
     // ---------- NCAAB on the default allowlist ----------
@@ -323,6 +331,28 @@ async function main() {
         expect("NCAAB: review item is an AMBIGUOUS_TEAM question offering NCAAF and NCAAB", [alItem?.questionType, alItem?.status, (alItem?.options as { choices: { sport?: string }[] }).choices.map((c) => c.sport).sort()], ["AMBIGUOUS_TEAM", "PENDING", ["NCAAB", "NCAAF"]]);
         expect("NCAAB: the shared-school line created no pick", (await picksOf(users.main)).length, before + 1);
       } else console.log("SKIP: NCAAB is out of season, so the shared-school question is settled by the season gate");
+    }
+
+    // ---------- capper-name guard: unknown names go to review, junk headers never become cappers ----------
+    {
+      const capperNamed = (name: string) => prisma.capper.count({ where: { userId: users.main, name } });
+      const nw = await (await post(route, { channelId: channelIds[0], messageId: 900, day: "2026-11-02", text: "Omega Newname\nKnicks ML -130" })).json();
+      expect("guard: an unknown capper's pick is held for review, not imported", [nw.imported, nw.pendingReview], [0, 1]);
+      const nwItem = await prisma.ingestReviewItem.findFirst({ where: { ingestBatchId: nw.batchId }, select: { questionType: true, options: true } });
+      expect(
+        "guard: the review item offers one click, create the capper",
+        [nwItem?.questionType, (nwItem?.options as { choices: { id: string; capperName?: string }[] }).choices.map((c) => [c.id, c.capperName])],
+        ["CAPPER_FUZZY", [["new-capper", "Omega Newname"]]]
+      );
+      expect("guard: no capper was created for the unknown name", await capperNamed("Omega Newname"), 0);
+      await post(route, { channelId: channelIds[0], messageId: 901, day: "2026-11-02", text: "3.5\nKnicks ML -130" });
+      await post(route, { channelId: channelIds[0], messageId: 902, day: "2026-11-02", text: "Alpha Capper\nLOCKS\nSTILL HAVE TIME TO GET ON BOARD\nKnicks ML -130" });
+      expect("guard: no capper named 3.5, LOCKS or the promo text", [await capperNamed("3.5"), await capperNamed("LOCKS"), await capperNamed("STILL HAVE TIME TO GET ON BOARD")], [0, 0, 0]);
+      expect(
+        "guard: the promo line is logged as skipped, not imported",
+        await prisma.importSkippedLine.count({ where: { userId: users.main, rawText: "STILL HAVE TIME TO GET ON BOARD", stage: "PARSE_SILENT" } }),
+        1
+      );
     }
 
     // ---------- error classification ----------
